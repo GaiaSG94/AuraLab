@@ -21,3 +21,5 @@ Agent-executable build plan. Each task ends with an observable check.
 - [ ] 9. Open decisions: guide block, JSONC, scenario buttons, eco-equations (B)?
 - [ ] 10. GitHub Pages portal link + demo video (portal → labs → repo diff → .kiro)
   - Check: under 3 min, both labs visible, no console errors.
+- [x] 11. MCP dev server (list_catalog, validate_lab, scaffold_law) + workspace config
+  - Check: stdio probe drives all tools; scaffolded test law reverted cleanly.
