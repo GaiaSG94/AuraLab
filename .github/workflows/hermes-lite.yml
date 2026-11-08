@@ -1,0 +1,47 @@
+name: hermes-lite
+
+# Gate Hermes Lite LabKit — fraîcheur exigée AU MOMENT DU MERGE + dispatch
+# du résolveur sur vrai conflit. Tourne en dry-run (HERMES_LITE_DRY_RUN=1,
+# Mergify pilote les merges) : le dry-run désactive le MERGE uniquement,
+# le dispatch du résolveur reste actif. Fail-closed : sans la variable,
+# le gate reste en dry-run (jamais deux pilotes).
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  check_run:
+    types: [completed, rerequested]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR unique (vide = toutes)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: write
+  actions: write
+
+concurrency:
+  group: hermes-lite-${{ github.event.pull_request.number || github.event.check_run.id || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: hermes-lite
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout (superficiel)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Gate fraîcheur + merge si verte
+        env:
+          GH_TOKEN: ${{ secrets.HERMES_LITE_TOKEN || github.token }}
+          HERMES_REQUIRED_CHECKS: ''
+          HERMES_LITE_DRY_RUN: ${{ vars.HERMES_LITE_DRY_RUN || '1' }}
+        run: python3 .github/hermes/gate.py

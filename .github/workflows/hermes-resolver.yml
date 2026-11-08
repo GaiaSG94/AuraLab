@@ -1,0 +1,61 @@
+name: Hermes sous-agent (conflits)
+
+# Sous-agent de résolution : dispatché par hermes-lite sur VRAI conflit
+# (jamais en PR : workflow_dispatch uniquement). Rebase + résout (IA
+# Fireworks puis déterministe) + valide (toolchain node) + pousse avec
+# lease + ré-arme + rapporte. JAMAIS de merge ici (file Mergify seule).
+# Budget : timeout 5 min (ci-budget) + deadline interne 240 s dans
+# resolver.py (abandon propre avant le kill, jamais pendant un push).
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Numéro de PR'
+        required: true
+      head_ref:
+        description: 'Branche de la PR'
+        required: true
+      base_ref:
+        description: 'Branche de base'
+        required: true
+      head_sha:
+        description: 'SHA attendu (bail anti-course)'
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: write
+  actions: write
+
+concurrency:
+  group: hermes-resolver-${{ inputs.pr_number }}
+  cancel-in-progress: false
+
+jobs:
+  resolver:
+    name: resolver
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout de la base (scripts du résolveur)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base_ref }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Node 24 (validation toolchain)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Rebase + résolution + push
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FW_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+          PUSH_TOKEN: ${{ secrets.HERMES_PUSH_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          HEAD_REF: ${{ inputs.head_ref }}
+          BASE_REF: ${{ inputs.base_ref }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+        run: python3 .github/hermes/resolver.py --run
