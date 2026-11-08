@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 """Sous-agent Hermes LabKit : rebase + résolution + push (jamais de merge).
-
-Dispatché par hermes-lite sur VRAI conflit : verrous → fast-path → clone →
-passes IA/déterministe/arbitrage → validation node → régénération dérivés →
-NO-LOSS → push avec lease → ré-armement → rapport. Deadline interne avec
-abandon propre avant le kill. [HERMES-NO-CLOSE] : échec = re-dispatch.
-"""
+Verrous → fast-path → clone → passes IA/déterministe/arbitrage → validation
+node → régénération dérivés → NO-LOSS → push avec lease → ré-armement →
+rapport. Deadline interne, abandon propre. [HERMES-NO-CLOSE]."""
 
 import base64
-import datetime
 import os
 import shutil
 import subprocess
@@ -18,6 +14,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ghops
+from mergeops import apply_mode, arbitrate_file
 from resolve import (fw_resolve, fw_resolve_hunks, heuristic_resolve,
                      valid_llm_output, find_generators, is_generated,
                      llm_available, llm_skip_reason, too_big_for_whole_file,
@@ -42,7 +39,6 @@ ia_ok, heur_ok, failed_files = [], [], []
 regen_required, regen_done = [], []
 arbitrage_ok, intent_gaps = [], []
 ia_hunks, ia_count = {}, 0
-rebased_onto = ""
 
 
 def scrub(text):
@@ -83,58 +79,6 @@ def file_content(rev, path):
     return proc.stdout if proc and proc.returncode == 0 else ""
 
 
-def apply_mode(path, mode):
-    # Pendant un rebase, --ours = la BASE et --theirs = la PR.
-    if mode in ("ours", "theirs"):
-        return _git_ok("checkout", "--" + mode, "--", path)
-    if mode == "union":
-        ours = run(["git", "show", "HEAD:" + path], timeout=60)
-        theirs = run(["git", "show", "REBASE_HEAD:" + path], timeout=60)
-        if ours is None or theirs is None:
-            return False
-        merged = sorted({l.rstrip("\r") for l in (ours.stdout + "\n" + theirs.stdout).splitlines() if l.strip()})
-        with open(os.path.join(WORK, path), "w", encoding="utf-8", newline="\n") as fh:
-            fh.write("\n".join(merged) + "\n")
-        return True
-    return False
-
-
-def arbitrate_file(path):
-    """Dernier recours : la BASE gagne, hunk par hunk. Rend (ok, contenu|None, écarts)."""
-    gaps = []
-    try:
-        with open(os.path.join(WORK, path), encoding="utf-8") as fh:
-            text = fh.read()
-    except Exception as exc:
-        print("[arbitrage] %s : lecture impossible (%s)" % (path, exc))
-        text = None
-    from resolve import split_conflict_hunks
-    segments, n_hunks = (None, 0) if text is None else split_conflict_hunks(text)
-    if segments is not None and n_hunks > 0:
-        out_parts, idx = [], 0
-        for seg in segments:
-            if seg[0] == "clean":
-                out_parts.append(seg[1])
-                continue
-            idx += 1
-            _, ours_h, theirs_h, _ = seg
-            if ours_h.strip():
-                out_parts.append(ours_h)
-                gaps.append("`%s` (hunk %d/%d) — base conservée, intention PR écartée" % (path, idx, n_hunks))
-            else:
-                out_parts.append(theirs_h)
-        return True, "\n".join(out_parts), gaps
-    for mode, note in (("ours", "version de base"),
-                       ("theirs", "contenu PR conservé (rien côté base)")):
-        if _git_ok("checkout", "--" + mode, "--", path):
-            gaps.append("`%s` — arbitrage fichier entier : %s" % (path, note))
-            return True, None, gaps
-    if _git_ok("rm", "-f", "--", path):
-        gaps.append("`%s` — arbitrage : supprimé côté base, intention PR écartée" % path)
-        return True, None, gaps
-    return False, None, []
-
-
 def resolve_one(path, base_t, ours_t, theirs_t, use_llm, blacklist):
     """Résout UN fichier. Rend 'ia' / 'heur:<mode>' / 'arbitrage' / None."""
     global ia_count
@@ -172,13 +116,13 @@ def resolve_one(path, base_t, ours_t, theirs_t, use_llm, blacklist):
         ia_ok.append(path)
         return "ia"
     mode = heuristic_resolve(path)
-    if mode and apply_mode(path, mode):
+    if mode and apply_mode(WORK, path, mode):
         heur_ok.append("%s (repli: %s)" % (path, mode))
         if is_generated(path):
             regen_required.append(path)
         return "heur:" + mode
     if ARBITRATE_MODE:
-        ok_a, out_a, gaps_a = arbitrate_file(path)
+        ok_a, out_a, gaps_a = arbitrate_file(WORK, path)
         if ok_a:
             if out_a is not None:
                 with open(os.path.join(WORK, path), "w", encoding="utf-8", newline="\n") as fh:
@@ -194,7 +138,7 @@ def resolve_one(path, base_t, ours_t, theirs_t, use_llm, blacklist):
 
 def do_rebase(use_llm, llm_blacklist=None):
     """Reset sur origin/<head> + rebase sur origin/<base> avec résolution."""
-    global ia_ok, heur_ok, failed_files, regen_required, rebased_onto
+    global ia_ok, heur_ok, failed_files, regen_required
     global arbitrage_ok, intent_gaps, ia_hunks, ia_count
     blacklist = set(llm_blacklist or ())
     ia_ok, heur_ok, failed_files, regen_required = [], [], [], []
@@ -204,8 +148,6 @@ def do_rebase(use_llm, llm_blacklist=None):
        os.path.isdir(os.path.join(WORK, ".git", "rebase-apply")):
         gi("rebase", "--abort")
     gi("fetch", "--no-tags", "origin", BASE_REF, HEAD_REF, timeout=300)
-    tip = run(["git", "rev-parse", "origin/" + BASE_REF], timeout=60)
-    rebased_onto = tip.stdout.strip() if tip and tip.returncode == 0 else ""
     if not _git_ok("checkout", "-B", HEAD_REF, "origin/" + HEAD_REF):
         return None
     proc = gi("rebase", "--empty=drop", "origin/" + BASE_REF, timeout=600)
