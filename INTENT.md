@@ -52,8 +52,9 @@ conception, de façon visible et vérifiable par les juges :
 - Spec-Driven Development : specs EARS (`requirements.md`), `design.md`, `tasks.md` dans `.kiro/specs/`.
 - Steering : règles d'architecture et de design système dans `.kiro/steering/`, que tout agent doit suivre.
 - Agent Hooks + validation : hook post-sauvegarde branché sur le validateur de configs (garde-fou anti-crash).
-- MCP : envisagé uniquement comme couche optionnelle à usage réel (ex. constantes scientifiques externes) —
-  pas de faux serveur pour impressionner.
+- MCP : IMPLÉMENTÉ comme couche dev à usage réel — serveur local `mcp-server/` (zéro dépendance,
+  déclaré dans `.kiro/settings/mcp.json`) offrant `list_catalog`, `validate_lab` (auto-approuvés, lecture
+  seule) et `scaffold_law` (confirmation à chaque appel, écrit des fichiers). Testé hors Kiro en stdio.
 Contrainte assumée (crédits incertains) : Kiro intervient au **build-time, jamais au runtime**. Les labos
 tournent sans crédits, sans clés API, sans backend. D'éventuels crédits serviraient à concevoir plus vite,
 pas à faire tourner le produit.
@@ -74,8 +75,7 @@ Tranchées et implémentées : catégories officielles (7 : instruments, métriq
 substances, matériel, lois) ; catalogue unique ; lois = modules composables interchangeables à cases
 à cocher ; notices obligatoires ; prompt d'extension non-dev (`add-element.bat`) ; carnet v1
 (notes + instantanés + restauration) ; portail 3 boutons ; contrainte prof actée (guide FR
-`CREER-UN-LABO.md`).
-
+`CREER-UN-LABO.md`) ; serveur MCP dev + config `.kiro/settings/mcp.json`.
 Encore ouvertes :
 1. **A ou B** : phase 1 réalisée = A (restructuration, démos conservées). B (+ éco en équations
    Lotka-Volterra) reste possible en phase 2 ?
