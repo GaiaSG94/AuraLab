@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%23f8fafc'/%3E%3Ccircle cx='5.5' cy='7' r='1.4' fill='%23111122'/%3E%3Ccircle cx='10.5' cy='7' r='1.4' fill='%23111122'/%3E%3C/svg%3E" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Aura-Space — AuraLab (standalone)</title>
+<title>Eco Lab — LabKit (standalone)</title>
 <style>
-/* AuraLab core — lab shell, "flat page" look.
+/* LabKit core — lab shell, "flat page" look.
    One flat page color per lab (lab.page), ink text, paper and ink cards.
    Every lab built on core/ gets this exact look; only --page (and the
    bench background) change per lab. Fonts degrade to system fonts offline. */
@@ -189,7 +190,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   background: var(--soft); border-radius: 10px; padding: 6px 10px;
 }
 .elem-row .icon svg { width: 26px; height: 30px; display: block; }
-.elem-row .name { font-weight: 800; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.elem-row .name { font-weight: 800; font-size: 15px; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .elem-row .live { font: 600 13px var(--mono); color: var(--muted); white-space: nowrap; }
 .elem-row .tools { display: flex; align-items: center; gap: 8px; }
 .elem-row.law { grid-template-columns: 44px minmax(0, 1fr) auto; background: none; padding: 4px 0; }
@@ -324,7 +325,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 <div id="lab"><div class="boot-hint">Loading lab…<br />If this message stays, enable JavaScript or open this file in a recent browser.</div></div>
 <script>
 // ---- core/catalog.js (inlined) ----
-// AuraLab core — unified catalog, organized by categories.
+// LabKit core — unified catalog, organized by categories.
 // The catalog is the single list of everything a lab can order:
 // laws, apparatus, instruments (+metrics), substances molds, surfaces.
 // Built-ins ship with the kit; packs and labs extend it. Merged at boot.
@@ -372,6 +373,15 @@ const builtinSurfaces = {
       limites: "2D only; one stage per lab.",
     },
   },
+  webgl: {
+    label: "WebGL stage",
+    notice: {
+      label: "WebGL stage",
+      formule: "The lab mounts its own 3D canvas in the stage box; the shell keeps header, steps, instruments and loop.",
+      sources: "Kit built-in surface (no model).",
+      limites: "One stage per lab; 3D content is 100% lab-owned.",
+    },
+  },
 };
 
 // Merge pack manifests + lab-local additions into one catalog.
@@ -408,7 +418,7 @@ function getLaw(catalog, id) {
 }
 
 // ---- core/validate.js (inlined) ----
-// AuraLab core — config validation + auto-tuning (shared by browser and Node).
+// LabKit core — config validation + auto-tuning (shared by browser and Node).
 // Invalid numbers are clamped with a warning; only structural problems are errors.
 // known = { laws: {id: {defaults}}, apparatus: [kinds], instruments: [types],
 //           measures: [ids], surfaces: [names] }
@@ -488,6 +498,11 @@ function validateConfig(raw, known) {
     }
     // home: where "← all labs" leads (relative to the lab page).
     if (typeof config.lab.home !== "string" || !config.lab.home.trim()) config.lab.home = "../index.html";
+    if (config.lab.lang === undefined) config.lab.lang = "en";
+    else if (config.lab.lang !== "en" && config.lab.lang !== "fr") {
+      config.lab.lang = "en";
+      fix('lab.lang reset to "en" (must be "en" or "fr")');
+    }
   }
 
   // --- bench ---
@@ -765,7 +780,7 @@ function validateConfig(raw, known) {
 }
 
 // ---- core/time.js (inlined) ----
-// AuraLab core — time services: clock, play/pause/reset/step wiring (no DOM inside).
+// LabKit core — time services: clock, play/pause/reset/step wiring (no DOM inside).
 function createClock() {
   return {
     t: 0,
@@ -780,7 +795,7 @@ function createClock() {
 }
 
 // ---- core/controls.js (inlined) ----
-// AuraLab core — controls: build config-declared sliders bound to live state paths.
+// LabKit core — controls: build config-declared sliders bound to live state paths.
 
 function el(tag, cls, html) {
   const n = document.createElement(tag);
@@ -847,8 +862,124 @@ function buildControls(parent, config, state, onChange) {
   parent.appendChild(sec);
 }
 
+// ---- core/strings.js (inlined) ----
+// LabKit core — shell UI strings (English/French). Labs pick via lab.lang ("en" default).
+const STR = {
+  en: {
+    allLabs: "← all labs",
+    labSteps: "Lab steps",
+    stepLab: "Lab", stepLabHint: "Substances, material, instruments",
+    stepLaws: "Laws", stepLawsHint: "How it behaves",
+    stepKnobs: "Knobs", stepKnobsHint: "Change the amounts",
+    stepNotebook: "Notebook", stepNotebookHint: "Write what you see",
+    bench: "Bench", benchHint: "Watch it happen",
+    substances: "Substances", material: "Material",
+    noSubstance: "No substance in this lab.", noMaterial: "No material in this lab.",
+    instruments: "Instruments · measuring devices",
+    lawsOn: "on",
+    enable: "Enable", about: "About",
+    reset: "Reset", step1: "+1 step", pause: "❚❚ Pause", play: "▶ Play",
+    autotuned: (n) => `Auto-tuned ${n} value(s), see console.`,
+    invalidConfig: "Invalid config:",
+    counter: "Counter", liveValues: "Live values", curve: "Curve", history: "History",
+    notePlaceholder: "Write what you see…", noteAria: "Notebook note", noteBtn: "Note",
+    recordBtn: "● Record measures", recordTitle: "Record measures at this instant",
+    snapshots: "Snapshots", restore: "Restore", deleteNote: "Delete note", deleteSnapshot: "Delete snapshot",
+  },
+  fr: {
+    allLabs: "← tous les labos",
+    labSteps: "Étapes du labo",
+    stepLab: "Labo", stepLabHint: "Substances, matériel, instruments",
+    stepLaws: "Lois", stepLawsHint: "Comment ça se comporte",
+    stepKnobs: "Réglages", stepKnobsHint: "Changer les quantités",
+    stepNotebook: "Carnet", stepNotebookHint: "Écris ce que tu vois",
+    bench: "Paillasse", benchHint: "Regarde ce qui se passe",
+    substances: "Substances", material: "Matériel",
+    noSubstance: "Aucune substance dans ce labo.", noMaterial: "Aucun matériel dans ce labo.",
+    instruments: "Instruments · appareils de mesure",
+    lawsOn: "sur",
+    enable: "Activer", about: "À propos de",
+    reset: "Réinitialiser", step1: "+1 pas", pause: "❚❚ Pause", play: "▶ Lecture",
+    autotuned: (n) => `${n} valeur(s) auto-réglée(s), voir la console.`,
+    invalidConfig: "Config invalide :",
+    counter: "Compteur", liveValues: "Valeurs directes", curve: "Courbe", history: "Historique",
+    notePlaceholder: "Écris ce que tu vois…", noteAria: "Note du carnet", noteBtn: "Noter",
+    recordBtn: "● Enregistrer les mesures", recordTitle: "Enregistrer les mesures à cet instant",
+    snapshots: "Instantanés", restore: "Restaurer", deleteNote: "Supprimer la note", deleteSnapshot: "Supprimer l'instantané",
+  },
+};
+
+function strings(config) {
+  const lang = config && config.lab && config.lab.lang;
+  return STR[lang] || STR.en;
+}
+
+// ---- core/headless.js (inlined) ----
+// LabKit core — headless boot for custom-UI labs: validate + catalog + clock, no DOM.
+// The lab mounts its own interface and drives the loop itself.
+// packManifests: catalog contributions [{ laws, apparatus, measures }].
+// labManifest: { measures: [{ id }] } extra measure ids beyond counts.*.
+
+async function bootHeadless(source, packManifests, labManifest) {
+  let raw;
+  if (typeof source === "string") {
+    const res = await fetch(source, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status} loading ${source}`);
+    raw = await res.json();
+  } else {
+    raw = source;
+  }
+  const catalog = mergeCatalog(packManifests || []);
+  const known = {
+    laws: {},
+    apparatus: [],
+    instruments: Object.keys(builtinInstruments),
+    measures: [],
+    surfaces: ["stage", "webgl"],
+  };
+  (packManifests || []).forEach((m) => {
+    Object.keys((m && m.laws) || {}).forEach((id) => {
+      known.laws[id] = { defaults: m.laws[id].defaults || {} };
+    });
+    Object.keys((m && m.apparatus) || {}).forEach((k) => {
+      known.apparatus.push(k);
+    });
+    ((m && m.measures) || []).forEach((x) => {
+      known.measures.push(x.id);
+    });
+  });
+  ((labManifest && labManifest.measures) || []).forEach((x) => {
+    known.measures.push(x.id);
+  });
+  const { config, warnings, errors } = validateConfig(raw, known);
+  if (!config) throw new Error(`Invalid config:\n- ${errors.join("\n- ")}`);
+  if (warnings.length > 0) console.info("[labkit] auto-tuned config:", warnings);
+  const clock = createClock();
+  const active = {};
+  const key = (cat, id) => `${cat}:${id}`;
+  (config.substances || []).forEach((s) => {
+    active[key("substances", s.id)] = s.active;
+  });
+  (config.material || []).forEach((m) => {
+    active[key("material", m.id)] = m.active;
+  });
+  (config.laws || []).forEach((l, i) => {
+    active[key("laws", `${l.law}#${i}`)] = l.active;
+  });
+  return {
+    config,
+    catalog,
+    clock,
+    warnings,
+    isActive: (cat, id) => active[key(cat, id)] !== false,
+    setActive: (cat, id, v) => {
+      active[key(cat, id)] = v;
+    },
+  };
+}
+
 // ---- core/instruments.js (inlined) ----
-// AuraLab core — instruments as measuring devices: a counter (live readouts)
+// LabKit core — instruments as measuring devices: a counter (live readouts)
 // and a curve (history chart). Fed by metric values; the lab decides what they mean.
 
 const GAUGE =
@@ -862,8 +993,8 @@ function device(name, hint) {
 }
 
 // Counter ("chips" type): one readout per metric. Returns { update(values), sample() }.
-function buildChips(parent, entry, metricsById) {
-  const box = device("Counter", "Live values");
+function buildChips(parent, entry, metricsById, L) {
+  const box = device(L.counter, L.liveValues);
   const screen = el("div", entry.metrics.length > 3 ? "lcd cols2" : "lcd");
   const cells = entry.metrics.map((id) => {
     const m = metricsById[id];
@@ -888,8 +1019,8 @@ function buildChips(parent, entry, metricsById) {
 }
 
 // Curve: one line per metric over a sliding window; sized to its box.
-function buildCurve(parent, entry, metricsById) {
-  const box = device("Curve", entry.title || "History");
+function buildCurve(parent, entry, metricsById, L) {
+  const box = device(L.curve, entry.title || L.history);
   box.classList.add("grow");
   const screen = el("div", "lcd plot");
   screen.appendChild(el("div", "lg", entry.metrics.map((id) => {
@@ -953,11 +1084,11 @@ function buildCurve(parent, entry, metricsById) {
 }
 
 // ---- core/notebook.js (inlined) ----
-// AuraLab core — notebook: timestamped notes + measure snapshots at instant t.
+// LabKit core — notebook: timestamped notes + measure snapshots at instant t.
 // Snapshots store metric values and tunable params; restoring re-applies params.
 
 function storageKey(labId) {
-  return `auralab.${labId}.notebook`;
+  return `labkit.${labId}.notebook`;
 }
 
 function load(labId) {
@@ -985,6 +1116,7 @@ function save(labId, data) {
 // onRestore(params): re-apply params + resync + redraw
 function buildNotebook(parent, config, getState, onRestore) {
   if (!config.notebook.enabled) return null;
+  const L = strings(config);
   const data = load(config.lab.id);
   const sec = el("section", "notebook");
 
@@ -997,9 +1129,9 @@ function buildNotebook(parent, config, getState, onRestore) {
   }
 
   const noteInput = el("textarea", "note-area");
-  noteInput.placeholder = "Write what you see…";
-  noteInput.setAttribute("aria-label", "Notebook note");
-  const noteBtn = el("button", "btn ink", "Note");
+  noteInput.placeholder = L.notePlaceholder;
+  noteInput.setAttribute("aria-label", L.noteAria);
+  const noteBtn = el("button", "btn ink", L.noteBtn);
   noteBtn.type = "button";
   noteBtn.addEventListener("click", () => {
     const text = noteInput.value.trim();
@@ -1012,9 +1144,9 @@ function buildNotebook(parent, config, getState, onRestore) {
   noteInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) noteBtn.click();
   });
-  const snapBtn = el("button", "btn", "● Record measures");
+  const snapBtn = el("button", "btn", L.recordBtn);
   snapBtn.type = "button";
-  snapBtn.title = "Record measures at this instant";
+  snapBtn.title = L.recordTitle;
   const actions = el("div", "note-actions");
   actions.appendChild(noteBtn);
   actions.appendChild(snapBtn);
@@ -1023,7 +1155,7 @@ function buildNotebook(parent, config, getState, onRestore) {
 
   const notesList = el("ul", "notes");
   sec.appendChild(notesList);
-  const snapsTitle = el("h3", "sub", "Snapshots");
+  const snapsTitle = el("h3", "sub", L.snapshots);
   const snapsList = el("ul", "snapshots");
   snapBtn.addEventListener("click", () => {
     const s = getState();
@@ -1051,7 +1183,7 @@ function buildNotebook(parent, config, getState, onRestore) {
     data.notes.forEach((n, i) => {
       const li = el("li", "", `<span class="t">${fmtT(n.t)}</span><span class="txt">${escapeHtml(n.text)}</span>`);
       const del = el("button", "btn mini", "×");
-      del.setAttribute("aria-label", "Delete note");
+      del.setAttribute("aria-label", L.deleteNote);
       del.addEventListener("click", () => {
         data.notes.splice(i, 1);
         save(config.lab.id, data);
@@ -1071,11 +1203,11 @@ function buildNotebook(parent, config, getState, onRestore) {
         .map((k) => `${k}=${Math.round(s.metrics[k] * 100) / 100}`)
         .join(", ");
       const li = el("li", "", `<span class="t">${fmtT(s.t)}</span><span class="txt">${escapeHtml(summary)}</span>`);
-      const back = el("button", "btn mini", "Restore");
+      const back = el("button", "btn mini", L.restore);
       back.addEventListener("click", () => onRestore(JSON.parse(JSON.stringify(s.params))));
       li.appendChild(back);
       const del = el("button", "btn mini", "×");
-      del.setAttribute("aria-label", "Delete snapshot");
+      del.setAttribute("aria-label", L.deleteSnapshot);
       del.addEventListener("click", () => {
         data.snapshots.splice(i, 1);
         save(config.lab.id, data);
@@ -1092,7 +1224,7 @@ function buildNotebook(parent, config, getState, onRestore) {
 }
 
 // ---- core/ghost.js (inlined) ----
-// AuraLab core — the flask ghost (logo + notebook guide).
+// LabKit core — the flask ghost (logo + notebook guide).
 // Classic script on purpose (no import/export): the portal loads it with a
 // plain <script src>, the shell imports it for its side effect, and the
 // standalone build inlines it as is. Exposes window.AuraGhost.mount(host, theme).
@@ -1224,7 +1356,7 @@ function buildNotebook(parent, config, getState, onRestore) {
 })();
 
 // ---- core/shell.js (inlined) ----
-// AuraLab core — shell: validates config, builds the lab page, binds everything,
+// LabKit core — shell: validates config, builds the lab page, binds everything,
 // runs the loop. Knows categories and presentation; knows zero science.
 // Page: header (ghost, lab name, back link) / steps | bench | panel.
 // Every lab built on this shell gets the same look; config only sets colors.
@@ -1257,6 +1389,7 @@ async function boot(source, buildLab, labManifest, packManifests) {
     raw = source;
   }
 
+  const L = strings(raw);
   const catalog = mergeCatalog(packManifests || []);
   const known = {
     laws: {},
@@ -1275,14 +1408,14 @@ async function boot(source, buildLab, labManifest, packManifests) {
 
   const { config, warnings, errors } = validateConfig(raw, known);
   if (!config) {
-    root.appendChild(el("div", "error", `Invalid config:\n- ${errors.join("\n- ")}`));
+    root.appendChild(el("div", "error", L.invalidConfig + "\n- " + errors.join("\n- ")));
     return null;
   }
-  if (warnings.length > 0) console.info("[auralab] auto-tuned config:", warnings);
+  if (warnings.length > 0) console.info("[labkit] auto-tuned config:", warnings);
 
   document.documentElement.style.setProperty("--accent", config.lab.accent);
   document.documentElement.style.setProperty("--page", config.lab.page);
-  document.title = `${config.lab.title} — AuraLab`;
+  document.title = `${config.lab.title} — LabKit`;
 
   // --- active flags (checkboxes and switches) ---
   const active = {};
@@ -1301,22 +1434,21 @@ async function boot(source, buildLab, labManifest, packManifests) {
   const header = el("header", "lab-header");
   header.appendChild(ghost(el("span", "logo"), "white"));
   header.appendChild(el("h1", "", escapeHtml(config.lab.title)));
-  const back = el("a", "back", "← all labs");
+  const back = el("a", "back", L.allLabs);
   back.href = config.lab.home;
   header.appendChild(back);
 
   const main = el("div", "lab-main");
   const rail = el("nav", "rail");
   rail.setAttribute("role", "tablist");
-  rail.setAttribute("aria-label", "Lab steps");
+  rail.setAttribute("aria-label", L.labSteps);
   const bench = el("section", "bench");
-  const benchHead = el("div", "zh", '<h2>Bench</h2><span class="hint">Watch it happen</span>');
+  const benchHead = el("div", "zh", '<h2>' + L.bench + '</h2><span class="hint">' + L.benchHint + '</span>');
   const fpsChip = el("span", "end fps", "– fps");
   benchHead.appendChild(fpsChip);
   const stage = el("div", "stage");
-  const canvas = el("canvas");
-  canvas.setAttribute("aria-label", `${config.lab.title} simulation`);
-  stage.appendChild(canvas);
+  // Created after buildLab: webgl labs mount their own surface instead.
+  let canvas = null;
   bench.appendChild(benchHead);
   bench.appendChild(stage);
   const panel = el("section", "panel");
@@ -1327,10 +1459,10 @@ async function boot(source, buildLab, labManifest, packManifests) {
   root.appendChild(main);
 
   // One step on the left = one pane on the right. Only declared parts get a step.
-  const steps = [{ id: "lab", label: "Lab", hint: "Substances, material, instruments" }];
-  if (config.laws.length > 0) steps.push({ id: "laws", label: "Laws", hint: "How it behaves" });
-  if (config.controls.length > 0) steps.push({ id: "knobs", label: "Knobs", hint: "Change the amounts" });
-  if (config.notebook.enabled) steps.push({ id: "notebook", label: "Notebook", hint: "Write what you see" });
+  const steps = [{ id: "lab", label: L.stepLab, hint: L.stepLabHint }];
+  if (config.laws.length > 0) steps.push({ id: "laws", label: L.stepLaws, hint: L.stepLawsHint });
+  if (config.controls.length > 0) steps.push({ id: "knobs", label: L.stepKnobs, hint: L.stepKnobsHint });
+  if (config.notebook.enabled) steps.push({ id: "notebook", label: L.stepNotebook, hint: L.stepNotebookHint });
   const panes = {};
   const tabs = [];
   const instruments = [];
@@ -1363,15 +1495,22 @@ async function boot(source, buildLab, labManifest, packManifests) {
 
   // --- lab wiring ---
   const clock = createClock();
-  const ctx = canvas.getContext("2d");
   const api = {
-    stage: { canvas, ctx, W: 800, H: 600 },
+    stage: { canvas: null, ctx: null, container: stage, W: 800, H: 600 },
     params: config,
     catalog,
     isActive,
     time: clock,
   };
   const lab = buildLab(api, config);
+  const is3d = lab.surface === "webgl";
+  if (!is3d) {
+    canvas = el("canvas");
+    canvas.setAttribute("aria-label", `${config.lab.title} : ${L.bench}`);
+    stage.appendChild(canvas);
+    api.stage.canvas = canvas;
+    api.stage.ctx = canvas.getContext("2d");
+  }
   const usesTime = () => typeof lab.step === "function";
 
   const speckles = [];
@@ -1379,11 +1518,13 @@ async function boot(source, buildLab, labManifest, packManifests) {
   function resize() {
     const r = stage.getBoundingClientRect();
     if (!r.width || !r.height) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.max(50, Math.floor(r.width * dpr));
-    canvas.height = Math.max(50, Math.floor(r.height * dpr));
-    api.stage.W = canvas.width / dpr;
-    api.stage.H = canvas.height / dpr;
+    api.stage.W = r.width;
+    api.stage.H = r.height;
+    if (!is3d) {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.max(50, Math.floor(r.width * dpr));
+      canvas.height = Math.max(50, Math.floor(r.height * dpr));
+    }
     if (lab.setSize) lab.setSize(api.stage.W, api.stage.H);
     // First real size known: respawn so nothing starts outside the bench.
     if (!sized) {
@@ -1417,7 +1558,7 @@ async function boot(source, buildLab, labManifest, packManifests) {
   function infoButton(nb, label) {
     const b = el("button", "ib", "i");
     b.type = "button";
-    b.setAttribute("aria-label", `About ${label}`);
+    b.setAttribute("aria-label", `${L.about} ${label}`);
     b.setAttribute("aria-expanded", "false");
     b.addEventListener("click", () => {
       nb.hidden = !nb.hidden;
@@ -1431,7 +1572,7 @@ async function boot(source, buildLab, labManifest, packManifests) {
     const box = el("input");
     box.type = "checkbox";
     box.checked = isActive(cat, id);
-    box.setAttribute("aria-label", `Enable ${label}`);
+    box.setAttribute("aria-label", `${L.enable} ${label}`);
     box.addEventListener("change", () => {
       active[key(cat, id)] = box.checked;
       drawOnce();
@@ -1453,6 +1594,11 @@ async function boot(source, buildLab, labManifest, packManifests) {
     row.appendChild(tools);
     outer.appendChild(row);
     if (nb) outer.appendChild(nb);
+    outer.addEventListener("click", (e) => {
+      if (e.target.closest(".switch, .check, .ib")) return;
+      const box = row.querySelector("input[type=checkbox]");
+      if (box && !box.disabled) box.click();
+    });
     return { outer, live };
   }
   function block(parent, title, cls) {
@@ -1469,8 +1615,8 @@ async function boot(source, buildLab, labManifest, packManifests) {
   }
 
   // Pane "Lab": substances, material and instruments, all visible at once.
-  const subsBlk = block(panes.lab, "Substances");
-  if (config.substances.length === 0) subsBlk.appendChild(el("p", "empty", "No substance in this lab."));
+  const subsBlk = block(panes.lab, L.substances);
+  if (config.substances.length === 0) subsBlk.appendChild(el("p", "empty", L.noSubstance));
   config.substances.forEach((s) => {
     const lawNames = config.laws
       .map((l, i) => ({ l, i }))
@@ -1485,8 +1631,8 @@ async function boot(source, buildLab, labManifest, packManifests) {
     liveSpans[s.id] = r.live;
     subsBlk.appendChild(r.outer);
   });
-  const matBlk = block(panes.lab, "Material");
-  if (config.material.length === 0) matBlk.appendChild(el("p", "empty", "No material in this lab."));
+  const matBlk = block(panes.lab, L.material);
+  if (config.material.length === 0) matBlk.appendChild(el("p", "empty", L.noMaterial));
   config.material.forEach((m) => {
     const app = catalog.apparatus[m.kind];
     const r = itemRow("material", m.id, m.label, APPARATUS(m.color || "#ffffff"), app ? app.notice : null);
@@ -1504,12 +1650,12 @@ async function boot(source, buildLab, labManifest, packManifests) {
     return out;
   };
   if (config.instruments.length > 0) {
-    const insBlk = block(panes.lab, "Instruments · measuring devices", "blk grow");
+    const insBlk = block(panes.lab, L.instruments, "blk grow");
     const devs = el("div", "devs");
     insBlk.appendChild(devs);
     config.instruments.forEach((entry) => {
-      if (entry.type === "chips") instruments.push(buildChips(devs, entry, metricsById));
-      else if (entry.type === "curve") instruments.push(buildCurve(devs, entry, metricsById));
+      if (entry.type === "chips") instruments.push(buildChips(devs, entry, metricsById, L));
+      else if (entry.type === "curve") instruments.push(buildCurve(devs, entry, metricsById, L));
     });
     // A lone counter takes the free space; with a curve, the curve does.
     if (!config.instruments.some((x) => x.type === "curve")) instruments[0].element.classList.add("grow");
@@ -1521,15 +1667,21 @@ async function boot(source, buildLab, labManifest, packManifests) {
       const mod = catalog.laws[l.law];
       const label = mod ? mod.notice.label : l.law;
       const pairs = l.params && l.params.pairs ? l.params.pairs.map((p) => p.join(" → ")).join(", ") : "";
-      const scope = l.targets ? `on ${l.targets.join(", ")}` : pairs || "on everything";
+      const scope = l.targets ? `${L.lawsOn} ${l.targets.join(", ")}` : pairs;
       const outer = el("div", "elem");
       const row = el("div", "elem-row law");
       row.appendChild(toggle("laws", lawKey(i), label, "switch"));
-      row.appendChild(el("span", "", `<span class="name">${escapeHtml(label)}</span><small>${escapeHtml(scope)}</small>`));
+      const scopeHtml = scope ? `<small>${escapeHtml(scope)}</small>` : "";
+      row.appendChild(el("span", "", `<span class="name">${escapeHtml(label)}</span>${scopeHtml}`));
       const nb = noticeBlock(mod ? mod.notice : null);
       if (nb) row.appendChild(infoButton(nb, label));
       outer.appendChild(row);
       if (nb) outer.appendChild(nb);
+      outer.addEventListener("click", (e) => {
+        if (e.target.closest(".switch, .check, .ib")) return;
+        const box = row.querySelector("input[type=checkbox]");
+        if (box && !box.disabled) box.click();
+      });
       panes.laws.appendChild(outer);
     });
   }
@@ -1544,11 +1696,11 @@ async function boot(source, buildLab, labManifest, packManifests) {
 
   // Bottom of the steps column: lab note + time buttons.
   if (config.lab.note) rail.appendChild(el("p", "note", escapeHtml(config.lab.note)));
-  if (warnings.length > 0) rail.appendChild(el("p", "note", `Auto-tuned ${warnings.length} value(s), see console.`));
+  if (warnings.length > 0) rail.appendChild(el("p", "note", L.autotuned(warnings.length)));
   const timeBox = el("div", "time");
   const pauseBtn = el("button", "btn ink big");
-  const resetBtn = el("button", "btn line", "Reset");
-  const stepBtn = el("button", "btn line", "+1 step");
+  const resetBtn = el("button", "btn line", L.reset);
+  const stepBtn = el("button", "btn line", L.step1);
   [pauseBtn, resetBtn, stepBtn].forEach((b) => {
     b.type = "button";
     timeBox.appendChild(b);
@@ -1556,7 +1708,7 @@ async function boot(source, buildLab, labManifest, packManifests) {
   rail.appendChild(timeBox);
   const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (reduced || !usesTime()) clock.running = false;
-  const paintPause = () => { pauseBtn.textContent = clock.running ? "❚❚ Pause" : "▶ Play"; };
+  const paintPause = () => { pauseBtn.textContent = clock.running ? L.pause : L.play; };
   paintPause();
   if (!usesTime()) pauseBtn.disabled = true;
   pauseBtn.addEventListener("click", () => {
@@ -1616,22 +1768,28 @@ async function boot(source, buildLab, labManifest, packManifests) {
   }
 
   function drawOnce() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const W = canvas.width / dpr;
-    const H = canvas.height / dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = config.bench.background;
-    ctx.globalAlpha = config.bench.trail;
-    ctx.fillRect(0, 0, W, H);
-    ctx.globalAlpha = 1;
-    for (const s of speckles) {
-      ctx.globalAlpha = s.a;
-      ctx.fillStyle = "#cdd6e0";
-      ctx.fillRect(s.x * W, s.y * H, s.s, s.s);
+    if (is3d) {
+      if (lab.draw) lab.draw(null, api.stage.W, api.stage.H, isActive, hexToRgb);
+    } else {
+      const canvas2d = api.stage.canvas;
+      const ctx = api.stage.ctx;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const W = canvas2d.width / dpr;
+      const H = canvas2d.height / dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = config.bench.background;
+      ctx.globalAlpha = config.bench.trail;
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
+      for (const s of speckles) {
+        ctx.globalAlpha = s.a;
+        ctx.fillStyle = "#cdd6e0";
+        ctx.fillRect(s.x * W, s.y * H, s.s, s.s);
+      }
+      ctx.globalAlpha = 1;
+      if (lab.draw) lab.draw(ctx, W, H, isActive, hexToRgb);
     }
-    ctx.globalAlpha = 1;
-    if (lab.draw) lab.draw(ctx, W, H, isActive, hexToRgb);
     const v = metricValues();
     instruments.forEach((ins) => ins.update(v));
     const flat = lab.measures();
@@ -2175,9 +2333,9 @@ const particlePack = {
   measures: [{ id: "consumed", label: "Consumed", unit: "" }],
 };
 
-// ---- app-space/lab.js (inlined) ----
-// Aura-Space lab wiring: particle world + catalog laws declared in config.json.
-// Copy this folder to start a new lab; only config + this wiring change.
+// ---- app-eco/lab.js (inlined) ----
+// Aura-Eco lab wiring: particle world + catalog laws declared in config.json.
+// Same pattern as Aura-Space; only the config content differs.
 
 const labManifest = { measures: [] };
 
@@ -2223,90 +2381,77 @@ function buildLab(api, config) {
 
 boot({
   "lab": {
-    "id": "space",
-    "title": "Aura-Space",
-    "subtitle": "Gravity well, planets and an asteroid belt — rendered by the shared AuraLab core.",
-    "accent": "#ffb454",
-    "page": "#5b8cff",
-    "note": "Same kit as Aura-Eco. Only this lab differs: substances, material, laws and instruments."
+    "id": "eco",
+    "title": "Eco Lab",
+    "subtitle": "Rabbits, foxes and a living population chart — rendered by the shared LabKit core.",
+    "accent": "#7fd069",
+    "page": "#6cc95a",
+    "note": "Same kit as Space Lab. Only this lab differs: substances, laws and instruments."
   },
   "bench": {
-    "background": "#07090c",
-    "trail": 0.22,
-    "speckles": 180
+    "background": "#080b09",
+    "trail": 0.35,
+    "speckles": 0
   },
-  "bounds": "wrap",
+  "bounds": "bounce",
   "substances": [
     {
-      "id": "planets",
-      "label": "Planets",
-      "count": 4,
-      "color": "#7fc4ff",
-      "radius": 4,
-      "mass": 2,
-      "speed": 60,
-      "ring": [0.14, 0.38]
-    },
-    {
-      "id": "belt",
-      "label": "Belt rocks",
-      "count": 220,
-      "color": "#8a94a0",
-      "radius": 1.4,
-      "mass": 1,
-      "speed": 60,
-      "ring": [0.43, 0.47]
-    },
-    {
-      "id": "comets",
-      "label": "Comets",
-      "count": 2,
-      "color": "#9ff0d0",
+      "id": "rabbits",
+      "label": "Rabbits",
+      "count": 120,
+      "color": "#a8e05f",
       "radius": 2.6,
       "mass": 1,
-      "speed": 60,
-      "ring": [0.28, 0.4]
-    }
-  ],
-  "material": [
-    {
-      "id": "star",
-      "kind": "attractor",
-      "label": "Star",
-      "x": 0.5,
-      "y": 0.5,
-      "strength": 160,
-      "radius": 22,
-      "color": "#ffd9a0"
-    }
-  ],
-  "laws": [
-    {
-      "law": "placement-circulaire",
-      "targets": ["planets", "belt", "comets"]
+      "speed": 55,
+      "links": { "distance": 46 }
     },
     {
-      "law": "gravitation"
+      "id": "foxes",
+      "label": "Foxes",
+      "count": 14,
+      "color": "#e0784a",
+      "radius": 3.6,
+      "mass": 2,
+      "speed": 70
+    },
+    {
+      "id": "bushes",
+      "label": "Bushes",
+      "count": 36,
+      "color": "#2f6b3a",
+      "radius": 4.5,
+      "mass": 1,
+      "speed": 4
     }
   ],
+  "material": [],
+  "laws": [
+    { "law": "fuite", "params": { "pairs": [["rabbits", "foxes"]] } },
+    { "law": "poursuite", "params": { "pairs": [["foxes", "rabbits"]] } },
+    { "law": "predation", "params": { "pairs": [["foxes", "rabbits"]] } },
+    { "law": "reproduction", "targets": ["rabbits"] },
+    { "law": "derive", "targets": ["bushes"] }
+  ],
   "metrics": [
-    { "id": "planets", "label": "Planets", "unit": "", "source": "counts.planets", "color": "#7fc4ff" },
-    { "id": "belt", "label": "Belt rocks", "unit": "", "source": "counts.belt", "color": "#8a94a0" },
-    { "id": "comets", "label": "Comets", "unit": "", "source": "counts.comets", "color": "#9ff0d0" }
+    { "id": "rabbits", "label": "Rabbits", "unit": "", "source": "counts.rabbits", "color": "#a8e05f" },
+    { "id": "foxes", "label": "Foxes", "unit": "", "source": "counts.foxes", "color": "#e0784a" },
+    { "id": "bushes", "label": "Bushes", "unit": "", "source": "counts.bushes", "color": "#2f6b3a" },
+    { "id": "captures", "label": "Captures", "unit": "", "source": "consumed", "color": "#e8e6e1" }
   ],
   "instruments": [
-    { "type": "chips", "metrics": ["planets", "belt", "comets"] }
+    { "type": "chips", "metrics": ["rabbits", "foxes", "bushes", "captures"] },
+    { "type": "curve", "title": "Populations", "metrics": ["rabbits", "foxes"], "samples": 160 }
   ],
   "controls": [
-    { "path": "material.star.strength", "label": "Star gravity", "min": 0, "max": 600, "step": 5 },
-    { "path": "substances.belt.count", "label": "Belt density", "min": 0, "max": 600, "step": 10 },
-    { "path": "bench.trail", "label": "Orbit trails", "min": 0.05, "max": 1, "step": 0.05 }
+    { "path": "substances.rabbits.count", "label": "Rabbit population", "min": 0, "max": 400, "step": 5 },
+    { "path": "substances.foxes.count", "label": "Fox population", "min": 0, "max": 60, "step": 1 },
+    { "path": "substances.foxes.speed", "label": "Fox speed", "min": 0, "max": 200, "step": 5 }
   ],
   "notebook": {
     "enabled": true,
     "prompts": [
-      "What happens at zero gravity?",
-      "Double the belt: do orbits stay stable?"
+      "Remove all foxes, wait, then bring them back: what happens?",
+      "How fast must foxes be to collapse the rabbits?"
     ]
   }
 }

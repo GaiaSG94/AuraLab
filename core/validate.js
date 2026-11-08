@@ -1,4 +1,4 @@
-// AuraLab core — config validation + auto-tuning (shared by browser and Node).
+// LabKit core — config validation + auto-tuning (shared by browser and Node).
 // Invalid numbers are clamped with a warning; only structural problems are errors.
 // known = { laws: {id: {defaults}}, apparatus: [kinds], instruments: [types],
 //           measures: [ids], surfaces: [names] }
@@ -78,6 +78,11 @@ export function validateConfig(raw, known) {
     }
     // home: where "← all labs" leads (relative to the lab page).
     if (typeof config.lab.home !== "string" || !config.lab.home.trim()) config.lab.home = "../index.html";
+    if (config.lab.lang === undefined) config.lab.lang = "en";
+    else if (config.lab.lang !== "en" && config.lab.lang !== "fr") {
+      config.lab.lang = "en";
+      fix('lab.lang reset to "en" (must be "en" or "fr")');
+    }
   }
 
   // --- bench ---

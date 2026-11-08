@@ -1,4 +1,4 @@
-// AuraLab core — time services: clock, play/pause/reset/step wiring (no DOM inside).
+// LabKit core — time services: clock, play/pause/reset/step wiring (no DOM inside).
 export function createClock() {
   return {
     t: 0,

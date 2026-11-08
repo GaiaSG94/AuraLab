@@ -1,4 +1,4 @@
-// AuraLab core — the flask ghost (logo + notebook guide).
+// LabKit core — the flask ghost (logo + notebook guide).
 // Classic script on purpose (no import/export): the portal loads it with a
 // plain <script src>, the shell imports it for its side effect, and the
 // standalone build inlines it as is. Exposes window.AuraGhost.mount(host, theme).

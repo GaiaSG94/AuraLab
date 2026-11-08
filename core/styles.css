@@ -1,4 +1,4 @@
-/* AuraLab core — lab shell, "flat page" look.
+/* LabKit core — lab shell, "flat page" look.
    One flat page color per lab (lab.page), ink text, paper and ink cards.
    Every lab built on core/ gets this exact look; only --page (and the
    bench background) change per lab. Fonts degrade to system fonts offline. */
@@ -182,7 +182,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   background: var(--soft); border-radius: 10px; padding: 6px 10px;
 }
 .elem-row .icon svg { width: 26px; height: 30px; display: block; }
-.elem-row .name { font-weight: 800; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.elem-row .name { font-weight: 800; font-size: 15px; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .elem-row .live { font: 600 13px var(--mono); color: var(--muted); white-space: nowrap; }
 .elem-row .tools { display: flex; align-items: center; gap: 8px; }
 .elem-row.law { grid-template-columns: 44px minmax(0, 1fr) auto; background: none; padding: 4px 0; }

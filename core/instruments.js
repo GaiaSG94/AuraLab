@@ -1,4 +1,4 @@
-// AuraLab core — instruments as measuring devices: a counter (live readouts)
+// LabKit core — instruments as measuring devices: a counter (live readouts)
 // and a curve (history chart). Fed by metric values; the lab decides what they mean.
 import { el, escapeHtml } from "./controls.js";
 
@@ -13,8 +13,8 @@ function device(name, hint) {
 }
 
 // Counter ("chips" type): one readout per metric. Returns { update(values), sample() }.
-export function buildChips(parent, entry, metricsById) {
-  const box = device("Counter", "Live values");
+export function buildChips(parent, entry, metricsById, L) {
+  const box = device(L.counter, L.liveValues);
   const screen = el("div", entry.metrics.length > 3 ? "lcd cols2" : "lcd");
   const cells = entry.metrics.map((id) => {
     const m = metricsById[id];
@@ -39,8 +39,8 @@ export function buildChips(parent, entry, metricsById) {
 }
 
 // Curve: one line per metric over a sliding window; sized to its box.
-export function buildCurve(parent, entry, metricsById) {
-  const box = device("Curve", entry.title || "History");
+export function buildCurve(parent, entry, metricsById, L) {
+  const box = device(L.curve, entry.title || L.history);
   box.classList.add("grow");
   const screen = el("div", "lcd plot");
   screen.appendChild(el("div", "lg", entry.metrics.map((id) => {
