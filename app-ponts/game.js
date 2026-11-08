@@ -209,8 +209,11 @@ export async function startGame(source) {
             save.cleared[activeId] = m.score;
             persist();
           }
-          ctx.journal(`Holding! Score ${m.score}.`, m);
-          ctx.announce(`Holding! Score: ${m.score}.`);
+          const site = active().site;
+          const at = config.sites.findIndex((s) => s.id === activeId);
+          const level = `Level ${at + 1}/${config.sites.length} — ${site.label}`;
+          ctx.journal(`${level}: Holding! Score ${m.score}.`, m);
+          ctx.announce(`${level}: Holding! Score: ${m.score}.`);
         } else if (w.statut === 0) {
           ctx.journal("Collapsed!", w.measures());
           ctx.announce("COLLAPSED! Repair, reinforce, retest.");
