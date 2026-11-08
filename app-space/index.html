@@ -15,5 +15,14 @@
     import { particlePack } from "../engines/particles/index.js";
     boot("config.json", buildLab, labManifest, [particlePack]);
   </script>
+<script>
+  // If the page is already served but the lab never boots, the static server
+  // dropped: say reload instead of pointing back at the server.
+  setTimeout(() => {
+    if (location.protocol.slice(0, 4) === "http" && document.querySelector(".boot-hint")) {
+      document.querySelector(".boot-hint").innerHTML += "<br />This page is already served: the static server may have dropped — just reload the page.";
+    }
+  }, 6000);
+</script>
 </body>
 </html>

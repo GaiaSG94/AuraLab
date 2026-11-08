@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "validate-lab-config",
+      "trigger": "PostFileSave",
+      "matcher": "app-[^\\\\/]+[\\\\/]config\\.json$",
+      "action": {
+        "type": "command",
+        "command": "node scripts/validate-config.mjs"
+      },
+      "timeout": 60,
+      "enabled": true
+    }
+  ]
+}

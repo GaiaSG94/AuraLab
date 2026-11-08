@@ -2,9 +2,9 @@
   "lab": {
     "id": "chimie",
     "title": "Chemistry Lab",
-    "subtitle": "Flask, colors and bunsen burner — same shell as the other labs.",
+    "subtitle": "Pour, mix and heat in real 3D glassware.",
     "accent": "#a8e05f",
-    "page": "#58b368",
+    "page": "#6cc95a",
     "note": "Same kit as Bridge Lab. Only this lab differs: substances, material, laws and instruments.",
     "lang": "en"
   },

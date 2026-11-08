@@ -1235,9 +1235,9 @@ function buildNotebook(parent, config, getState, onRestore) {
     "M41 22 H59 V36 Q81 45 81 68 V86 Q75.8 80 70.7 86 Q65.5 92 60.3 86 Q55.2 80 50 86 " +
     "Q44.8 92 39.7 86 Q34.5 80 29.3 86 Q24.2 92 19 86 V68 Q19 45 41 36 Z";
   const THEMES = {
-    white: { body: "#fbf8ff", eye: "#17141f", hl: "#fbf8ff", bub: "#17141f", cheek: "#ff8a3d" },
-    ink: { body: "#17141f", eye: "#fbf8ff", hl: "#17141f", bub: "#fbf8ff", cheek: "#ff8a3d" },
-    inkpaper: { body: "#17141f", eye: "#fbf8ff", hl: "#17141f", bub: "#ff8a3d", cheek: "#ff8a3d" },
+    white: { body: "#fbf8ff", eye: "#17141f", iris: "#4a3f66", hl: "#fbf8ff", bub: "#17141f", cheek: "#ff8a3d" },
+    ink: { body: "#17141f", eye: "#fbf8ff", iris: "#d9d2ee", hl: "#17141f", bub: "#fbf8ff", cheek: "#ff8a3d" },
+    inkpaper: { body: "#17141f", eye: "#fbf8ff", iris: "#d9d2ee", hl: "#17141f", bub: "#ff8a3d", cheek: "#ff8a3d" },
   };
   const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const ghosts = [];
@@ -1247,15 +1247,17 @@ function buildNotebook(parent, config, getState, onRestore) {
   style.textContent =
     ".aura-ghost{display:block}.aura-ghost svg{display:block;width:100%;height:auto;overflow:visible}" +
     ".aura-ghost .happy{display:none}.aura-ghost.joy .pupil,.aura-ghost.joy .hl{display:none}.aura-ghost.joy .happy{display:inline}" +
-    ".aura-ghost .pupil{transform-box:fill-box;transform-origin:center;animation:aura-blink 6s infinite}" +
-    "@keyframes aura-blink{0%,95%,100%{transform:scaleY(1)}97.5%{transform:scaleY(.08)}}" +
-    "@media (prefers-reduced-motion: reduce){.aura-ghost .pupil{animation:none}}";
+    // Blink: the whole eye squashes around its centre (JS sets the scale, so ghosts blink apart).
+    ".aura-ghost .lid{transform-box:fill-box;transform-origin:center;transition:transform .07s}" +
+    ".aura-ghost.blink .lid{transform:scaleY(.08)}";
   document.head.appendChild(style);
 
+  // Glossy eye: dark pupil, a soft lighter crescent at the bottom for depth, two catch-lights.
   function eye(cx, t) {
-    return `<g><ellipse class="pupil" cx="${cx}" cy="62" rx="5.2" ry="6.9" fill="${t.eye}"/>` +
-      `<g class="hlg"><circle class="hl" cx="${cx - 1.6}" cy="59.4" r="1.6" fill="${t.hl}"/>` +
-      `<circle class="hl" cx="${cx + 1.7}" cy="64.8" r=".75" fill="${t.hl}"/></g></g>`;
+    return `<g class="lid"><ellipse class="pupil" cx="${cx}" cy="62" rx="5.6" ry="7.3" fill="${t.eye}"/>` +
+      `<path class="pupil" d="M${cx - 4} 65.2 Q${cx} 69.6 ${cx + 4} 65.2 Q${cx} 67.4 ${cx - 4} 65.2 Z" fill="${t.iris}"/>` +
+      `<g class="hlg"><circle class="hl" cx="${cx - 1.8}" cy="59.2" r="1.9" fill="${t.hl}"/>` +
+      `<circle class="hl" cx="${cx + 2}" cy="65" r=".85" fill="${t.hl}"/></g></g>`;
   }
 
   function svg(t) {
@@ -1269,8 +1271,10 @@ function buildNotebook(parent, config, getState, onRestore) {
       `<g class="bubl"></g></svg>`;
   }
 
-  // Eyes follow the pointer; hovering the ghost closes its eyes (^ ^).
+  // Eyes follow the pointer; hovering the ghost closes its eyes (^ ^). Idle: glances around.
+  let lastMove = -1e9;
   function onPointer(ev) {
+    lastMove = performance.now();
     for (const g of ghosts) {
       const r = g.host.getBoundingClientRect();
       if (!r.width) continue;
@@ -1287,6 +1291,26 @@ function buildNotebook(parent, config, getState, onRestore) {
   // Bubbles rise from the flask neck, sway, then pop.
   function update(g, dt) {
     if (!reduce) {
+      if (g.look) {
+        g.tx = g.look[0];
+        g.ty = g.look[1];
+      } else if (performance.now() - lastMove > 2500) {
+        g.glance -= dt;
+        if (g.glance <= 0) {
+          const a = Math.random() * 6.28, k = Math.random() < 0.35 ? 0 : 0.5 + Math.random() * 0.5;
+          g.tx = Math.cos(a) * 3.2 * k;
+          g.ty = Math.sin(a) * 2.4 * k;
+          g.glance = 1.2 + Math.random() * 2;
+        }
+      }
+      g.blinkIn -= dt;
+      if (g.blinkIn <= 0) {
+        g.host.classList.add("blink");
+        const twice = Math.random() < 0.2;
+        setTimeout(() => g.host.classList.remove("blink"), 110);
+        if (twice) setTimeout(() => { g.host.classList.add("blink"); setTimeout(() => g.host.classList.remove("blink"), 110); }, 240);
+        g.blinkIn = 2.5 + Math.random() * 4;
+      }
       const sm = Math.min(1, dt * 9);
       g.ex += (g.tx - g.ex) * sm;
       g.ey += (g.ty - g.ey) * sm;
@@ -1341,6 +1365,7 @@ function buildNotebook(parent, config, getState, onRestore) {
     const g = {
       host, col: t.bub, eyes: s.querySelector(".eyes"), hls: [...s.querySelectorAll(".hlg")],
       bubl: s.querySelector(".bubl"), tx: 0, ty: 0, ex: 0, ey: 0, bubs: [], next: Math.random(),
+      glance: Math.random() * 2, blinkIn: 1.5 + Math.random() * 3, look: null,
     };
     if (reduce) g.bubl.innerHTML = `<circle cx="54" cy="12" r="3" fill="${t.bub}"/>`;
     ghosts.push(g);
@@ -1352,7 +1377,18 @@ function buildNotebook(parent, config, getState, onRestore) {
     return host;
   }
 
-  window.AuraGhost = { mount };
+  // Point the eyes somewhere (svg units, about ±3) or give them back to the pointer (null).
+  function look(host, x, y) {
+    const g = ghosts.find((k) => k.host === host);
+    if (g) g.look = x === null || x === undefined ? null : [x, y];
+  }
+  // Closed happy eyes (^ ^) for a moment.
+  function joy(host, ms) {
+    host.classList.add("joy");
+    setTimeout(() => host.classList.remove("joy"), ms || 900);
+  }
+
+  window.AuraGhost = { mount, look, joy };
 })();
 
 // ---- core/shell.js (inlined) ----

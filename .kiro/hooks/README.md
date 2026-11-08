@@ -17,8 +17,10 @@ edit never reaches the demo.
 browser uses, checks every `app-*/config.json`, prints warnings for
 auto-tuned values and fails on structural errors. Zero dependencies.
 
-## Why a doc instead of a JSON blob
+## Installed hook
 
-Kiro hook schemas evolve; the panel is the source of truth for field names.
-This file plus the runnable script is the stable contract — wire it once in
-the IDE and every config edit is guarded.
+`validate-lab-config.json` (schema `v1`, trigger `PostFileSave`, matcher
+`app-*/config.json`) runs `node scripts/validate-config.mjs` and fails the
+save result on exit code ≠ 0. It activates automatically — no panel setup.
+Note: file triggers fire on agent-made saves, not manual editor saves; to
+see it fire, have the agent edit a config.

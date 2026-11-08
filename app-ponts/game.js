@@ -33,6 +33,9 @@ export async function startGame(source) {
   const { config, catalog, clock, isActive, setActive } = boot;
   const host = document.getElementById("game");
   host.innerHTML = "";
+  // Full-screen host in both builds (the standalone page has no #game rule of its own).
+  host.style.cssText = "position:fixed;inset:0;overflow:hidden;";
+  document.documentElement.style.setProperty("--page", "#ffd6ad");
   const save = loadSave() || { designs: {}, cleared: {}, journal: [] };
   const persist = () => {
     try {
@@ -119,6 +122,21 @@ export async function startGame(source) {
         ctx.announce("No bars on this node.");
       }
     },
+    undo() {
+      const w = active().world;
+      if (w.testing) {
+        ctx.announce("Test running…");
+        return;
+      }
+      if (w.sticks.length === 0) {
+        ctx.announce("Nothing to undo.");
+        return;
+      }
+      w.removeStick(w.sticks.length - 1);
+      ctx.selected = -1;
+      ctx.saveDesign();
+      ctx.announce("Last bar removed, budget refunded.");
+    },
     saveDesign() {
       const w = active().world;
       save.designs[activeId] = w.sticks.map((s) => ({ a: s.a, b: s.b, type: s.type }));
@@ -161,7 +179,9 @@ export async function startGame(source) {
   };
   const view = buildMapView(host, ctx);
   const hud = buildHud(host, ctx);
+  if (active().world.sticks.length > 0) ctx.message = "Road restored — TEST it or keep building.";
   const lastStatut = {};
+  let acc = 0; // fixed-step accumulator: holds/breaks must not depend on frame rate
   let last = performance.now();
   function frame(now) {
     requestAnimationFrame(frame);
@@ -171,8 +191,16 @@ export async function startGame(source) {
     dt = Math.min(dt, 0.05);
     if (clock.running) {
       const w = active().world;
-      w.step(dt, isActive);
-      clock.advance(dt);
+            acc = Math.min(acc + dt, 0.25);
+      let n = 0;
+      while (acc >= 1 / 60 && n < 4) {
+        w.step(1 / 60, isActive);
+        clock.advance(1 / 60);
+        acc -= 1 / 60;
+        n++;
+      }
+      if (n === 4) acc = 0;
+      if (w.testing) ctx.message = `Testing… the ghost is crossing! · stress ${Math.round((w.maxStrain || 0) * 100)}%`;
       if (w.statut !== (lastStatut[activeId] ?? -1)) {
         lastStatut[activeId] = w.statut;
         if (w.statut === 1) {
