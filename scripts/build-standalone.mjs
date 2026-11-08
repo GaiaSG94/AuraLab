@@ -1,6 +1,6 @@
 // Builds double-clickable standalone labs: dist/labkit-<lab>.html.
 // Inlines styles + core + the lab's packs + lab wiring + config: no modules, no fetch.
-// app-ponts additionally inlines vendor/three.min.js (raw, no module stripping).
+// The 3D labs (app-ponts, app-chimie) also inline app-ponts/vendor/three.min.js (raw, no module stripping).
 // Run: node scripts/build-standalone.mjs (re-run after editing core/, engines/ or configs).
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -50,6 +50,8 @@ const PACKS = {
     "engines/chimie/laws/chauffage.js",
     "engines/chimie/world.js",
     "engines/chimie/index.js",
+    "engines/chimie/benchview.js",
+    "engines/chimie/hud.js",
   ],
   ponts: [
     "engines/ponts/laws/chantier.js",
@@ -108,7 +110,7 @@ ${mode === "game" ? `startGame(${safe});` : `boot(${safe}, buildLab, labManifest
 const labs = [
   { dir: "app-space", out: "labkit-space.html", packs: ["particles"] },
   { dir: "app-eco", out: "labkit-eco.html", packs: ["particles"] },
-  { dir: "app-chimie", out: "labkit-chimie.html", packs: ["chimie"] },
+  { dir: "app-chimie", out: "labkit-chimie.html", packs: ["chimie"], vendor: ["app-ponts/vendor/three.min.js"], mode: "game", main: "game.js" },
   { dir: "app-ponts", out: "labkit-ponts.html", packs: ["ponts"], vendor: ["app-ponts/vendor/three.min.js"], mode: "game", main: "game.js" },
 ];
 mkdirSync(join(root, "dist"), { recursive: true });

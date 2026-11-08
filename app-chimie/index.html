@@ -5,15 +5,41 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%23f8fafc'/%3E%3Ccircle cx='5.5' cy='7' r='1.4' fill='%23111122'/%3E%3Ccircle cx='10.5' cy='7' r='1.4' fill='%23111122'/%3E%3C/svg%3E" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Chemistry Lab — LabKit</title>
-  <link rel="stylesheet" href="../core/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=JetBrains+Mono:wght@400;600;700&display=swap" />
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #6cc95a; }
+    #game { position: fixed; inset: 0; }
+    #game .boot-hint { max-width: 560px; margin: 60px auto; padding: 16px 20px; border-radius: 16px;
+      background: #fbf8ff; color: #17141f; font: 14px/1.6 system-ui, sans-serif; }
+    #game .fatal { max-width: 560px; margin: 60px auto; padding: 16px 20px; border-radius: 16px;
+      background: #fbf8ff; color: #8f2a22; font: 12.5px/1.5 monospace; white-space: pre-wrap; }
+  </style>
 </head>
 <body>
-  <div id="lab"><div class="boot-hint">Loading the lab…<br />If this message stays, don't double-click this file: run <b>start-lab.bat</b> and open <b>http://localhost:8080/app-chimie/</b> instead.</div></div>
+  <div id="game"><div class="boot-hint">Loading the lab…<br />If this message stays, don't double-click this file: run <b>start-lab.bat</b> and open <b>http://localhost:8080/app-chimie/</b> instead.</div></div>
+  <!-- Same three.js build as the Bridge Lab (kept in one place). -->
+  <script src="../app-ponts/vendor/three.min.js"></script>
   <script type="module">
-    import { boot } from "../core/shell.js";
-    import { buildLab, labManifest } from "./lab.js";
-    import { chimiePack } from "../engines/chimie/index.js";
-    boot("config.json", buildLab, labManifest, [chimiePack]);
+    import { startGame } from "./game.js";
+    startGame("config.json").catch((err) => {
+      const box = document.createElement("pre");
+      box.className = "fatal";
+      box.textContent = "The lab failed to start: " + ((err && err.message) || err);
+      const host = document.getElementById("game");
+      host.innerHTML = "";
+      host.appendChild(box);
+    });
   </script>
+<script>
+  // If the page is already served but the lab never boots, the static server
+  // dropped: say reload instead of pointing back at the server.
+  setTimeout(() => {
+    if (location.protocol.slice(0, 4) === "http" && document.querySelector(".boot-hint")) {
+      document.querySelector(".boot-hint").innerHTML += "<br />This page is already served: the static server may have dropped — just reload the page.";
+    }
+  }, 6000);
+</script>
 </body>
 </html>

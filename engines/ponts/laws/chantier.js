@@ -3,7 +3,7 @@ export const chantier = {
   id: "chantier",
   notice: {
     label: "Site rules",
-    formule: "Budget 120: beam = 10, cable = 5. The road must link both banks.",
+    formule: "Beam = 10, cable = 5. Each site sets its own budget — see the Budget ring. The road must link both banks.",
     sources: "Game rules (not a physics model).",
     limites: "Designs are saved locally, per site.",
   },

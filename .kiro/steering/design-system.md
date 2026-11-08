@@ -26,3 +26,22 @@ same without writing CSS.
   Static when `prefers-reduced-motion` is set; the lab then starts paused.
 - New labs inherit all of this by using `core/`. Do not restyle per lab beyond
   `lab.page` and `bench.background`.
+- Exception: Bridge Lab (`app-ponts`) is a headless full-screen 3D game with
+  its own interface (`engines/ponts/mapview.js` + `hud.js`). Golden-hour
+  low-poly valley; frosted-glass HUD floating on the edges: brand (ghost +
+  lowercase name), sites and score/home on top, tool dock on the left, sensors
+  card (laws, ghost, log) on the right, budget ring + hint + Test at the
+  bottom. Gradients and glass are allowed here because the 3D scene shows
+  through; keep the bridge clear in the middle of the screen.
+- Exception: Chemistry Lab (`app-chimie`) is also headless and full-screen 3D
+  (`engines/chimie/benchview.js` + `hud.js`, design "blown glass"). Real glass
+  on the flat page green `#6cc95a`, no dark bench: slim dropper bottles on the
+  left (dose pill under each, click a bottle to pour), Erlenmeyer on a tripod
+  over the Bunsen burner in the middle (thermometer dipped in), the 3D flask
+  ghost watching on the right. Frosted-glass HUD: brand + Lab/Laws/Knobs/
+  Notebook tabs + home on top, measure cards on the right, time + status +
+  Measure at the bottom. `lab.js` stays for the validator / MCP server.
+- The 3D ghost (both 3D labs) has a wavy, swaying hem instead of a round
+  bottom, eyes that follow the pointer (else the experiment) and blink. In the
+  Chemistry Lab it also has moods: watches the flask, looks at the viewer,
+  turns around, or flies up and lands. Still when reduced motion is set.

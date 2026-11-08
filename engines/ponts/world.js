@@ -59,7 +59,7 @@ export function createWorld({ laws, site }) {
       }
       const A = this.nodes[a];
       const B = this.nodes[b];
-      if (!A || !B) return { ok: false, why: "Nœud inconnu." };
+      if (!A || !B) return { ok: false, why: "Unknown node." };
       const len = Math.hypot(B.rx - A.rx, B.ry - A.ry);
       if (len > MAXLEN[type]) {
         return { ok: false, why: type === "poutre" ? "Too long for a beam." : "Too long even for a cable." };
@@ -196,8 +196,9 @@ export function createWorld({ laws, site }) {
       for (let k = 0; k < sub; k++) {
         for (const n of this.nodes) {
           if (n.fixed || !linked.has(this.nodes.indexOf(n))) continue;
-          const nx = n.x + (n.x - n.px) * 0.999 + n.ax * h * h;
-          const ny = n.y + (n.y - n.py) * 0.999 + n.ay * h * h;
+                    // 0.98 damps the settling ring so braced decks survive their own gravity transient.
+          const nx = n.x + (n.x - n.px) * 0.98 + n.ax * h * h;
+          const ny = n.y + (n.y - n.py) * 0.98 + n.ay * h * h;
           n.px = n.x; n.py = n.y; n.x = nx; n.y = ny;
         }
         for (let it = 0; it < ITER; it++) {
@@ -214,7 +215,7 @@ export function createWorld({ laws, site }) {
             const wb = B.fixed ? 0 : 1;
             const w = wa + wb;
             if (!w) continue;
-            const stiff = s.type === "poutre" ? 1 : 0.5;
+            const stiff = s.type === "poutre" ? 1 : (this.cablesYielding ? 0 : 0.5);
             s.load = (s.load || 0) + Math.abs(diff);
             const f = (diff * stiff) / w;
             A.x += dx * f * wa; A.y += dy * f * wa;
