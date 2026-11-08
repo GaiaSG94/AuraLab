@@ -20,21 +20,24 @@ export function hexToRgb(hex) {
   return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)];
 }
 
-// parent: sidebar element; onChange called after every input (for resync/redraw).
+// parent: the Knobs pane; onChange called after every input (for resync/redraw).
 export function buildControls(parent, config, state, onChange) {
   if (config.controls.length === 0) return;
-  const sec = el("section", "", "<h2>Controls</h2>");
+  const sec = el("section", "controls");
   for (const c of config.controls) {
     const wrap = el("div", "control");
-    const label = el("label", "", `${escapeHtml(c.label)} <output></output>`);
+    const label = el("label", "", `<span>${escapeHtml(c.label)}</span> <output></output>`);
     const out = label.querySelector("output");
     const input = el("input");
     input.type = "range";
     input.min = String(c.min);
     input.max = String(c.max);
     input.step = String(c.step);
+    input.id = `ctl-${sec.childElementCount}`;
+    label.htmlFor = input.id;
     const show = (v) => {
       out.textContent = String(Math.round(v * 100) / 100);
+      input.style.setProperty("--p", `${((v - c.min) / (c.max - c.min || 1)) * 100}%`);
     };
     const current = () => getPath(state, c.path);
     input.value = String(current());

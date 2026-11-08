@@ -5,19 +5,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Aura-Space — AuraLab (standalone)</title>
 <style>
-/* AuraLab core — dark lab dashboard (generic, accent comes from lab config) */
+/* AuraLab core — lab shell, "flat page" look.
+   One flat page color per lab (lab.page), ink text, paper and ink cards.
+   Every lab built on core/ gets this exact look; only --page (and the
+   bench background) change per lab. Fonts degrade to system fonts offline. */
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=JetBrains+Mono:wght@400;600;700&display=swap");
+
 :root {
-  --bg: #0b0e11;
-  --panel: #12161b;
-  --panel-2: #171d24;
-  --line: #232b34;
-  --text: #e8e6e1;
-  --muted: #9aa3ab;
-  --accent: #ffb454;
+  --page: #ff8a3d;          /* overwritten by lab.page */
+  --accent: #ffb454;        /* overwritten by lab.accent */
+  --ink: #17141f;
+  --paper: #fbf8ff;
+  --soft: #f0edf6;
+  --muted: #625d74;
+  --line: #e2deec;
+  --screen: #0b0e11;
+  --device: #2a2733;
+  --readout: #7dffb0;
   --danger: #e0655a;
-  --radius: 6px;
-  --font: "Segoe UI", system-ui, -apple-system, sans-serif;
-  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --radius: 16px;
+  --font: "Archivo", "Arial Narrow", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
@@ -25,320 +33,289 @@
 html, body {
   margin: 0;
   min-height: 100%;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--page);
+  color: var(--ink);
   font-family: var(--font);
   font-size: 14px;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
+button { font: inherit; color: inherit; cursor: pointer; }
+button:disabled { opacity: 0.45; cursor: default; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible,
+.check input:focus-visible + span, .switch input:focus-visible + span {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+#lab {
+  height: 100vh;
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: 72px minmax(0, 1fr);
+}
+
+/* ---------- Header: ghost, lab name, back link ---------- */
 .lab-header {
   display: flex;
-  align-items: baseline;
-  gap: 12px;
-  padding: 14px 20px 12px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
+  align-items: center;
+  gap: 14px;
+  padding: 0 18px;
+  min-width: 0;
 }
-
+.lab-header .logo { width: 48px; flex: none; }
 .lab-header h1 {
   margin: 0;
-  font-size: 18px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
+  font-weight: 900;
+  font-stretch: 72%;
+  font-size: 44px;
+  line-height: 1;
+  text-transform: lowercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
-.lab-header h1 .dot {
-  color: var(--accent);
-}
-
-.lab-header p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12.5px;
-}
-
-.lab-header .template-tag {
+.lab-header .back {
   margin-left: auto;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 3px 8px;
+  flex: none;
+  font: 700 13px var(--mono);
+  color: var(--paper);
+  background: var(--ink);
+  border-radius: 999px;
+  padding: 8px 14px;
+  text-decoration: none;
   white-space: nowrap;
 }
 
+/* ---------- Three columns: steps | bench | panel ---------- */
 .lab-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 264px;
-  gap: 0;
-  min-height: calc(100vh - 57px);
+  grid-template-columns: 184px minmax(0, 1fr) 360px;
+  gap: 12px;
+  padding: 0 14px 14px;
+  min-height: 0;
 }
 
-.stage {
-  position: relative;
-  min-width: 0;
-  background: #07090c;
-}
-
-.stage canvas {
-  display: block;
-  width: 100%;
-  height: calc(100vh - 57px);
-}
-
-.hud {
-  position: absolute;
-  left: 12px;
-  top: 12px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  pointer-events: none;
-}
-
-.chip {
-  font-family: var(--mono);
-  font-size: 11.5px;
-  background: rgba(11, 14, 17, 0.82);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 4px 9px;
-  color: var(--text);
-}
-
-.chip b { font-weight: 700; }
-.chip .unit { color: var(--muted); font-size: 10.5px; }
-.chip .swatch {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  margin-right: 6px;
-  vertical-align: baseline;
-}
-
-.history {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  background: rgba(11, 14, 17, 0.88);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 8px 10px 6px;
-}
-
-.history h2 {
-  margin: 0 0 4px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.history canvas { width: 220px; height: 64px; }
-
-.sidebar {
-  border-left: 1px solid var(--line);
-  background: var(--panel);
-  padding: 14px 14px 20px;
-  overflow-y: auto;
-}
-
-.sidebar section { margin-bottom: 18px; }
-
-.sidebar h2 {
-  margin: 0 0 10px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.control { margin-bottom: 12px; }
-
-.control label {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12.5px;
-  margin-bottom: 4px;
-}
-
-.control label output {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--accent);
-}
-
-.control input[type="range"] {
-  width: 100%;
-  accent-color: var(--accent);
-}
-
-.btn-row { display: flex; gap: 8px; }
-
-button {
-  font: inherit;
-  font-size: 12.5px;
-  color: var(--text);
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 7px 10px;
-  cursor: pointer;
-}
-
-.btn-row button { flex: 1; }
-
-button:hover { border-color: var(--accent); }
-button:disabled { opacity: 0.45; cursor: default; }
-button:disabled:hover { border-color: var(--line); }
-
-button.mini {
-  font-size: 11px;
-  padding: 1px 7px;
-  margin-left: 6px;
-}
-
-button.wide { width: 100%; margin: 6px 0 8px; }
-
-/* Category element rows: checkbox + name + live value + notice. */
-.elem { margin-bottom: 8px; }
-
-.elem-row {
-  display: flex;
+/* Steps (left) */
+.rail { display: flex; flex-direction: column; gap: 8px; min-height: 0; min-width: 0; }
+.tab {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 2px 10px;
   align-items: center;
-  gap: 8px;
-}
-
-.elem-row input[type="checkbox"] {
-  accent-color: var(--accent);
-  width: 14px;
-  height: 14px;
-  flex: none;
-}
-
-.elem-row .swatch {
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
-  flex: none;
-}
-
-button.elem-name {
-  flex: 1;
   text-align: left;
-  background: none;
-  border: 0;
-  padding: 2px 0;
-  font-size: 12.5px;
-}
-
-button.elem-name:hover { color: var(--accent); }
-button.elem-name:disabled:hover { color: var(--text); }
-
-.elem-row .live {
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--accent);
-}
-
-.notice {
-  margin: 4px 0 6px 22px;
-  padding: 8px 10px;
-  font-size: 12px;
-  color: var(--muted);
-  border-left: 2px solid var(--line);
-}
-
-.notice b { color: var(--text); font-weight: 600; }
-.notice i { font-style: normal; color: var(--text); }
-
-/* Notebook. */
-.notebook .prompts {
-  margin: 0 0 10px 16px;
-  padding: 0;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.note-row { display: flex; gap: 8px; margin-bottom: 8px; }
-
-.note-row input[type="text"] {
-  flex: 1;
-  min-width: 0;
-  font: inherit;
-  font-size: 12.5px;
-  color: var(--text);
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 6px 9px;
-}
-
-.notes, .snapshots {
-  list-style: none;
-  margin: 0 0 8px;
-  padding: 0;
-  font-size: 12px;
-}
-
-.notes li, .snapshots li {
-  padding: 5px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.notes .t, .snapshots .t {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--accent);
-  margin-right: 6px;
-}
-
-.note {
-  font-size: 12px;
-  color: var(--muted);
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-}
-
-.boot-hint {
-  max-width: 560px;
-  margin: 60px auto;
-  padding: 16px 20px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--panel);
-  color: var(--muted);
-  font-size: 13.5px;
-  line-height: 1.6;
-}
-
-.boot-hint b { color: var(--text); font-weight: 600; }
-
-.error {
-  margin: 12px;
   padding: 10px 12px;
-  border: 1px solid var(--danger);
+  border: 0;
+  border-radius: 14px;
+  background: rgba(251, 248, 255, 0.45);
+  color: var(--ink);
+}
+.tab:hover { background: rgba(251, 248, 255, 0.7); }
+.tab[aria-selected="true"] { background: var(--paper); box-shadow: 0 0 0 3px var(--ink); }
+.tab .no {
+  grid-row: 1 / span 2;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--ink); color: var(--paper);
+  display: grid; place-items: center;
+  font-weight: 800; font-size: 14px;
+}
+.tab b { font-weight: 900; font-stretch: 68%; font-size: 21px; text-transform: uppercase; line-height: 1; }
+.tab small { font-size: 12px; line-height: 1.2; }
+.rail .spacer { flex: 1; }
+.rail .note { margin: 0; font-size: 12px; line-height: 1.35; }
+.time { display: grid; gap: 8px; }
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: 0; border-radius: 999px;
+  padding: 9px 14px;
+  font-weight: 800; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase;
+  background: var(--page); color: var(--ink);
+  white-space: nowrap;
+}
+.btn.ink { background: var(--ink); color: var(--paper); }
+.btn.big { padding: 14px 12px; font-size: 15px; }
+.btn.line { background: rgba(251, 248, 255, 0.35); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.btn.mini { padding: 3px 9px; font-size: 11px; letter-spacing: 0; text-transform: none; background: var(--soft); }
+.ib {
+  width: 22px; height: 22px; padding: 0;
+  border-radius: 50%; border: 1.5px solid var(--muted); background: none; color: var(--muted);
+  display: grid; place-items: center;
+  font: 700 11px var(--mono);
+  flex: none;
+}
+.ib[aria-expanded="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+
+/* Zone headers */
+.zh { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.zh .no {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--ink); color: var(--paper);
+  display: grid; place-items: center; font-weight: 800; font-size: 13px; flex: none;
+}
+.zh h2 { margin: 0; font-weight: 900; font-stretch: 68%; font-size: 26px; line-height: 1; text-transform: uppercase; white-space: nowrap; }
+.zh .hint { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.zh .end { margin-left: auto; flex: none; }
+.zh .guide { width: 34px; margin-left: auto; flex: none; }
+
+/* Bench (center) */
+.bench {
+  background: var(--ink); color: var(--paper);
   border-radius: var(--radius);
-  color: #f2b8b3;
-  background: #1c1214;
-  font-family: var(--mono);
-  font-size: 12px;
-  white-space: pre-wrap;
+  padding: 10px 12px 12px;
+  display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px;
+  min-height: 0; min-width: 0;
+}
+.bench .zh .hint, .bench .fps { color: #bdb6d3; }
+.bench .fps { font: 600 12px var(--mono); }
+.stage { position: relative; border-radius: 10px; overflow: hidden; min-height: 0; background: #07090c; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* Panel (right) with one pane per step */
+.panel { background: var(--paper); border-radius: var(--radius); min-height: 0; min-width: 0; display: grid; overflow: hidden; }
+.pane { display: none; padding: 12px 14px 14px; min-height: 0; overflow-y: auto; }
+.pane.on { display: flex; flex-direction: column; gap: 12px; }
+.blk { display: flex; flex-direction: column; gap: 6px; }
+.blk.grow { flex: 1 1 auto; min-height: 230px; }
+.sub { margin: 0; font-weight: 800; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+
+/* Rows: substances, material, laws */
+.elem-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto auto;
+  gap: 10px; align-items: center;
+  background: var(--soft); border-radius: 10px; padding: 6px 10px;
+}
+.elem-row .icon svg { width: 26px; height: 30px; display: block; }
+.elem-row .name { font-weight: 800; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.elem-row .live { font: 600 13px var(--mono); color: var(--muted); white-space: nowrap; }
+.elem-row .tools { display: flex; align-items: center; gap: 8px; }
+.elem-row.law { grid-template-columns: 44px minmax(0, 1fr) auto; background: none; padding: 4px 0; }
+.elem-row.law .name { font-size: 16px; white-space: normal; }
+.elem-row.law small { display: block; font-size: 13px; color: var(--muted); }
+.empty { border: 1.5px dashed rgba(23, 20, 31, 0.3); border-radius: 10px; padding: 10px 12px; color: var(--muted); font-size: 13px; margin: 0; }
+.notice { margin: 6px 0 2px 38px; padding: 8px 10px; font-size: 12.5px; color: var(--muted); border-left: 3px solid var(--page); }
+.notice b, .notice i { color: var(--ink); font-style: normal; }
+.elem-row.law + .notice { margin-left: 54px; }
+
+/* Checkbox and switch (real inputs, visually replaced) */
+.check, .switch { position: relative; display: inline-block; flex: none; cursor: pointer; }
+.check input, .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.check span {
+  display: grid; place-items: center;
+  width: 22px; height: 22px; border-radius: 6px;
+  box-shadow: inset 0 0 0 2px var(--ink); background: var(--paper);
+}
+.check input:checked + span {
+  background: var(--ink) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23fbf8ff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 15px no-repeat;
+}
+.switch span {
+  display: block; position: relative;
+  width: 44px; height: 26px; border-radius: 999px;
+  background: var(--line); box-shadow: inset 0 0 0 1.5px var(--ink);
+  transition: background 0.15s;
+}
+.switch span::after {
+  content: ""; position: absolute; top: 4px; left: 4px;
+  width: 18px; height: 18px; border-radius: 50%; background: var(--ink);
+  transition: left 0.15s;
+}
+.switch input:checked + span { background: var(--page); }
+.switch input:checked + span::after { left: 22px; }
+
+/* Instruments: measuring devices with dark screens */
+.devs { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; }
+.dev {
+  background: var(--device); color: #e8e6f0;
+  border-radius: 12px; padding: 8px 10px 10px;
+  display: flex; flex-direction: column; gap: 7px; min-height: 0;
+}
+.dev.grow { flex: 1 1 auto; min-height: 150px; }
+.dh { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.dh svg { width: 18px; height: 18px; flex: none; color: var(--page); }
+.dh b { font-weight: 800; font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em; }
+.dh span { font-size: 11.5px; color: #a9a3bd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.lcd {
+  background: var(--screen); border-radius: 8px; padding: 8px 10px;
+  box-shadow: inset 0 0 0 1px #3a3546;
+  display: grid; grid-template-columns: 1fr; gap: 6px 14px; min-height: 0;
+}
+.lcd.cols2 { grid-template-columns: 1fr 1fr; }
+.dev.grow .lcd { flex: 1 1 auto; align-content: space-around; }
+.rd { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font: 600 12px var(--mono); color: #a9a3bd; min-width: 0; line-height: 1; }
+.rd span { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.rd i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.rd b { font: 700 26px/1 var(--mono); color: var(--readout); }
+.dev.grow .rd b { font-size: 38px; }
+.rd .unit { font-size: 11px; color: #a9a3bd; margin-left: 3px; }
+.lcd.plot { display: flex; flex-direction: column; flex: 1 1 auto; }
+.lcd.plot .lg { display: flex; flex-wrap: wrap; gap: 4px 12px; font: 600 11px var(--mono); }
+.lcd.plot .lg span { display: flex; align-items: center; gap: 5px; }
+.lcd.plot .lg i { width: 14px; height: 3px; border-radius: 2px; }
+.plotbox { position: relative; flex: 1 1 auto; min-height: 90px; }
+.plotbox canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* Knobs (sliders) */
+.controls { display: flex; flex-direction: column; gap: 18px; }
+.control label { display: flex; justify-content: space-between; gap: 8px; font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+.control output { font: 700 14px var(--mono); }
+.control input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 10px; margin: 6px 0; border-radius: 5px;
+  background: linear-gradient(var(--ink), var(--ink)) 0 / var(--p, 50%) 100% no-repeat, var(--line);
+}
+.control input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--page); box-shadow: 0 0 0 3px var(--ink);
+}
+.control input[type="range"]::-moz-range-thumb {
+  width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--ink); background: var(--page);
 }
 
+/* Notebook */
+.notebook { display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; min-height: 0; }
+.prompts { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.prompts li { background: var(--soft); border-radius: 12px 12px 12px 3px; padding: 7px 12px; font-size: 14px; font-weight: 600; line-height: 1.3; }
+.note-area {
+  flex: 1 1 auto; min-height: 90px; resize: none;
+  font: inherit; font-size: 14px; color: var(--ink);
+  border: 1.5px solid var(--ink); border-radius: 12px; padding: 10px 12px;
+  background: var(--paper) repeating-linear-gradient(transparent 0 25px, var(--line) 25px 26px) content-box;
+}
+.note-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.notes, .snapshots { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.notes li, .snapshots li { display: flex; align-items: center; gap: 6px; background: var(--soft); border-radius: 8px; padding: 6px 10px; }
+.notes li .txt, .snapshots li .txt { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.notes .t, .snapshots .t { font: 700 12px var(--mono); }
+
+/* Boot / errors */
+.boot-hint {
+  max-width: 560px; margin: 60px auto; padding: 16px 20px;
+  border-radius: var(--radius); background: var(--paper); color: var(--ink);
+  font-size: 14px; line-height: 1.6;
+}
+.error {
+  margin: 12px; padding: 12px 14px;
+  border-radius: 12px; background: var(--paper); color: #8f2a22;
+  box-shadow: inset 0 0 0 2px var(--danger);
+  font: 12.5px/1.5 var(--mono); white-space: pre-wrap;
+}
+
+/* Narrow screens: steps become a row, bench then panel stacked. */
 @media (max-width: 900px) {
-  .lab-main { grid-template-columns: 1fr; }
-  .sidebar { border-left: 0; border-top: 1px solid var(--line); }
-  .stage canvas { height: 60vh; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .stage canvas { image-rendering: auto; }
+  #lab { height: auto; grid-template-rows: 64px auto; }
+  .lab-header h1 { font-size: 34px; }
+  .lab-header .logo { width: 40px; }
+  .lab-main { grid-template-columns: minmax(0, 1fr); }
+  .rail { flex-direction: row; flex-wrap: wrap; }
+  .tab { flex: 1 1 140px; }
+  .rail .spacer, .rail .note { display: none; }
+  .time { grid-auto-flow: column; flex: 1 1 100%; }
+  .bench { height: 60vh; }
+  .panel { min-height: 420px; }
 }
 
 </style>
@@ -354,10 +331,10 @@ button.elem-name:disabled:hover { color: var(--text); }
 
 const builtinInstruments = {
   chips: {
-    label: "Chips",
+    label: "Counter",
     notice: {
-      label: "Chips",
-      formule: "Each chip shows one live metric value + unit, refreshed every frame.",
+      label: "Counter",
+      formule: "Shows one live readout per metric (value + unit), refreshed every frame.",
       sources: "Kit built-in readout (no model).",
       limites: "No history; for trends use the curve instrument.",
     },
@@ -502,6 +479,15 @@ function validateConfig(raw, known) {
       errors.push("lab.accent: required hex color like #ffb454");
     }
     if (typeof config.lab.note !== "string") config.lab.note = "";
+    // page: the flat page color of the lab (ink text sits on it, keep it mid-light).
+    if (config.lab.page === undefined) {
+      config.lab.page = HEX_COLOR.test(String(config.lab.accent)) ? config.lab.accent : "#ff8a3d";
+    } else if (typeof config.lab.page !== "string" || !HEX_COLOR.test(config.lab.page)) {
+      config.lab.page = HEX_COLOR.test(String(config.lab.accent)) ? config.lab.accent : "#ff8a3d";
+      fix(`lab.page reset to ${config.lab.page} (must be a hex color)`);
+    }
+    // home: where "← all labs" leads (relative to the lab page).
+    if (typeof config.lab.home !== "string" || !config.lab.home.trim()) config.lab.home = "../index.html";
   }
 
   // --- bench ---
@@ -815,21 +801,24 @@ function hexToRgb(hex) {
   return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)];
 }
 
-// parent: sidebar element; onChange called after every input (for resync/redraw).
+// parent: the Knobs pane; onChange called after every input (for resync/redraw).
 function buildControls(parent, config, state, onChange) {
   if (config.controls.length === 0) return;
-  const sec = el("section", "", "<h2>Controls</h2>");
+  const sec = el("section", "controls");
   for (const c of config.controls) {
     const wrap = el("div", "control");
-    const label = el("label", "", `${escapeHtml(c.label)} <output></output>`);
+    const label = el("label", "", `<span>${escapeHtml(c.label)}</span> <output></output>`);
     const out = label.querySelector("output");
     const input = el("input");
     input.type = "range";
     input.min = String(c.min);
     input.max = String(c.max);
     input.step = String(c.step);
+    input.id = `ctl-${sec.childElementCount}`;
+    label.htmlFor = input.id;
     const show = (v) => {
       out.textContent = String(Math.round(v * 100) / 100);
+      input.style.setProperty("--p", `${((v - c.min) / (c.max - c.min || 1)) * 100}%`);
     };
     const current = () => getPath(state, c.path);
     input.value = String(current());
@@ -859,25 +848,35 @@ function buildControls(parent, config, state, onChange) {
 }
 
 // ---- core/instruments.js (inlined) ----
-// AuraLab core — instruments: chips (live values) and curve (history chart).
-// Fed by metric values each frame; the lab decides what metrics mean.
+// AuraLab core — instruments as measuring devices: a counter (live readouts)
+// and a curve (history chart). Fed by metric values; the lab decides what they mean.
 
-// Returns { update(values), sample() } where values = {metricId: number}.
-function buildChips(hud, entry, metricsById) {
+const GAUGE =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>' +
+  '<path d="M12 17l5-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="17" r="2" fill="currentColor"/></svg>';
+
+function device(name, hint) {
+  const box = el("div", "dev");
+  box.appendChild(el("div", "dh", `${GAUGE}<b>${escapeHtml(name)}</b><span>${escapeHtml(hint)}</span>`));
+  return box;
+}
+
+// Counter ("chips" type): one readout per metric. Returns { update(values), sample() }.
+function buildChips(parent, entry, metricsById) {
+  const box = device("Counter", "Live values");
+  const screen = el("div", entry.metrics.length > 3 ? "lcd cols2" : "lcd");
   const cells = entry.metrics.map((id) => {
     const m = metricsById[id];
-    const c = el(
-      "span",
-      "chip",
-      `<span class="swatch" style="background:${m.color}"></span>${escapeHtml(m.label)}: <b>0</b>${m.unit ? ` <span class="unit">${escapeHtml(m.unit)}</span>` : ""}`
-    );
-    hud.appendChild(c);
-    return c.querySelector("b");
+    const unit = m.unit ? `<span class="unit">${escapeHtml(m.unit)}</span>` : "";
+    const r = el("div", "rd", `<span><i style="background:${m.color}"></i>${escapeHtml(m.label)}</span><b>0</b>`);
+    if (unit) r.querySelector("b").insertAdjacentHTML("afterend", unit);
+    screen.appendChild(r);
+    return r.querySelector("b");
   });
-  const box = el("span", "chip", "");
-  box.style.display = "none";
+  box.appendChild(screen);
+  parent.appendChild(box);
   return {
-    element: null,
+    element: box,
     update(values) {
       entry.metrics.forEach((id, i) => {
         const v = values[id];
@@ -885,21 +884,56 @@ function buildChips(hud, entry, metricsById) {
       });
     },
     sample() {},
-    setVisible() {},
   };
 }
 
-// Small multiples-free single chart; one line per metric.
-function buildCurve(stage, entry, metricsById) {
-  const box = el("div", "history", `<h2>${escapeHtml(entry.title || "History")}</h2>`);
+// Curve: one line per metric over a sliding window; sized to its box.
+function buildCurve(parent, entry, metricsById) {
+  const box = device("Curve", entry.title || "History");
+  box.classList.add("grow");
+  const screen = el("div", "lcd plot");
+  screen.appendChild(el("div", "lg", entry.metrics.map((id) => {
+    const m = metricsById[id];
+    return `<span><i style="background:${m.color}"></i>${escapeHtml(m.label)}</span>`;
+  }).join("")));
+  const plot = el("div", "plotbox");
   const hc = el("canvas");
-  hc.width = 440;
-  hc.height = 128;
-  box.appendChild(hc);
-  stage.appendChild(box);
+  plot.appendChild(hc);
+  screen.appendChild(plot);
+  box.appendChild(screen);
+  parent.appendChild(box);
   const ctx = hc.getContext("2d");
   const samples = entry.samples || 120;
   const series = entry.metrics.map(() => []);
+
+  function draw() {
+    const w = plot.clientWidth;
+    const h = plot.clientHeight;
+    if (!w || !h) return; // hidden pane: redrawn on next sample once visible
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (hc.width !== Math.round(w * dpr) || hc.height !== Math.round(h * dpr)) {
+      hc.width = Math.round(w * dpr);
+      hc.height = Math.round(h * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    let peak = 4;
+    for (const s of series) for (const v of s) if (v > peak) peak = v;
+    series.forEach((s, i) => {
+      if (s.length < 2) return;
+      ctx.strokeStyle = metricsById[entry.metrics[i]].color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      s.forEach((v, k) => {
+        const x = (k / (samples - 1)) * w;
+        const y = h - 4 - (v / peak) * (h - 10);
+        if (k === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    });
+  }
+
   return {
     element: box,
     update() {},
@@ -911,38 +945,11 @@ function buildCurve(stage, entry, metricsById) {
       draw();
     },
     reset() {
-      series.forEach((s) => {
-        s.length = 0;
-      });
+      series.forEach((s) => { s.length = 0; });
       draw();
     },
-    setVisible(v) {
-      box.style.display = v ? "" : "none";
-    },
+    redraw: draw,
   };
-  function draw() {
-    const hw = 440;
-    const hh = 128;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, hw, hh);
-    ctx.fillStyle = "#0b0e11";
-    ctx.fillRect(0, 0, hw, hh);
-    let peak = 4;
-    for (const s of series) for (const v of s) if (v > peak) peak = v;
-    series.forEach((s, i) => {
-      if (s.length < 2) return;
-      ctx.strokeStyle = metricsById[entry.metrics[i]].color;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      s.forEach((v, k) => {
-        const x = (k / (samples - 1)) * hw;
-        const y = hh - 6 - (v / peak) * (hh - 14);
-        if (k === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
-      ctx.stroke();
-    });
-  }
 }
 
 // ---- core/notebook.js (inlined) ----
@@ -979,7 +986,7 @@ function save(labId, data) {
 function buildNotebook(parent, config, getState, onRestore) {
   if (!config.notebook.enabled) return null;
   const data = load(config.lab.id);
-  const sec = el("section", "notebook", "<h2>Notebook</h2>");
+  const sec = el("section", "notebook");
 
   if (config.notebook.prompts.length > 0) {
     const ul = el("ul", "prompts");
@@ -989,12 +996,11 @@ function buildNotebook(parent, config, getState, onRestore) {
     sec.appendChild(ul);
   }
 
-  const noteRow = el("div", "note-row");
-  const noteInput = el("input");
-  noteInput.type = "text";
-  noteInput.placeholder = "Note an observation…";
+  const noteInput = el("textarea", "note-area");
+  noteInput.placeholder = "Write what you see…";
   noteInput.setAttribute("aria-label", "Notebook note");
-  const noteBtn = el("button", "", "Note");
+  const noteBtn = el("button", "btn ink", "Note");
+  noteBtn.type = "button";
   noteBtn.addEventListener("click", () => {
     const text = noteInput.value.trim();
     if (!text) return;
@@ -1004,16 +1010,20 @@ function buildNotebook(parent, config, getState, onRestore) {
     renderNotes();
   });
   noteInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") noteBtn.click();
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) noteBtn.click();
   });
-  noteRow.appendChild(noteInput);
-  noteRow.appendChild(noteBtn);
-  sec.appendChild(noteRow);
+  const snapBtn = el("button", "btn", "● Record measures");
+  snapBtn.type = "button";
+  snapBtn.title = "Record measures at this instant";
+  const actions = el("div", "note-actions");
+  actions.appendChild(noteBtn);
+  actions.appendChild(snapBtn);
+  sec.appendChild(noteInput);
+  sec.appendChild(actions);
 
   const notesList = el("ul", "notes");
   sec.appendChild(notesList);
-
-  const snapBtn = el("button", "wide", "Record measures at this instant");
+  const snapsTitle = el("h3", "sub", "Snapshots");
   const snapsList = el("ul", "snapshots");
   snapBtn.addEventListener("click", () => {
     const s = getState();
@@ -1025,7 +1035,7 @@ function buildNotebook(parent, config, getState, onRestore) {
     save(config.lab.id, data);
     renderSnaps();
   });
-  sec.appendChild(snapBtn);
+  sec.appendChild(snapsTitle);
   sec.appendChild(snapsList);
 
   parent.appendChild(sec);
@@ -1039,8 +1049,8 @@ function buildNotebook(parent, config, getState, onRestore) {
   function renderNotes() {
     notesList.innerHTML = "";
     data.notes.forEach((n, i) => {
-      const li = el("li", "", `<span class="t">${fmtT(n.t)}</span> ${escapeHtml(n.text)} `);
-      const del = el("button", "mini", "×");
+      const li = el("li", "", `<span class="t">${fmtT(n.t)}</span><span class="txt">${escapeHtml(n.text)}</span>`);
+      const del = el("button", "btn mini", "×");
       del.setAttribute("aria-label", "Delete note");
       del.addEventListener("click", () => {
         data.notes.splice(i, 1);
@@ -1054,16 +1064,17 @@ function buildNotebook(parent, config, getState, onRestore) {
 
   function renderSnaps() {
     snapsList.innerHTML = "";
+    snapsTitle.hidden = data.snapshots.length === 0;
     data.snapshots.forEach((s, i) => {
       const summary = Object.keys(s.metrics)
         .slice(0, 4)
         .map((k) => `${k}=${Math.round(s.metrics[k] * 100) / 100}`)
         .join(", ");
-      const li = el("li", "", `<span class="t">${fmtT(s.t)}</span> ${escapeHtml(summary)} `);
-      const back = el("button", "mini", "Restore");
+      const li = el("li", "", `<span class="t">${fmtT(s.t)}</span><span class="txt">${escapeHtml(summary)}</span>`);
+      const back = el("button", "btn mini", "Restore");
       back.addEventListener("click", () => onRestore(JSON.parse(JSON.stringify(s.params))));
       li.appendChild(back);
-      const del = el("button", "mini", "×");
+      const del = el("button", "btn mini", "×");
       del.setAttribute("aria-label", "Delete snapshot");
       del.addEventListener("click", () => {
         data.snapshots.splice(i, 1);
@@ -1080,9 +1091,150 @@ function buildNotebook(parent, config, getState, onRestore) {
   return { element: sec };
 }
 
+// ---- core/ghost.js (inlined) ----
+// AuraLab core — the flask ghost (logo + notebook guide).
+// Classic script on purpose (no import/export): the portal loads it with a
+// plain <script src>, the shell imports it for its side effect, and the
+// standalone build inlines it as is. Exposes window.AuraGhost.mount(host, theme).
+(function () {
+  if (typeof window === "undefined" || window.AuraGhost) return;
+
+  const BODY =
+    "M41 22 H59 V36 Q81 45 81 68 V86 Q75.8 80 70.7 86 Q65.5 92 60.3 86 Q55.2 80 50 86 " +
+    "Q44.8 92 39.7 86 Q34.5 80 29.3 86 Q24.2 92 19 86 V68 Q19 45 41 36 Z";
+  const THEMES = {
+    white: { body: "#fbf8ff", eye: "#17141f", hl: "#fbf8ff", bub: "#17141f", cheek: "#ff8a3d" },
+    ink: { body: "#17141f", eye: "#fbf8ff", hl: "#17141f", bub: "#fbf8ff", cheek: "#ff8a3d" },
+    inkpaper: { body: "#17141f", eye: "#fbf8ff", hl: "#17141f", bub: "#ff8a3d", cheek: "#ff8a3d" },
+  };
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const ghosts = [];
+  let started = false;
+
+  const style = document.createElement("style");
+  style.textContent =
+    ".aura-ghost{display:block}.aura-ghost svg{display:block;width:100%;height:auto;overflow:visible}" +
+    ".aura-ghost .happy{display:none}.aura-ghost.joy .pupil,.aura-ghost.joy .hl{display:none}.aura-ghost.joy .happy{display:inline}" +
+    ".aura-ghost .pupil{transform-box:fill-box;transform-origin:center;animation:aura-blink 6s infinite}" +
+    "@keyframes aura-blink{0%,95%,100%{transform:scaleY(1)}97.5%{transform:scaleY(.08)}}" +
+    "@media (prefers-reduced-motion: reduce){.aura-ghost .pupil{animation:none}}";
+  document.head.appendChild(style);
+
+  function eye(cx, t) {
+    return `<g><ellipse class="pupil" cx="${cx}" cy="62" rx="5.2" ry="6.9" fill="${t.eye}"/>` +
+      `<g class="hlg"><circle class="hl" cx="${cx - 1.6}" cy="59.4" r="1.6" fill="${t.hl}"/>` +
+      `<circle class="hl" cx="${cx + 1.7}" cy="64.8" r=".75" fill="${t.hl}"/></g></g>`;
+  }
+
+  function svg(t) {
+    return `<svg viewBox="0 0 100 100" aria-hidden="true">` +
+      `<rect x="36" y="18" width="28" height="6" rx="3" fill="${t.body}"/><path d="${BODY}" fill="${t.body}"/>` +
+      `<ellipse cx="31.5" cy="71" rx="4.6" ry="2.6" fill="${t.cheek}" opacity=".6"/>` +
+      `<ellipse cx="68.5" cy="71" rx="4.6" ry="2.6" fill="${t.cheek}" opacity=".6"/>` +
+      `<path d="M46.5 71.5 Q50 75 53.5 71.5" fill="none" stroke="${t.eye}" stroke-width="1.7" stroke-linecap="round"/>` +
+      `<g class="eyes">${eye(41, t)}${eye(59, t)}` +
+      `<path class="happy" d="M36.8 64 Q41 57.6 45.2 64 M54.8 64 Q59 57.6 63.2 64" fill="none" stroke="${t.eye}" stroke-width="2.6" stroke-linecap="round"/></g>` +
+      `<g class="bubl"></g></svg>`;
+  }
+
+  // Eyes follow the pointer; hovering the ghost closes its eyes (^ ^).
+  function onPointer(ev) {
+    for (const g of ghosts) {
+      const r = g.host.getBoundingClientRect();
+      if (!r.width) continue;
+      const dx = ev.clientX - (r.left + r.width / 2);
+      const dy = ev.clientY - (r.top + r.height * 0.6);
+      const d = Math.hypot(dx, dy) || 1;
+      const k = Math.min(1, d / 260);
+      g.tx = (dx / d) * 3.2 * k;
+      g.ty = (dy / d) * 2.6 * k;
+      g.host.classList.toggle("joy", ev.clientX > r.left && ev.clientX < r.right && ev.clientY > r.top && ev.clientY < r.bottom);
+    }
+  }
+
+  // Bubbles rise from the flask neck, sway, then pop.
+  function update(g, dt) {
+    if (!reduce) {
+      const sm = Math.min(1, dt * 9);
+      g.ex += (g.tx - g.ex) * sm;
+      g.ey += (g.ty - g.ey) * sm;
+    }
+    g.eyes.setAttribute("transform", `translate(${g.ex.toFixed(2)} ${g.ey.toFixed(2)})`);
+    g.hls.forEach((h) => h.setAttribute("transform", `translate(${(-g.ex * 0.55).toFixed(2)} ${(-g.ey * 0.55).toFixed(2)})`));
+    if (reduce) return;
+    g.next -= dt;
+    if (g.next <= 0 && g.bubs.length < 4) {
+      g.bubs.push({ x: 47 + Math.random() * 6, y: 40, r: 0.9, R: 2.4 + Math.random() * 1.8, vy: -(13 + Math.random() * 6), ph: Math.random() * 6.28, life: 0, max: 1.7 + Math.random() * 0.6, pop: 0, px: 0 });
+      g.next = 0.6 + Math.random() * 0.9;
+    }
+    let out = "";
+    g.bubs = g.bubs.filter((b) => {
+      b.life += dt;
+      if (!b.pop) {
+        b.y += b.vy * dt;
+        b.r += (b.R - b.r) * Math.min(1, dt * 1.6);
+        const x = b.x + (b.y < 20 ? Math.sin(b.life * 4 + b.ph) * (20 - b.y) * 0.12 : 0);
+        if (b.life <= b.max) {
+          out += `<circle cx="${x.toFixed(2)}" cy="${b.y.toFixed(2)}" r="${b.r.toFixed(2)}" fill="${g.col}"/>`;
+          return true;
+        }
+        b.pop = 0.001;
+        b.px = x;
+      }
+      b.pop += dt;
+      if (b.pop > 0.3) return false;
+      const k = b.pop / 0.3;
+      out += `<circle cx="${b.px.toFixed(2)}" cy="${b.y.toFixed(2)}" r="${(b.r * (1 + k * 1.2)).toFixed(2)}" fill="none" stroke="${g.col}" stroke-width="${(1 - k * 0.8).toFixed(2)}" opacity="${(1 - k).toFixed(2)}"/>`;
+      return true;
+    });
+    g.bubl.innerHTML = out;
+  }
+
+  let last = 0;
+  function frame(ts) {
+    const dt = Math.min(0.05, (ts - last) / 1000 || 0.016);
+    last = ts;
+    for (let i = ghosts.length - 1; i >= 0; i--) {
+      if (!ghosts[i].host.isConnected) ghosts.splice(i, 1);
+      else update(ghosts[i], dt);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function mount(host, themeName) {
+    const t = THEMES[themeName] || THEMES.white;
+    host.classList.add("aura-ghost");
+    host.innerHTML = svg(t);
+    const s = host.querySelector("svg");
+    const g = {
+      host, col: t.bub, eyes: s.querySelector(".eyes"), hls: [...s.querySelectorAll(".hlg")],
+      bubl: s.querySelector(".bubl"), tx: 0, ty: 0, ex: 0, ey: 0, bubs: [], next: Math.random(),
+    };
+    if (reduce) g.bubl.innerHTML = `<circle cx="54" cy="12" r="3" fill="${t.bub}"/>`;
+    ghosts.push(g);
+    if (!started) {
+      started = true;
+      window.addEventListener("pointermove", onPointer);
+      requestAnimationFrame(frame);
+    }
+    return host;
+  }
+
+  window.AuraGhost = { mount };
+})();
+
 // ---- core/shell.js (inlined) ----
-// AuraLab core — shell: validates config, builds the dashboard, binds everything,
+// AuraLab core — shell: validates config, builds the lab page, binds everything,
 // runs the loop. Knows categories and presentation; knows zero science.
+// Page: header (ghost, lab name, back link) / steps | bench | panel.
+// Every lab built on this shell gets the same look; config only sets colors.
+
+const JAR = (c) =>
+  `<svg viewBox="0 0 30 34" aria-hidden="true"><path d="M5 17h20v11a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z" fill="${c}"/>` +
+  '<path d="M10 2h10M11 2v6L4 15v13a4 4 0 0 0 4 4h14a4 4 0 0 0 4-4V15l-7-7V2" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+const APPARATUS = (c) =>
+  `<svg viewBox="0 0 30 34" aria-hidden="true"><circle cx="15" cy="17" r="12" fill="${c}" opacity=".35"/>` +
+  `<circle cx="15" cy="17" r="6.5" fill="${c}" stroke="currentColor" stroke-width="2"/></svg>`;
 
 // source: config URL (fetch) or config object (standalone).
 // buildLab(api, config): lab wiring, returns { state, step?, draw?, reset, resync, setSize?, measures() }.
@@ -1129,9 +1281,10 @@ async function boot(source, buildLab, labManifest, packManifests) {
   if (warnings.length > 0) console.info("[auralab] auto-tuned config:", warnings);
 
   document.documentElement.style.setProperty("--accent", config.lab.accent);
+  document.documentElement.style.setProperty("--page", config.lab.page);
   document.title = `${config.lab.title} — AuraLab`;
 
-  // --- active flags (checkboxes) ---
+  // --- active flags (checkboxes and switches) ---
   const active = {};
   const key = (cat, id) => `${cat}:${id}`;
   config.substances.forEach((s) => { active[key("substances", s.id)] = s.active; });
@@ -1139,23 +1292,74 @@ async function boot(source, buildLab, labManifest, packManifests) {
   config.laws.forEach((l, i) => { active[key("laws", `${l.law}#${i}`)] = l.active; });
   const isActive = (cat, id) => active[key(cat, id)] !== false;
   const lawKey = (i) => `${config.laws[i].law}#${i}`;
+  const ghost = (host, theme) => {
+    if (window.AuraGhost) window.AuraGhost.mount(host, theme);
+    return host;
+  };
 
   // --- layout ---
   const header = el("header", "lab-header");
-  header.appendChild(el("h1", "", `${escapeHtml(config.lab.title).replace(/-([^-]*)$/, '<span class="dot">-$1</span>')}`));
-  header.appendChild(el("p", "", escapeHtml(config.lab.subtitle)));
-  header.appendChild(el("span", "template-tag", "auralab template"));
+  header.appendChild(ghost(el("span", "logo"), "white"));
+  header.appendChild(el("h1", "", escapeHtml(config.lab.title)));
+  const back = el("a", "back", "← all labs");
+  back.href = config.lab.home;
+  header.appendChild(back);
+
   const main = el("div", "lab-main");
+  const rail = el("nav", "rail");
+  rail.setAttribute("role", "tablist");
+  rail.setAttribute("aria-label", "Lab steps");
+  const bench = el("section", "bench");
+  const benchHead = el("div", "zh", '<h2>Bench</h2><span class="hint">Watch it happen</span>');
+  const fpsChip = el("span", "end fps", "– fps");
+  benchHead.appendChild(fpsChip);
   const stage = el("div", "stage");
   const canvas = el("canvas");
+  canvas.setAttribute("aria-label", `${config.lab.title} simulation`);
   stage.appendChild(canvas);
-  const hud = el("div", "hud");
-  stage.appendChild(hud);
-  const sidebar = el("aside", "sidebar");
-  main.appendChild(stage);
-  main.appendChild(sidebar);
+  bench.appendChild(benchHead);
+  bench.appendChild(stage);
+  const panel = el("section", "panel");
+  main.appendChild(rail);
+  main.appendChild(bench);
+  main.appendChild(panel);
   root.appendChild(header);
   root.appendChild(main);
+
+  // One step on the left = one pane on the right. Only declared parts get a step.
+  const steps = [{ id: "lab", label: "Lab", hint: "Substances, material, instruments" }];
+  if (config.laws.length > 0) steps.push({ id: "laws", label: "Laws", hint: "How it behaves" });
+  if (config.controls.length > 0) steps.push({ id: "knobs", label: "Knobs", hint: "Change the amounts" });
+  if (config.notebook.enabled) steps.push({ id: "notebook", label: "Notebook", hint: "Write what you see" });
+  const panes = {};
+  const tabs = [];
+  const instruments = [];
+  function select(id) {
+    tabs.forEach((t) => t.setAttribute("aria-selected", String(t.dataset.step === id)));
+    Object.keys(panes).forEach((k) => panes[k].classList.toggle("on", k === id));
+    instruments.forEach((ins) => { if (ins.redraw) ins.redraw(); });
+  }
+  steps.forEach((st, i) => {
+    const tab = el("button", "tab", `<span class="no">${i + 1}</span><b>${st.label}</b><small>${st.hint}</small>`);
+    tab.type = "button";
+    tab.id = `tab-${st.id}`;
+    tab.dataset.step = st.id;
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-controls", `pane-${st.id}`);
+    tab.addEventListener("click", () => select(st.id));
+    rail.appendChild(tab);
+    tabs.push(tab);
+    const pane = el("div", "pane");
+    pane.id = `pane-${st.id}`;
+    pane.setAttribute("role", "tabpanel");
+    pane.setAttribute("aria-labelledby", tab.id);
+    const head = el("div", "zh", `<span class="no">${i + 1}</span><h2>${st.label}</h2><span class="hint">${st.hint}</span>`);
+    if (st.id === "notebook") head.appendChild(ghost(el("span", "guide"), "inkpaper"));
+    pane.appendChild(head);
+    panel.appendChild(pane);
+    panes[st.id] = pane;
+  });
+  rail.appendChild(el("div", "spacer"));
 
   // --- lab wiring ---
   const clock = createClock();
@@ -1168,56 +1372,62 @@ async function boot(source, buildLab, labManifest, packManifests) {
     time: clock,
   };
   const lab = buildLab(api, config);
+  const usesTime = () => typeof lab.step === "function";
 
   const speckles = [];
+  let sized = false;
   function resize() {
     const r = stage.getBoundingClientRect();
+    if (!r.width || !r.height) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.max(50, Math.floor(r.width * dpr));
-    canvas.height = Math.max(50, Math.floor((window.innerHeight - 57) * dpr));
+    canvas.height = Math.max(50, Math.floor(r.height * dpr));
     api.stage.W = canvas.width / dpr;
     api.stage.H = canvas.height / dpr;
     if (lab.setSize) lab.setSize(api.stage.W, api.stage.H);
+    // First real size known: respawn so nothing starts outside the bench.
+    if (!sized) {
+      sized = true;
+      if (lab.reset) lab.reset();
+    }
     speckles.length = 0;
     for (let i = 0; i < config.bench.speckles; i++) {
       speckles.push({ x: Math.random(), y: Math.random(), s: 0.4 + Math.random() * 1.3, a: 0.25 + Math.random() * 0.5 });
     }
     drawOnce();
   }
-  window.addEventListener("resize", resize);
+  // The canvas always matches the bench's real pixel size: the scene is never stretched.
+  if ("ResizeObserver" in window) new ResizeObserver(resize).observe(stage);
+  else window.addEventListener("resize", resize);
 
-  // --- metrics + instruments ---
-  const metricsById = {};
-  config.metrics.forEach((m) => { metricsById[m.id] = m; });
-  const metricValues = () => {
-    const flat = lab.measures();
-    const out = {};
-    config.metrics.forEach((m) => { out[m.id] = flat[m.source]; });
-    return out;
-  };
-  const instruments = [];
-  const fpsChip = el("span", "chip", "fps <b>–</b>");
-  hud.appendChild(fpsChip);
-  const fpsVal = fpsChip.querySelector("b");
-  config.instruments.forEach((entry) => {
-    if (entry.type === "chips") instruments.push(buildChips(hud, entry, metricsById));
-    else if (entry.type === "curve") instruments.push(buildCurve(stage, entry, metricsById));
-  });
-
-  // --- category sections with selectable rows ---
+  // --- rows ---
   const liveSpans = {};
   function noticeBlock(notice) {
     if (!notice) return null;
-    return el(
+    const nb = el(
       "div", "notice",
       `<b>${escapeHtml(notice.label || "")}</b><br>` +
       `<i>Rule:</i> ${escapeHtml(notice.formule || "–")}<br>` +
       `<i>Sources:</i> ${escapeHtml(notice.sources || "–")}<br>` +
       `<i>Limits:</i> ${escapeHtml(notice.limites || "–")}`
     );
+    nb.hidden = true;
+    return nb;
   }
-  function row(cat, id, label, swatch, notice, liveId) {
-    const wrap = el("div", "elem-row");
+  function infoButton(nb, label) {
+    const b = el("button", "ib", "i");
+    b.type = "button";
+    b.setAttribute("aria-label", `About ${label}`);
+    b.setAttribute("aria-expanded", "false");
+    b.addEventListener("click", () => {
+      nb.hidden = !nb.hidden;
+      b.setAttribute("aria-expanded", String(!nb.hidden));
+    });
+    return b;
+  }
+  // kind: "check" (box) or "switch" (laws). Real checkbox, restyled in CSS.
+  function toggle(cat, id, label, kind) {
+    const wrap = el("label", kind);
     const box = el("input");
     box.type = "checkbox";
     box.checked = isActive(cat, id);
@@ -1227,37 +1437,28 @@ async function boot(source, buildLab, labManifest, packManifests) {
       drawOnce();
     });
     wrap.appendChild(box);
-    if (swatch) {
-      const s = el("span", "swatch");
-      s.style.background = swatch;
-      wrap.appendChild(s);
-    }
-    const nameBtn = el("button", "elem-name", escapeHtml(label));
-    const nb = noticeBlock(notice);
-    if (nb) {
-      nb.style.display = "none";
-      nameBtn.addEventListener("click", () => {
-        nb.style.display = nb.style.display === "none" ? "" : "none";
-      });
-    } else {
-      nameBtn.disabled = true;
-    }
-    wrap.appendChild(nameBtn);
-    if (liveId) {
-      const live = el("span", "live", "0");
-      liveSpans[liveId] = live;
-      wrap.appendChild(live);
-    }
-    const outer = el("div", "elem");
-    outer.appendChild(wrap);
-    if (nb) outer.appendChild(nb);
-    return outer;
+    wrap.appendChild(el("span"));
+    return wrap;
   }
-  function section(title, rows) {
-    if (rows.length === 0) return;
-    const sec = el("section", "", `<h2>${escapeHtml(title)}</h2>`);
-    rows.forEach((r) => sec.appendChild(r));
-    sidebar.appendChild(sec);
+  // Substance / material row: icon, name, live text, notice button, enable box.
+  function itemRow(cat, id, label, icon, notice) {
+    const outer = el("div", "elem");
+    const row = el("div", "elem-row", `<span class="icon">${icon}</span><span class="name">${escapeHtml(label)}</span>`);
+    const live = el("span", "live", "");
+    row.appendChild(live);
+    const tools = el("span", "tools");
+    const nb = noticeBlock(notice);
+    if (nb) tools.appendChild(infoButton(nb, label));
+    tools.appendChild(toggle(cat, id, label, "check"));
+    row.appendChild(tools);
+    outer.appendChild(row);
+    if (nb) outer.appendChild(nb);
+    return { outer, live };
+  }
+  function block(parent, title, cls) {
+    const b = el("div", cls || "blk", `<h3 class="sub">${escapeHtml(title)}</h3>`);
+    parent.appendChild(b);
+    return b;
   }
   function lawsTargeting(subId, lawIdx) {
     const entry = config.laws[lawIdx];
@@ -1266,61 +1467,108 @@ async function boot(source, buildLab, labManifest, packManifests) {
     if (pairs) return pairs.some((p) => p.includes(subId));
     return true;
   }
-  section("Substances", config.substances.map((s) => {
+
+  // Pane "Lab": substances, material and instruments, all visible at once.
+  const subsBlk = block(panes.lab, "Substances");
+  if (config.substances.length === 0) subsBlk.appendChild(el("p", "empty", "No substance in this lab."));
+  config.substances.forEach((s) => {
     const lawNames = config.laws
       .map((l, i) => ({ l, i }))
       .filter(({ i }) => lawsTargeting(s.id, i))
       .map(({ l }) => (catalog.laws[l.law] ? catalog.laws[l.law].notice.label : l.law));
-    return row("substances", s.id, s.label, s.color, {
+    const r = itemRow("substances", s.id, s.label, JAR(s.color), {
       label: s.label,
       formule: `Group of ${s.count}: simulated by ${lawNames.join(", ") || "no law"}.`,
       sources: "Declared in this lab config.",
-      limites: "Behavior comes from active laws only; uncheck a law to remove its effect.",
-    }, `sub:${s.id}`);
-  }));
-  section("Material", config.material.map((m) => {
-    const app = catalog.apparatus[m.kind];
-    return row("material", m.id, m.label, m.color || null, app ? app.notice : null, null);
-  }));
-  section("Laws", config.laws.map((l, i) => {
-    const mod = catalog.laws[l.law];
-    const pairs = l.params && l.params.pairs ? ` (${l.params.pairs.map((p) => p.join("→")).join(", ")})` : "";
-    const targets = l.targets ? ` → ${l.targets.join(", ")}` : pairs;
-    return row("laws", lawKey(i), (mod ? mod.notice.label : l.law) + targets, null, mod ? mod.notice : null, null);
-  }));
-
-  // --- controls + time buttons ---
-  const redrawStatic = () => {
-    if (lab.resync) lab.resync();
-    drawOnce();
-  };
-  buildControls(sidebar, config, lab.state, () => {
-    if (lab.resync) lab.resync();
-    if (!usesTime()) drawOnce();
+      limites: "Behavior comes from active laws only; switch a law off to remove its effect.",
+    });
+    liveSpans[s.id] = r.live;
+    subsBlk.appendChild(r.outer);
   });
-  const usesTime = () => typeof lab.step === "function";
-  const runSec = el("section");
-  const rowBtns = el("div", "btn-row");
-  const pauseBtn = el("button", "", "Pause");
-  const resetBtn = el("button", "", "Reset");
-  const stepBtn = el("button", "", "+1 step");
-  const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (reduced || !usesTime()) {
-    clock.running = false;
-    pauseBtn.textContent = "Play";
+  const matBlk = block(panes.lab, "Material");
+  if (config.material.length === 0) matBlk.appendChild(el("p", "empty", "No material in this lab."));
+  config.material.forEach((m) => {
+    const app = catalog.apparatus[m.kind];
+    const r = itemRow("material", m.id, m.label, APPARATUS(m.color || "#ffffff"), app ? app.notice : null);
+    r.live.textContent = (app && app.label ? app.label : m.kind).toLowerCase();
+    matBlk.appendChild(r.outer);
+  });
+
+  // Instruments are measuring devices (counter, curve), shown apart from substances.
+  const metricsById = {};
+  config.metrics.forEach((m) => { metricsById[m.id] = m; });
+  const metricValues = () => {
+    const flat = lab.measures();
+    const out = {};
+    config.metrics.forEach((m) => { out[m.id] = flat[m.source]; });
+    return out;
+  };
+  if (config.instruments.length > 0) {
+    const insBlk = block(panes.lab, "Instruments · measuring devices", "blk grow");
+    const devs = el("div", "devs");
+    insBlk.appendChild(devs);
+    config.instruments.forEach((entry) => {
+      if (entry.type === "chips") instruments.push(buildChips(devs, entry, metricsById));
+      else if (entry.type === "curve") instruments.push(buildCurve(devs, entry, metricsById));
+    });
+    // A lone counter takes the free space; with a curve, the curve does.
+    if (!config.instruments.some((x) => x.type === "curve")) instruments[0].element.classList.add("grow");
   }
+
+  // Pane "Laws": one switch per law, with its notice.
+  if (panes.laws) {
+    config.laws.forEach((l, i) => {
+      const mod = catalog.laws[l.law];
+      const label = mod ? mod.notice.label : l.law;
+      const pairs = l.params && l.params.pairs ? l.params.pairs.map((p) => p.join(" → ")).join(", ") : "";
+      const scope = l.targets ? `on ${l.targets.join(", ")}` : pairs || "on everything";
+      const outer = el("div", "elem");
+      const row = el("div", "elem-row law");
+      row.appendChild(toggle("laws", lawKey(i), label, "switch"));
+      row.appendChild(el("span", "", `<span class="name">${escapeHtml(label)}</span><small>${escapeHtml(scope)}</small>`));
+      const nb = noticeBlock(mod ? mod.notice : null);
+      if (nb) row.appendChild(infoButton(nb, label));
+      outer.appendChild(row);
+      if (nb) outer.appendChild(nb);
+      panes.laws.appendChild(outer);
+    });
+  }
+
+  // Pane "Knobs": config-declared sliders.
+  if (panes.knobs) {
+    buildControls(panes.knobs, config, lab.state, () => {
+      if (lab.resync) lab.resync();
+      if (!usesTime()) drawOnce();
+    });
+  }
+
+  // Bottom of the steps column: lab note + time buttons.
+  if (config.lab.note) rail.appendChild(el("p", "note", escapeHtml(config.lab.note)));
+  if (warnings.length > 0) rail.appendChild(el("p", "note", `Auto-tuned ${warnings.length} value(s), see console.`));
+  const timeBox = el("div", "time");
+  const pauseBtn = el("button", "btn ink big");
+  const resetBtn = el("button", "btn line", "Reset");
+  const stepBtn = el("button", "btn line", "+1 step");
+  [pauseBtn, resetBtn, stepBtn].forEach((b) => {
+    b.type = "button";
+    timeBox.appendChild(b);
+  });
+  rail.appendChild(timeBox);
+  const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduced || !usesTime()) clock.running = false;
+  const paintPause = () => { pauseBtn.textContent = clock.running ? "❚❚ Pause" : "▶ Play"; };
+  paintPause();
   if (!usesTime()) pauseBtn.disabled = true;
   pauseBtn.addEventListener("click", () => {
     clock.running = !clock.running;
-    pauseBtn.textContent = clock.running ? "Pause" : "Play";
+    paintPause();
   });
-  const doReset = () => {
+  resetBtn.addEventListener("click", () => {
     if (lab.reset) lab.reset();
     clock.reset();
     instruments.forEach((ins) => { if (ins.reset) ins.reset(); });
     drawOnce();
-  };
-  resetBtn.addEventListener("click", doReset);
+  });
   stepBtn.addEventListener("click", () => {
     if (usesTime() && !clock.running && lab.step) {
       lab.step(1 / 60, isActive);
@@ -1329,37 +1577,30 @@ async function boot(source, buildLab, labManifest, packManifests) {
       drawOnce();
     }
   });
-  rowBtns.appendChild(pauseBtn);
-  rowBtns.appendChild(resetBtn);
-  rowBtns.appendChild(stepBtn);
-  runSec.appendChild(rowBtns);
-  sidebar.appendChild(runSec);
-  if (config.lab.note) sidebar.appendChild(el("p", "note", escapeHtml(config.lab.note)));
-  if (warnings.length > 0) {
-    sidebar.appendChild(el("p", "note", `Auto-tuned ${warnings.length} value(s) — see console.`));
-  }
 
-  // --- notebook ---
-  const controlsSec = () => sidebar.querySelectorAll("section");
-  buildNotebook(sidebar, config,
-    () => ({
-      t: clock.t,
-      metrics: metricValues(),
-      params: {
-        substances: JSON.parse(JSON.stringify(config.substances)),
-        material: JSON.parse(JSON.stringify(config.material)),
-        laws: JSON.parse(JSON.stringify(config.laws)),
-      },
-    }),
-    (params) => {
-      config.substances = params.substances;
-      config.material = params.material;
-      config.laws = params.laws;
-      if (lab.resync) lab.resync();
-      controlsSec().forEach((sec) => { if (sec.refreshAll) sec.refreshAll(); });
-      drawOnce();
-    }
-  );
+  // Pane "Notebook".
+  if (panes.notebook) {
+    buildNotebook(panes.notebook, config,
+      () => ({
+        t: clock.t,
+        metrics: metricValues(),
+        params: {
+          substances: JSON.parse(JSON.stringify(config.substances)),
+          material: JSON.parse(JSON.stringify(config.material)),
+          laws: JSON.parse(JSON.stringify(config.laws)),
+        },
+      }),
+      (params) => {
+        config.substances = params.substances;
+        config.material = params.material;
+        config.laws = params.laws;
+        if (lab.resync) lab.resync();
+        root.querySelectorAll("section").forEach((sec) => { if (sec.refreshAll) sec.refreshAll(); });
+        drawOnce();
+      }
+    );
+  }
+  select("lab");
 
   // --- loop ---
   resize();
@@ -1395,12 +1636,13 @@ async function boot(source, buildLab, labManifest, packManifests) {
     instruments.forEach((ins) => ins.update(v));
     const flat = lab.measures();
     config.substances.forEach((s) => {
-      const span = liveSpans[`sub:${s.id}`];
-      if (span) span.textContent = String(flat[`counts.${s.id}`] === undefined ? "–" : flat[`counts.${s.id}`]);
+      const span = liveSpans[s.id];
+      const n = flat[`counts.${s.id}`];
+      if (span) span.textContent = `× ${n === undefined ? "–" : n}`;
     });
   }
 
-  function draw(t) {
+  function draw() {
     requestAnimationFrame(draw);
     const now = performance.now();
     let dt = (now - last) / 1000;
@@ -1411,7 +1653,7 @@ async function boot(source, buildLab, labManifest, packManifests) {
     fpsN += 1;
     fpsT += dt;
     if (fpsT >= 0.5) {
-      fpsVal.textContent = String(Math.round(fpsN / fpsAcc));
+      fpsChip.textContent = `${Math.round(fpsN / fpsAcc)} fps`;
       fpsAcc = 0;
       fpsN = 0;
       fpsT = 0;
@@ -1985,6 +2227,7 @@ boot({
     "title": "Aura-Space",
     "subtitle": "Gravity well, planets and an asteroid belt — rendered by the shared AuraLab core.",
     "accent": "#ffb454",
+    "page": "#5b8cff",
     "note": "Same kit as Aura-Eco. Only this lab differs: substances, material, laws and instruments."
   },
   "bench": {

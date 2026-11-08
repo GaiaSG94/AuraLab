@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="512" height="512">
+  <title>auralab · fiole-fantôme v1</title>
+  <!-- Version 1 du logo, gelée le 2026-11-08. Bulles orange, corps lavande, yeux sombres. -->
+  <circle cx="67" cy="16" r="3.6" fill="#ff8a3d"/>
+  <circle cx="74" cy="6.5" r="2.2" fill="#ff8a3d" opacity=".75"/>
+  <rect x="36" y="18" width="28" height="6" rx="3" fill="#efeaff"/>
+  <path d="M41 22 H59 V36 Q81 45 81 68 V86 Q75.8 80 70.7 86 Q65.5 92 60.3 86 Q55.2 80 50 86 Q44.8 92 39.7 86 Q34.5 80 29.3 86 Q24.2 92 19 86 V68 Q19 45 41 36 Z" fill="#efeaff"/>
+  <g class="eyes">
+    <ellipse cx="41" cy="62" rx="4.6" ry="6.2" fill="#0f0d16"/>
+    <ellipse cx="59" cy="62" rx="4.6" ry="6.2" fill="#0f0d16"/>
+  </g>
+</svg>

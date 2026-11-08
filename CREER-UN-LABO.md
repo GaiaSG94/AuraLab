@@ -15,8 +15,11 @@
 
 ## La fiche, rubrique par rubrique
 
-- `lab` : `title` (titre affiché), `subtitle`, `accent` (couleur thème, ex. `#ffb454`),
-  `note` (phrase affichée en bas du panneau), `id` (identifiant unique, sans espaces).
+- `lab` : `title` (titre affiché), `subtitle`, `page` (couleur de fond de la page, ex. `#5b8cff` ;
+  le texte est noir, choisissez une couleur moyenne ou claire), `accent` (couleur d'accent, ex. `#ffb454`),
+  `note` (phrase affichée en bas de la colonne des étapes), `id` (identifiant unique, sans espaces),
+  optionnel `home` (lien du bouton « ← all labs », par défaut `../index.html`).
+  L'apparence (étapes, paillasse, volets, fantôme) est la même pour tous les labos : seule `page` change.
 - `bench` : `background` (fond), `trail` (0.05–1 : longueur des traînées),
   `speckles` (0–600 : points de fond).
 - `bounds` : `wrap` (traverse les bords) ou `bounce` (rebondit).

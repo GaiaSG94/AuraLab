@@ -69,6 +69,15 @@ export function validateConfig(raw, known) {
       errors.push("lab.accent: required hex color like #ffb454");
     }
     if (typeof config.lab.note !== "string") config.lab.note = "";
+    // page: the flat page color of the lab (ink text sits on it, keep it mid-light).
+    if (config.lab.page === undefined) {
+      config.lab.page = HEX_COLOR.test(String(config.lab.accent)) ? config.lab.accent : "#ff8a3d";
+    } else if (typeof config.lab.page !== "string" || !HEX_COLOR.test(config.lab.page)) {
+      config.lab.page = HEX_COLOR.test(String(config.lab.accent)) ? config.lab.accent : "#ff8a3d";
+      fix(`lab.page reset to ${config.lab.page} (must be a hex color)`);
+    }
+    // home: where "← all labs" leads (relative to the lab page).
+    if (typeof config.lab.home !== "string" || !config.lab.home.trim()) config.lab.home = "../index.html";
   }
 
   // --- bench ---

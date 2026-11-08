@@ -32,7 +32,7 @@ function save(labId, data) {
 export function buildNotebook(parent, config, getState, onRestore) {
   if (!config.notebook.enabled) return null;
   const data = load(config.lab.id);
-  const sec = el("section", "notebook", "<h2>Notebook</h2>");
+  const sec = el("section", "notebook");
 
   if (config.notebook.prompts.length > 0) {
     const ul = el("ul", "prompts");
@@ -42,12 +42,11 @@ export function buildNotebook(parent, config, getState, onRestore) {
     sec.appendChild(ul);
   }
 
-  const noteRow = el("div", "note-row");
-  const noteInput = el("input");
-  noteInput.type = "text";
-  noteInput.placeholder = "Note an observation…";
+  const noteInput = el("textarea", "note-area");
+  noteInput.placeholder = "Write what you see…";
   noteInput.setAttribute("aria-label", "Notebook note");
-  const noteBtn = el("button", "", "Note");
+  const noteBtn = el("button", "btn ink", "Note");
+  noteBtn.type = "button";
   noteBtn.addEventListener("click", () => {
     const text = noteInput.value.trim();
     if (!text) return;
@@ -57,16 +56,20 @@ export function buildNotebook(parent, config, getState, onRestore) {
     renderNotes();
   });
   noteInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") noteBtn.click();
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) noteBtn.click();
   });
-  noteRow.appendChild(noteInput);
-  noteRow.appendChild(noteBtn);
-  sec.appendChild(noteRow);
+  const snapBtn = el("button", "btn", "● Record measures");
+  snapBtn.type = "button";
+  snapBtn.title = "Record measures at this instant";
+  const actions = el("div", "note-actions");
+  actions.appendChild(noteBtn);
+  actions.appendChild(snapBtn);
+  sec.appendChild(noteInput);
+  sec.appendChild(actions);
 
   const notesList = el("ul", "notes");
   sec.appendChild(notesList);
-
-  const snapBtn = el("button", "wide", "Record measures at this instant");
+  const snapsTitle = el("h3", "sub", "Snapshots");
   const snapsList = el("ul", "snapshots");
   snapBtn.addEventListener("click", () => {
     const s = getState();
@@ -78,7 +81,7 @@ export function buildNotebook(parent, config, getState, onRestore) {
     save(config.lab.id, data);
     renderSnaps();
   });
-  sec.appendChild(snapBtn);
+  sec.appendChild(snapsTitle);
   sec.appendChild(snapsList);
 
   parent.appendChild(sec);
@@ -92,8 +95,8 @@ export function buildNotebook(parent, config, getState, onRestore) {
   function renderNotes() {
     notesList.innerHTML = "";
     data.notes.forEach((n, i) => {
-      const li = el("li", "", `<span class="t">${fmtT(n.t)}</span> ${escapeHtml(n.text)} `);
-      const del = el("button", "mini", "×");
+      const li = el("li", "", `<span class="t">${fmtT(n.t)}</span><span class="txt">${escapeHtml(n.text)}</span>`);
+      const del = el("button", "btn mini", "×");
       del.setAttribute("aria-label", "Delete note");
       del.addEventListener("click", () => {
         data.notes.splice(i, 1);
@@ -107,16 +110,17 @@ export function buildNotebook(parent, config, getState, onRestore) {
 
   function renderSnaps() {
     snapsList.innerHTML = "";
+    snapsTitle.hidden = data.snapshots.length === 0;
     data.snapshots.forEach((s, i) => {
       const summary = Object.keys(s.metrics)
         .slice(0, 4)
         .map((k) => `${k}=${Math.round(s.metrics[k] * 100) / 100}`)
         .join(", ");
-      const li = el("li", "", `<span class="t">${fmtT(s.t)}</span> ${escapeHtml(summary)} `);
-      const back = el("button", "mini", "Restore");
+      const li = el("li", "", `<span class="t">${fmtT(s.t)}</span><span class="txt">${escapeHtml(summary)}</span>`);
+      const back = el("button", "btn mini", "Restore");
       back.addEventListener("click", () => onRestore(JSON.parse(JSON.stringify(s.params))));
       li.appendChild(back);
-      const del = el("button", "mini", "×");
+      const del = el("button", "btn mini", "×");
       del.setAttribute("aria-label", "Delete snapshot");
       del.addEventListener("click", () => {
         data.snapshots.splice(i, 1);

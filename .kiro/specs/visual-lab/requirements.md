@@ -35,8 +35,8 @@ One generic shell renders every lab; each lab is a config + small wiring code.
 
 ## Presentation and instruments
 
-- REQ-20: WHEN the lab defines an accent color THEN the system SHALL apply it
-  to markers, sliders, readouts and live values.
+- REQ-20: WHEN the lab defines a page color THEN the system SHALL use it as the
+  flat page background, with the shared layout (steps | bench | panel) for every lab.
 - REQ-21: WHEN elements exist THEN the system SHALL render one selectable row
   per substance, material and law, grouped by category, each with a checkbox
   and an expandable notice (rule, sources, limits).

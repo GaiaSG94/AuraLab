@@ -52,7 +52,9 @@ Wire it as a Kiro post-save Agent Hook — see `.kiro/hooks/README.md`.
 | Key | Meaning |
 |---|---|
 | `lab.title`, `lab.subtitle`, `lab.note` | header text |
-| `lab.accent` | hex color theming the whole dashboard |
+| `lab.page` | flat page color of the lab (ink text on it, keep it mid-light) |
+| `lab.accent` | legacy accent color (still required) |
+| `lab.home` | optional link of "← all labs" (default `../index.html`) |
 | `canvas.background`, `canvas.trail` | backdrop + motion-trail strength (0.05–1) |
 | `canvas.starfield` | static background dots (0–600) |
 | `bounds` | `wrap` or `bounce` at edges |
