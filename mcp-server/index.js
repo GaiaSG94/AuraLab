@@ -10,6 +10,9 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const { validateConfig } = await import(pathToFileURL(join(root, "core/validate.js")).href);
 const { builtinInstruments } = await import(pathToFileURL(join(root, "core/catalog.js")).href);
 const { particlePack } = await import(pathToFileURL(join(root, "engines/particles/index.js")).href);
+const { chimiePack } = await import(pathToFileURL(join(root, "engines/chimie/index.js")).href);
+const { pontsPack } = await import(pathToFileURL(join(root, "engines/ponts/index.js")).href);
+const packs = [particlePack, chimiePack, pontsPack];
 const { buildLawSource, registerLaw } = await import(pathToFileURL(join(root, "scripts/add-element.mjs")).href);
 
 const TOOLS = [
@@ -24,10 +27,10 @@ const TOOLS = [
   },
   {
     name: "validate_lab",
-    description: "Validate one lab config (app-space, app-eco) or all labs. Returns OK/FAIL with warnings and errors.",
+    description: "Validate one lab config or all labs. Returns OK/FAIL with warnings and errors.",
     inputSchema: {
       type: "object",
-      properties: { lab: { type: "string", enum: ["app-space", "app-eco", "all"] } },
+      properties: { lab: { type: "string", enum: ["app-space", "app-eco", "app-chimie", "app-ponts", "all"] } },
       additionalProperties: false,
     },
   },
@@ -54,18 +57,20 @@ const TOOLS = [
 function listCatalog({ category }) {
   const out = {};
   if (!category || category === "laws") {
-    out.laws = Object.keys(particlePack.laws).map((id) => ({
+    out.laws = packs.flatMap((pack) => Object.keys(pack.laws).map((id) => ({
       id,
-      notice: particlePack.laws[id].notice,
-      defaults: particlePack.laws[id].defaults || {},
-    }));
+      pack: pack.id,
+      notice: pack.laws[id].notice,
+      defaults: pack.laws[id].defaults || {},
+    })));
   }
   if (!category || category === "apparatus") {
-    out.apparatus = Object.keys(particlePack.apparatus).map((kind) => ({
+    out.apparatus = packs.flatMap((pack) => Object.keys(pack.apparatus).map((kind) => ({
       kind,
-      notice: particlePack.apparatus[kind].notice,
-      defaults: particlePack.apparatus[kind].defaults || {},
-    }));
+      pack: pack.id,
+      notice: pack.apparatus[kind].notice,
+      defaults: pack.apparatus[kind].defaults || {},
+    })));
   }
   if (!category || category === "instruments") {
     out.instruments = Object.keys(builtinInstruments).map((type) => ({
@@ -95,18 +100,25 @@ async function validateLab({ lab }) {
       const mod = await import(pathToFileURL(join(root, dir, "lab.js")).href);
       labManifest = mod.labManifest || labManifest;
     } catch (err) {
-      results.push({ lab: dir, ok: false, errors: [`cannot load lab.js: ${err.message}`], warnings: [] });
-      continue;
+      try {
+        const game = await import(pathToFileURL(join(root, dir, "game.js")).href);
+        labManifest = game.gameManifest || labManifest;
+      } catch (err2) {
+        results.push({ lab: dir, ok: false, errors: [`cannot load lab.js: ${err.message}`], warnings: [] });
+        continue;
+      }
     }
     const known = {
       laws: {},
-      apparatus: Object.keys(particlePack.apparatus),
+      apparatus: packs.flatMap((p) => Object.keys(p.apparatus)),
       instruments: Object.keys(builtinInstruments),
-      measures: [...particlePack.measures.map((m) => m.id), ...labManifest.measures.map((m) => m.id)],
+      measures: [...packs.flatMap((p) => p.measures.map((m) => m.id)), ...labManifest.measures.map((m) => m.id)],
       surfaces: ["stage"],
     };
-    Object.keys(particlePack.laws).forEach((id) => {
-      known.laws[id] = { defaults: particlePack.laws[id].defaults || {} };
+    packs.forEach((pack) => {
+      Object.keys(pack.laws).forEach((id) => {
+        known.laws[id] = { defaults: pack.laws[id].defaults || {} };
+      });
     });
     const { config, warnings, errors } = validateConfig(raw, known);
     results.push({ lab: dir, ok: !!config, errors, warnings });

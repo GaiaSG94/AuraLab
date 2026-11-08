@@ -1,4 +1,4 @@
-// AuraLab core — shell: validates config, builds the lab page, binds everything,
+// LabKit core — shell: validates config, builds the lab page, binds everything,
 // runs the loop. Knows categories and presentation; knows zero science.
 // Page: header (ghost, lab name, back link) / steps | bench | panel.
 // Every lab built on this shell gets the same look; config only sets colors.
@@ -7,6 +7,7 @@ import { mergeCatalog, builtinInstruments } from "./catalog.js";
 import { el, escapeHtml, hexToRgb, buildControls } from "./controls.js";
 import { buildChips, buildCurve } from "./instruments.js";
 import { buildNotebook } from "./notebook.js";
+import { strings } from "./strings.js";
 import { createClock } from "./time.js";
 import "./ghost.js"; // side effect: window.AuraGhost (logo + notebook guide)
 
@@ -38,6 +39,7 @@ export async function boot(source, buildLab, labManifest, packManifests) {
     raw = source;
   }
 
+  const L = strings(raw);
   const catalog = mergeCatalog(packManifests || []);
   const known = {
     laws: {},
@@ -56,14 +58,14 @@ export async function boot(source, buildLab, labManifest, packManifests) {
 
   const { config, warnings, errors } = validateConfig(raw, known);
   if (!config) {
-    root.appendChild(el("div", "error", `Invalid config:\n- ${errors.join("\n- ")}`));
+    root.appendChild(el("div", "error", L.invalidConfig + "\n- " + errors.join("\n- ")));
     return null;
   }
-  if (warnings.length > 0) console.info("[auralab] auto-tuned config:", warnings);
+  if (warnings.length > 0) console.info("[labkit] auto-tuned config:", warnings);
 
   document.documentElement.style.setProperty("--accent", config.lab.accent);
   document.documentElement.style.setProperty("--page", config.lab.page);
-  document.title = `${config.lab.title} — AuraLab`;
+  document.title = `${config.lab.title} — LabKit`;
 
   // --- active flags (checkboxes and switches) ---
   const active = {};
@@ -82,22 +84,21 @@ export async function boot(source, buildLab, labManifest, packManifests) {
   const header = el("header", "lab-header");
   header.appendChild(ghost(el("span", "logo"), "white"));
   header.appendChild(el("h1", "", escapeHtml(config.lab.title)));
-  const back = el("a", "back", "← all labs");
+  const back = el("a", "back", L.allLabs);
   back.href = config.lab.home;
   header.appendChild(back);
 
   const main = el("div", "lab-main");
   const rail = el("nav", "rail");
   rail.setAttribute("role", "tablist");
-  rail.setAttribute("aria-label", "Lab steps");
+  rail.setAttribute("aria-label", L.labSteps);
   const bench = el("section", "bench");
-  const benchHead = el("div", "zh", '<h2>Bench</h2><span class="hint">Watch it happen</span>');
+  const benchHead = el("div", "zh", '<h2>' + L.bench + '</h2><span class="hint">' + L.benchHint + '</span>');
   const fpsChip = el("span", "end fps", "– fps");
   benchHead.appendChild(fpsChip);
   const stage = el("div", "stage");
-  const canvas = el("canvas");
-  canvas.setAttribute("aria-label", `${config.lab.title} simulation`);
-  stage.appendChild(canvas);
+  // Created after buildLab: webgl labs mount their own surface instead.
+  let canvas = null;
   bench.appendChild(benchHead);
   bench.appendChild(stage);
   const panel = el("section", "panel");
@@ -108,10 +109,10 @@ export async function boot(source, buildLab, labManifest, packManifests) {
   root.appendChild(main);
 
   // One step on the left = one pane on the right. Only declared parts get a step.
-  const steps = [{ id: "lab", label: "Lab", hint: "Substances, material, instruments" }];
-  if (config.laws.length > 0) steps.push({ id: "laws", label: "Laws", hint: "How it behaves" });
-  if (config.controls.length > 0) steps.push({ id: "knobs", label: "Knobs", hint: "Change the amounts" });
-  if (config.notebook.enabled) steps.push({ id: "notebook", label: "Notebook", hint: "Write what you see" });
+  const steps = [{ id: "lab", label: L.stepLab, hint: L.stepLabHint }];
+  if (config.laws.length > 0) steps.push({ id: "laws", label: L.stepLaws, hint: L.stepLawsHint });
+  if (config.controls.length > 0) steps.push({ id: "knobs", label: L.stepKnobs, hint: L.stepKnobsHint });
+  if (config.notebook.enabled) steps.push({ id: "notebook", label: L.stepNotebook, hint: L.stepNotebookHint });
   const panes = {};
   const tabs = [];
   const instruments = [];
@@ -144,15 +145,22 @@ export async function boot(source, buildLab, labManifest, packManifests) {
 
   // --- lab wiring ---
   const clock = createClock();
-  const ctx = canvas.getContext("2d");
   const api = {
-    stage: { canvas, ctx, W: 800, H: 600 },
+    stage: { canvas: null, ctx: null, container: stage, W: 800, H: 600 },
     params: config,
     catalog,
     isActive,
     time: clock,
   };
   const lab = buildLab(api, config);
+  const is3d = lab.surface === "webgl";
+  if (!is3d) {
+    canvas = el("canvas");
+    canvas.setAttribute("aria-label", `${config.lab.title} : ${L.bench}`);
+    stage.appendChild(canvas);
+    api.stage.canvas = canvas;
+    api.stage.ctx = canvas.getContext("2d");
+  }
   const usesTime = () => typeof lab.step === "function";
 
   const speckles = [];
@@ -160,11 +168,13 @@ export async function boot(source, buildLab, labManifest, packManifests) {
   function resize() {
     const r = stage.getBoundingClientRect();
     if (!r.width || !r.height) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.max(50, Math.floor(r.width * dpr));
-    canvas.height = Math.max(50, Math.floor(r.height * dpr));
-    api.stage.W = canvas.width / dpr;
-    api.stage.H = canvas.height / dpr;
+    api.stage.W = r.width;
+    api.stage.H = r.height;
+    if (!is3d) {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.max(50, Math.floor(r.width * dpr));
+      canvas.height = Math.max(50, Math.floor(r.height * dpr));
+    }
     if (lab.setSize) lab.setSize(api.stage.W, api.stage.H);
     // First real size known: respawn so nothing starts outside the bench.
     if (!sized) {
@@ -198,7 +208,7 @@ export async function boot(source, buildLab, labManifest, packManifests) {
   function infoButton(nb, label) {
     const b = el("button", "ib", "i");
     b.type = "button";
-    b.setAttribute("aria-label", `About ${label}`);
+    b.setAttribute("aria-label", `${L.about} ${label}`);
     b.setAttribute("aria-expanded", "false");
     b.addEventListener("click", () => {
       nb.hidden = !nb.hidden;
@@ -212,7 +222,7 @@ export async function boot(source, buildLab, labManifest, packManifests) {
     const box = el("input");
     box.type = "checkbox";
     box.checked = isActive(cat, id);
-    box.setAttribute("aria-label", `Enable ${label}`);
+    box.setAttribute("aria-label", `${L.enable} ${label}`);
     box.addEventListener("change", () => {
       active[key(cat, id)] = box.checked;
       drawOnce();
@@ -234,6 +244,11 @@ export async function boot(source, buildLab, labManifest, packManifests) {
     row.appendChild(tools);
     outer.appendChild(row);
     if (nb) outer.appendChild(nb);
+    outer.addEventListener("click", (e) => {
+      if (e.target.closest(".switch, .check, .ib")) return;
+      const box = row.querySelector("input[type=checkbox]");
+      if (box && !box.disabled) box.click();
+    });
     return { outer, live };
   }
   function block(parent, title, cls) {
@@ -250,8 +265,8 @@ export async function boot(source, buildLab, labManifest, packManifests) {
   }
 
   // Pane "Lab": substances, material and instruments, all visible at once.
-  const subsBlk = block(panes.lab, "Substances");
-  if (config.substances.length === 0) subsBlk.appendChild(el("p", "empty", "No substance in this lab."));
+  const subsBlk = block(panes.lab, L.substances);
+  if (config.substances.length === 0) subsBlk.appendChild(el("p", "empty", L.noSubstance));
   config.substances.forEach((s) => {
     const lawNames = config.laws
       .map((l, i) => ({ l, i }))
@@ -266,8 +281,8 @@ export async function boot(source, buildLab, labManifest, packManifests) {
     liveSpans[s.id] = r.live;
     subsBlk.appendChild(r.outer);
   });
-  const matBlk = block(panes.lab, "Material");
-  if (config.material.length === 0) matBlk.appendChild(el("p", "empty", "No material in this lab."));
+  const matBlk = block(panes.lab, L.material);
+  if (config.material.length === 0) matBlk.appendChild(el("p", "empty", L.noMaterial));
   config.material.forEach((m) => {
     const app = catalog.apparatus[m.kind];
     const r = itemRow("material", m.id, m.label, APPARATUS(m.color || "#ffffff"), app ? app.notice : null);
@@ -285,12 +300,12 @@ export async function boot(source, buildLab, labManifest, packManifests) {
     return out;
   };
   if (config.instruments.length > 0) {
-    const insBlk = block(panes.lab, "Instruments · measuring devices", "blk grow");
+    const insBlk = block(panes.lab, L.instruments, "blk grow");
     const devs = el("div", "devs");
     insBlk.appendChild(devs);
     config.instruments.forEach((entry) => {
-      if (entry.type === "chips") instruments.push(buildChips(devs, entry, metricsById));
-      else if (entry.type === "curve") instruments.push(buildCurve(devs, entry, metricsById));
+      if (entry.type === "chips") instruments.push(buildChips(devs, entry, metricsById, L));
+      else if (entry.type === "curve") instruments.push(buildCurve(devs, entry, metricsById, L));
     });
     // A lone counter takes the free space; with a curve, the curve does.
     if (!config.instruments.some((x) => x.type === "curve")) instruments[0].element.classList.add("grow");
@@ -302,15 +317,21 @@ export async function boot(source, buildLab, labManifest, packManifests) {
       const mod = catalog.laws[l.law];
       const label = mod ? mod.notice.label : l.law;
       const pairs = l.params && l.params.pairs ? l.params.pairs.map((p) => p.join(" → ")).join(", ") : "";
-      const scope = l.targets ? `on ${l.targets.join(", ")}` : pairs || "on everything";
+      const scope = l.targets ? `${L.lawsOn} ${l.targets.join(", ")}` : pairs;
       const outer = el("div", "elem");
       const row = el("div", "elem-row law");
       row.appendChild(toggle("laws", lawKey(i), label, "switch"));
-      row.appendChild(el("span", "", `<span class="name">${escapeHtml(label)}</span><small>${escapeHtml(scope)}</small>`));
+      const scopeHtml = scope ? `<small>${escapeHtml(scope)}</small>` : "";
+      row.appendChild(el("span", "", `<span class="name">${escapeHtml(label)}</span>${scopeHtml}`));
       const nb = noticeBlock(mod ? mod.notice : null);
       if (nb) row.appendChild(infoButton(nb, label));
       outer.appendChild(row);
       if (nb) outer.appendChild(nb);
+      outer.addEventListener("click", (e) => {
+        if (e.target.closest(".switch, .check, .ib")) return;
+        const box = row.querySelector("input[type=checkbox]");
+        if (box && !box.disabled) box.click();
+      });
       panes.laws.appendChild(outer);
     });
   }
@@ -325,11 +346,11 @@ export async function boot(source, buildLab, labManifest, packManifests) {
 
   // Bottom of the steps column: lab note + time buttons.
   if (config.lab.note) rail.appendChild(el("p", "note", escapeHtml(config.lab.note)));
-  if (warnings.length > 0) rail.appendChild(el("p", "note", `Auto-tuned ${warnings.length} value(s), see console.`));
+  if (warnings.length > 0) rail.appendChild(el("p", "note", L.autotuned(warnings.length)));
   const timeBox = el("div", "time");
   const pauseBtn = el("button", "btn ink big");
-  const resetBtn = el("button", "btn line", "Reset");
-  const stepBtn = el("button", "btn line", "+1 step");
+  const resetBtn = el("button", "btn line", L.reset);
+  const stepBtn = el("button", "btn line", L.step1);
   [pauseBtn, resetBtn, stepBtn].forEach((b) => {
     b.type = "button";
     timeBox.appendChild(b);
@@ -337,7 +358,7 @@ export async function boot(source, buildLab, labManifest, packManifests) {
   rail.appendChild(timeBox);
   const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (reduced || !usesTime()) clock.running = false;
-  const paintPause = () => { pauseBtn.textContent = clock.running ? "❚❚ Pause" : "▶ Play"; };
+  const paintPause = () => { pauseBtn.textContent = clock.running ? L.pause : L.play; };
   paintPause();
   if (!usesTime()) pauseBtn.disabled = true;
   pauseBtn.addEventListener("click", () => {
@@ -397,22 +418,28 @@ export async function boot(source, buildLab, labManifest, packManifests) {
   }
 
   function drawOnce() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const W = canvas.width / dpr;
-    const H = canvas.height / dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = config.bench.background;
-    ctx.globalAlpha = config.bench.trail;
-    ctx.fillRect(0, 0, W, H);
-    ctx.globalAlpha = 1;
-    for (const s of speckles) {
-      ctx.globalAlpha = s.a;
-      ctx.fillStyle = "#cdd6e0";
-      ctx.fillRect(s.x * W, s.y * H, s.s, s.s);
+    if (is3d) {
+      if (lab.draw) lab.draw(null, api.stage.W, api.stage.H, isActive, hexToRgb);
+    } else {
+      const canvas2d = api.stage.canvas;
+      const ctx = api.stage.ctx;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const W = canvas2d.width / dpr;
+      const H = canvas2d.height / dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = config.bench.background;
+      ctx.globalAlpha = config.bench.trail;
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
+      for (const s of speckles) {
+        ctx.globalAlpha = s.a;
+        ctx.fillStyle = "#cdd6e0";
+        ctx.fillRect(s.x * W, s.y * H, s.s, s.s);
+      }
+      ctx.globalAlpha = 1;
+      if (lab.draw) lab.draw(ctx, W, H, isActive, hexToRgb);
     }
-    ctx.globalAlpha = 1;
-    if (lab.draw) lab.draw(ctx, W, H, isActive, hexToRgb);
     const v = metricValues();
     instruments.forEach((ins) => ins.update(v));
     const flat = lab.measures();

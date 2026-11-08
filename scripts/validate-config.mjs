@@ -7,6 +7,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { validateConfig } from "../core/validate.js";
 import { builtinInstruments } from "../core/catalog.js";
 import { particlePack } from "../engines/particles/index.js";
+import { chimiePack } from "../engines/chimie/index.js";
+import { pontsPack } from "../engines/ponts/index.js";
+
+const packs = [particlePack, chimiePack, pontsPack];
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const apps = readdirSync(root, { withFileTypes: true })
@@ -29,19 +33,26 @@ for (const dir of apps) {
     const lab = await import(pathToFileURL(join(root, dir, "lab.js")).href);
     labManifest = lab.labManifest || labManifest;
   } catch (err) {
-    console.error(`FAIL ${dir}/lab.js: cannot load (${err.message})`);
-    failed += 1;
-    continue;
+    try {
+      const game = await import(pathToFileURL(join(root, dir, "game.js")).href);
+      labManifest = game.gameManifest || labManifest;
+    } catch (err2) {
+      console.error(`FAIL ${dir}/lab.js: cannot load (${err.message})`);
+      failed += 1;
+      continue;
+    }
   }
   const known = {
     laws: {},
-    apparatus: Object.keys(particlePack.apparatus),
+    apparatus: packs.flatMap((p) => Object.keys(p.apparatus)),
     instruments: Object.keys(builtinInstruments),
-    measures: [...particlePack.measures.map((m) => m.id), ...labManifest.measures.map((m) => m.id)],
+    measures: [...packs.flatMap((p) => p.measures.map((m) => m.id)), ...labManifest.measures.map((m) => m.id)],
     surfaces: ["stage"],
   };
-  Object.keys(particlePack.laws).forEach((id) => {
-    known.laws[id] = { defaults: particlePack.laws[id].defaults || {} };
+  packs.forEach((pack) => {
+    Object.keys(pack.laws).forEach((id) => {
+      known.laws[id] = { defaults: pack.laws[id].defaults || {} };
+    });
   });
   const { config, warnings, errors } = validateConfig(raw, known);
   if (!config) {

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%23f8fafc'/%3E%3Ccircle cx='5.5' cy='7' r='1.4' fill='%23111122'/%3E%3Ccircle cx='10.5' cy='7' r='1.4' fill='%23111122'/%3E%3C/svg%3E" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chemistry Lab — LabKit</title>
+  <link rel="stylesheet" href="../core/styles.css" />
+</head>
+<body>
+  <div id="lab"><div class="boot-hint">Loading the lab…<br />If this message stays, don't double-click this file: run <b>start-lab.bat</b> and open <b>http://localhost:8080/app-chimie/</b> instead.</div></div>
+  <script type="module">
+    import { boot } from "../core/shell.js";
+    import { buildLab, labManifest } from "./lab.js";
+    import { chimiePack } from "../engines/chimie/index.js";
+    boot("config.json", buildLab, labManifest, [chimiePack]);
+  </script>
+</body>
+</html>

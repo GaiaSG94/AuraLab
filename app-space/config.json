@@ -1,11 +1,11 @@
 {
   "lab": {
     "id": "space",
-    "title": "Aura-Space",
-    "subtitle": "Gravity well, planets and an asteroid belt — rendered by the shared AuraLab core.",
+    "title": "Space Lab",
+    "subtitle": "Gravity well, planets and an asteroid belt — rendered by the shared LabKit core.",
     "accent": "#ffb454",
     "page": "#5b8cff",
-    "note": "Same kit as Aura-Eco. Only this lab differs: substances, material, laws and instruments."
+    "note": "Same kit as Eco Lab. Only this lab differs: substances, material, laws and instruments."
   },
   "bench": {
     "background": "#07090c",

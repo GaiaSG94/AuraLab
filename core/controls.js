@@ -1,4 +1,4 @@
-// AuraLab core — controls: build config-declared sliders bound to live state paths.
+// LabKit core — controls: build config-declared sliders bound to live state paths.
 import { getPath, setPath } from "./validate.js";
 
 export function el(tag, cls, html) {

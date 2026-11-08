@@ -1,0 +1,53 @@
+{
+  "lab": {
+    "id": "chimie",
+    "title": "Chemistry Lab",
+    "subtitle": "Flask, colors and bunsen burner — same shell as the other labs.",
+    "accent": "#a8e05f",
+    "page": "#58b368",
+    "note": "Same kit as Bridge Lab. Only this lab differs: substances, material, laws and instruments.",
+    "lang": "en"
+  },
+  "bench": {
+    "background": "#0a0f0c",
+    "trail": 1,
+    "speckles": 0
+  },
+  "bounds": "wrap",
+  "substances": [
+    { "id": "bleu", "label": "Blue solution", "count": 1, "color": "#2563eb", "radius": 3, "mass": 1, "speed": 0 },
+    { "id": "jaune", "label": "Yellow solution", "count": 1, "color": "#facc15", "radius": 3, "mass": 1, "speed": 0 },
+    { "id": "acide", "label": "Mild acid", "count": 0, "color": "#f97316", "radius": 3, "mass": 1, "speed": 0 }
+  ],
+  "material": [
+    { "id": "erlenmeyer", "kind": "recipient", "label": "Erlenmeyer 500 mL", "x": 0.38, "y": 0.62 },
+    { "id": "bruleur", "kind": "bruleur", "label": "Bunsen burner", "x": 0.38, "y": 0.9, "strength": 60 }
+  ],
+  "laws": [
+    { "law": "melange-couleurs" },
+    { "law": "reaction-acide" },
+    { "law": "chauffage" }
+  ],
+  "metrics": [
+    { "id": "temperature", "label": "Temperature", "unit": "°C", "source": "temp", "color": "#dc2626" },
+    { "id": "ph", "label": "pH", "unit": "", "source": "ph", "color": "#16a34a" },
+    { "id": "volume", "label": "Volume", "unit": "mL", "source": "volume", "color": "#2563eb" }
+  ],
+  "instruments": [
+    { "type": "chips", "metrics": ["temperature", "ph", "volume"] },
+    { "type": "curve", "metrics": ["temperature"] }
+  ],
+  "controls": [
+    { "path": "substances.bleu.count", "label": "Blue doses", "min": 0, "max": 2, "step": 1 },
+    { "path": "substances.jaune.count", "label": "Yellow doses", "min": 0, "max": 2, "step": 1 },
+    { "path": "substances.acide.count", "label": "Acid doses", "min": 0, "max": 1, "step": 1 },
+    { "path": "material.bruleur.strength", "label": "Burner power", "min": 0, "max": 100, "step": 5 }
+  ],
+  "notebook": {
+    "enabled": true,
+    "prompts": [
+      "Blue + yellow: what color do you get?",
+      "What does the acid change: bubbles, heat, pH?"
+    ]
+  }
+}

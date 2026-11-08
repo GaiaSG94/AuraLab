@@ -1,4 +1,4 @@
-// AuraLab core — unified catalog, organized by categories.
+// LabKit core — unified catalog, organized by categories.
 // The catalog is the single list of everything a lab can order:
 // laws, apparatus, instruments (+metrics), substances molds, surfaces.
 // Built-ins ship with the kit; packs and labs extend it. Merged at boot.
@@ -44,6 +44,15 @@ export const builtinSurfaces = {
       formule: "Main 2D canvas: background + optional speckles + lab drawing, with motion trails.",
       sources: "Kit built-in surface (no model).",
       limites: "2D only; one stage per lab.",
+    },
+  },
+  webgl: {
+    label: "WebGL stage",
+    notice: {
+      label: "WebGL stage",
+      formule: "The lab mounts its own 3D canvas in the stage box; the shell keeps header, steps, instruments and loop.",
+      sources: "Kit built-in surface (no model).",
+      limites: "One stage per lab; 3D content is 100% lab-owned.",
     },
   },
 };

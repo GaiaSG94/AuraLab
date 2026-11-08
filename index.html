@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%23f8fafc'/%3E%3Ccircle cx='5.5' cy='7' r='1.4' fill='%23111122'/%3E%3Ccircle cx='10.5' cy='7' r='1.4' fill='%23111122'/%3E%3C/svg%3E" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>auralab — one kit, many labs</title>
+<title>labkit — one kit, many labs</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=JetBrains+Mono:wght@400;600;700&display=swap" />
 <style>
   /* Portal: same flat-page language as the labs (core/styles.css). */
@@ -18,29 +19,38 @@
   html, body { margin: 0; min-height: 100%; background: var(--page); color: var(--ink); font-family: var(--font); }
   a:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
   .poster {
-    min-height: 100vh; min-height: 100dvh;
+    height: 100vh; height: 100dvh;
     display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto;
-    gap: 18px; padding: 22px 36px 18px;
+    gap: clamp(10px, 2.2vh, 18px); padding: clamp(12px, 2.6vh, 22px) 36px clamp(10px, 2.2vh, 18px);
     max-width: 1400px; margin: 0 auto;
   }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 900; font-stretch: 72%; font-size: 32px; line-height: 1; }
-  .brand .logo { width: 30px; }
-  .main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 400px); gap: 24px; align-items: center; min-height: 0; }
-  h1 { margin: 0; font-weight: 900; font-stretch: 68%; text-transform: uppercase; line-height: 0.86; font-size: clamp(64px, 10vw, 136px); }
+  .brand { display: flex; align-items: center; gap: 12px; font-weight: 900; font-stretch: 72%; font-size: 46px; line-height: 1; }
+  .brand .logo { width: 46px; transform-origin: 50% 100%; animation: hop 6s ease-in-out 2s infinite; }
+  @keyframes hop {
+    0%, 84%, 100% { transform: translateY(0) scale(1, 1); }
+    86% { transform: translateY(0) scale(1.08, 0.9); }
+    90% { transform: translateY(-14px) scale(0.95, 1.06); }
+    94% { transform: translateY(0) scale(1.1, 0.88); }
+    97% { transform: translateY(0) scale(1, 1); }
+  }
+  @media (prefers-reduced-motion: reduce) { .brand .logo { animation: none; } }
+  .main { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 48px; align-items: center; min-height: 0; }
+  h1 { margin: 0; font-weight: 900; font-stretch: 68%; text-transform: uppercase; line-height: 0.86; font-size: clamp(48px, min(10vw, 17vh), 136px); }
   h1 span { display: block; color: var(--paper); }
-  .lede { font-weight: 500; font-size: 17px; max-width: 42ch; margin: 18px 0 0; }
-  .hero-ghost { width: 100%; max-width: 390px; justify-self: center; padding-top: 40px; }
+  .hero-ghost { display: block; height: 100%; max-height: 520px; aspect-ratio: 1 / 1; max-width: 42vw; justify-self: center; overflow: visible; }
+  .hero-ghost svg { height: 100%; width: auto; max-width: 100%; margin: 0 auto; }
+  .main { height: 100%; }
+  .hero-ghost.pouring .bubl { opacity: 0; }
   .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
   .card {
     display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: 12px;
     background: var(--ink); color: var(--paper); text-decoration: none;
-    border-radius: 18px; padding: 14px 16px; min-height: 160px;
+    border-radius: 18px; padding: 14px 16px; height: clamp(104px, 18vh, 140px);
   }
   .card:hover { box-shadow: 0 0 0 3px var(--paper); }
   .card .t { display: flex; flex-direction: column; min-width: 0; }
   .card h2 { margin: 0; font-weight: 900; font-stretch: 68%; text-transform: uppercase; line-height: 0.9; font-size: 36px; }
   .card h2 em { font-style: normal; color: var(--c); }
-  .card p { margin: 6px 0 0; font-size: 13px; color: #cfc9e3; line-height: 1.35; }
   .card .open { margin-top: auto; padding-top: 8px; font: 700 12px var(--mono); color: var(--c); }
   .card .vis { position: relative; border-radius: 12px; background: #0c0a12; overflow: hidden; }
   .card .vis canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -50,44 +60,46 @@
   footer a { color: var(--ink); font-weight: 700; }
   footer code { font-family: var(--mono); font-size: 12px; }
   @media (max-width: 900px) {
-    .poster { padding: 18px 16px; }
+    .poster { height: auto; min-height: 100dvh; padding: 18px 16px; }
+    .main { height: auto; }
+    .card { height: auto; min-height: 120px; }
     .main { grid-template-columns: 1fr; }
-    .hero-ghost { max-width: 220px; padding-top: 10px; order: -1; }
+    .hero-ghost { height: auto; width: min(260px, 60vw); max-width: none; order: -1; }
+    .hero-ghost svg { width: 100%; height: auto; }
     .cards { grid-template-columns: 1fr; }
   }
 </style>
 </head>
 <body>
   <div class="poster">
-    <span class="brand"><span class="logo" data-ghost="ink"></span>auralab</span>
+    <span class="brand"><span class="logo" data-ghost="ink"></span>labkit</span>
     <div class="main">
       <div>
         <h1>One kit. <span>Many labs.</span></h1>
-        <p class="lede">No account, no install, works offline. Each laboratory runs standalone: pick one and start experimenting.</p>
       </div>
       <span class="hero-ghost" data-ghost="white"></span>
     </div>
     <nav class="cards" aria-label="Laboratories">
-      <a class="card" style="--c:#fbf8ff" href="https://github.com/GaiaSG94/AuraLab">
-        <div class="t"><h2>The <em>Kit</em></h2><p>Shell, engines, configs and docs. Copy a lab folder, edit its config: same look, new lab.</p><span class="open">Open repository →</span></div>
-        <div class="vis"><pre class="tree">auralab/
+      <a class="card" style="--c:#fbf8ff" href="https://github.com/GaiaSG94/LabKit">
+        <div class="t"><h2>The <em>Kit</em></h2><span class="open">Open repository →</span></div>
+        <div class="vis"><pre class="tree">labkit/
 ├ <b>core/</b>
 ├ <b>engines/</b>
-├ <b>app-space/</b>
-└ <b>app-eco/</b></pre></div>
+├ <b>app-chimie/</b>
+└ <b>app-ponts/</b></pre></div>
       </a>
-      <a class="card" style="--c:#5b8cff" href="dist/aura-space.html">
-        <div class="t"><h2>Space<em>Lab</em></h2><p>Gravity well, planets and an asteroid belt.</p><span class="open">Open laboratory →</span></div>
-        <div class="vis"><canvas data-mini="orbit" aria-hidden="true"></canvas></div>
+      <a class="card" style="--c:#f59e0b" href="dist/labkit-chimie.html">
+        <div class="t"><h2>Chemistry <em>Lab</em></h2><span class="open">Open laboratory →</span></div>
+        <div class="vis"><canvas data-mini="chimie" aria-hidden="true"></canvas></div>
       </a>
-      <a class="card" style="--c:#6cc95a" href="dist/aura-eco.html">
-        <div class="t"><h2>Eco<em>Lab</em></h2><p>Rabbits, foxes, bushes and a living population chart.</p><span class="open">Open laboratory →</span></div>
-        <div class="vis"><canvas data-mini="eco" aria-hidden="true"></canvas></div>
+      <a class="card" style="--c:#7dd3fc" href="dist/labkit-ponts.html">
+        <div class="t"><h2>Bridge <em>Lab</em></h2><span class="open">Open laboratory →</span></div>
+        <div class="vis"><canvas data-mini="ponts" aria-hidden="true"></canvas></div>
       </a>
     </nav>
     <footer>
-      <span>auralab template · Kiroween Skeleton Crew</span>
-      <span>Modular sources (need a static server): <a href="app-space/">app-space/</a> · <a href="app-eco/">app-eco/</a> · run <code>start-lab.bat</code></span>
+      <span>labkit template · Kiroween Skeleton Crew</span>
+      <span>Modular sources (need a static server): <a href="app-chimie/">app-chimie/</a> · <a href="app-ponts/">app-ponts/</a> · <a href="app-space/">app-space/</a> · <a href="app-eco/">app-eco/</a> · run <code>start-lab.bat</code> · bonus standalone: <a href="dist/labkit-space.html">space</a> · <a href="dist/labkit-eco.html">eco</a></span>
     </footer>
   </div>
   <script src="core/ghost.js"></script>
@@ -136,7 +148,110 @@
         c.fillStyle = "#e0784a"; F.forEach((p) => { c.beginPath(); c.arc(p.x, p.y, 3, 0, 6.28); c.fill(); });
       };
     }
-    const loops = [...document.querySelectorAll("canvas[data-mini]")].map((cv) => (cv.dataset.mini === "orbit" ? orbit(cv) : eco(cv)));
+    function chimie(cv) {
+      const o = fit(cv);
+      const b = Array.from({ length: 14 }, () => ({ x: rnd(), s: rnd(), v: 0.25 + rnd() * 0.5 }));
+      return (dt) => {
+        const c = o.c; c.clearRect(0, 0, o.w, o.h);
+        c.fillStyle = "#f2e7c9"; c.fillRect(0, 0, o.w, o.h);
+        const lh = o.h * 0.55;
+        c.fillStyle = "#16a34a"; c.fillRect(6, o.h - 6 - lh, o.w - 12, lh);
+        c.strokeStyle = "#44403c"; c.lineWidth = 2;
+        c.beginPath();
+        c.moveTo(o.w * 0.32, 4); c.lineTo(o.w * 0.32, o.h * 0.4); c.lineTo(6, o.h - 6);
+        c.lineTo(o.w - 6, o.h - 6); c.lineTo(o.w * 0.68, o.h * 0.4); c.lineTo(o.w * 0.68, 4);
+        c.stroke();
+        c.fillStyle = "#ffffff";
+        b.forEach((p) => {
+          p.s -= p.v * dt; if (p.s < 0) p.s = 1;
+          c.globalAlpha = 0.9;
+          c.beginPath(); c.arc(8 + p.x * (o.w - 16), o.h - 6 - p.s * (lh - 8), 1.8, 0, 6.28); c.fill();
+        });
+        c.globalAlpha = 1;
+      };
+    }
+    function ponts(cv) {
+      const o = fit(cv);
+      let x = -0.2;
+      return (dt) => {
+        const c = o.c; c.clearRect(0, 0, o.w, o.h);
+        c.fillStyle = "#1b2452"; c.fillRect(0, 0, o.w, o.h);
+        c.fillStyle = "#1e5f9e"; c.fillRect(0, o.h * 0.72, o.w, o.h * 0.28);
+        const y = o.h * 0.55;
+        c.strokeStyle = "#c7d2e8"; c.lineWidth = 2;
+        c.beginPath(); c.moveTo(4, y); c.lineTo(o.w - 4, y); c.stroke();
+        c.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const x0 = 4 + (o.w - 8) * i / 6, x1 = 4 + (o.w - 8) * (i + 1) / 6;
+          c.moveTo(x0, y); c.lineTo((x0 + x1) / 2, y - o.h * 0.2); c.lineTo(x1, y);
+        }
+        c.stroke();
+        x += dt * 0.25; if (x > 1.2) x = -0.2;
+        c.fillStyle = "#f8fafc";
+        c.beginPath(); c.arc(x * o.w, y - 16, 6, 0, 6.28); c.fill();
+        c.fillRect(x * o.w - 6, y - 16, 12, 10);
+        c.fillStyle = "#111122";
+        c.fillRect(x * o.w - 3, y - 18, 2, 3); c.fillRect(x * o.w + 1, y - 18, 2, 3);
+      };
+    }
+    // Hero ghost: tips over once at load and pours a stream of potion, then rights itself.
+    function pour(host) {
+      const svg = host.querySelector("svg");
+      if (!svg || reduce) return;
+      const NS = "http://www.w3.org/2000/svg";
+      const bubl = svg.querySelector(".bubl");
+      const tilt = document.createElementNS(NS, "g");
+      [...svg.childNodes].forEach((n) => { if (n !== bubl) tilt.appendChild(n); });
+      svg.insertBefore(tilt, bubl);
+      const liquid = document.createElementNS(NS, "g");
+      liquid.innerHTML = '<ellipse class="puddle" cx="0" cy="97" rx="0" ry="2.6" fill="#17141f"/>' +
+        '<path class="stream" fill="none" stroke="#17141f" stroke-width="3.6" stroke-linecap="round"/>';
+      svg.insertBefore(liquid, tilt);
+      const stream = liquid.querySelector(".stream");
+      const puddle = liquid.querySelector(".puddle");
+      host.classList.add("pouring");
+      const ease = (x) => (x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2);
+      const T = { in: 0.9, hold: 1.7, out: 0.8 };
+      const MAX = -62; // degrees, counter-clockwise: pours toward the headline side
+      let t0 = null;
+      function frame(ts) {
+        if (t0 === null) t0 = ts;
+        const t = (ts - t0) / 1000;
+        let a;
+        if (t < T.in) a = MAX * ease(t / T.in);
+        else if (t < T.in + T.hold) a = MAX + Math.sin((t - T.in) * 9) * 1.2;
+        else if (t < T.in + T.hold + T.out) a = MAX * (1 - ease((t - T.in - T.hold) / T.out));
+        else a = 0;
+        tilt.setAttribute("transform", `rotate(${a.toFixed(2)} 50 86)`);
+        // Neck lip after rotation around (50, 86).
+        const r = (a * Math.PI) / 180;
+        const tx = 50 + 66 * Math.sin(r);
+        const ty = 86 - 66 * Math.cos(r);
+        const startT = T.in * 0.7, stopT = T.in + T.hold;
+        const head = Math.max(0, Math.min(1, (t - startT) / 0.35));
+        const tail = Math.max(0, Math.min(1, (t - stopT) / 0.35));
+        if (head > 0 && tail < 1) {
+          const pts = [];
+          for (let k = 0; k <= 12; k++) {
+            const u = tail + (head - tail) * (k / 12);
+            pts.push(`${(tx - 4 * u).toFixed(2)} ${(ty + (97 - ty) * u * u).toFixed(2)}`);
+          }
+          stream.setAttribute("d", "M" + pts.join(" L"));
+        } else stream.setAttribute("d", "");
+        // Puddle grows while it pours, then fades away.
+        const grow = Math.max(0, Math.min(1, (t - startT - 0.35) / 1.2));
+        const fade = Math.max(0, Math.min(1, (t - stopT - 0.6) / 1.4));
+        puddle.setAttribute("cx", (tx - 4).toFixed(2));
+        puddle.setAttribute("rx", (9 * grow).toFixed(2));
+        puddle.setAttribute("opacity", (1 - fade).toFixed(2));
+        if (t < stopT + 2.1) requestAnimationFrame(frame);
+        else { liquid.remove(); host.classList.remove("pouring"); }
+      }
+      setTimeout(() => requestAnimationFrame(frame), 500);
+    }
+    const hero = document.querySelector(".hero-ghost");
+    if (hero) pour(hero);
+    const loops = [...document.querySelectorAll("canvas[data-mini]")].map((cv) => ({ orbit: orbit, eco: eco, chimie: chimie, ponts: ponts })[cv.dataset.mini](cv));
     let last = 0;
     function frame(ts) {
       const dt = reduce ? 0 : Math.min(0.05, (ts - last) / 1000 || 0.016);

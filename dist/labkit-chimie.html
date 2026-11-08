@@ -1,0 +1,2201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%23f8fafc'/%3E%3Ccircle cx='5.5' cy='7' r='1.4' fill='%23111122'/%3E%3Ccircle cx='10.5' cy='7' r='1.4' fill='%23111122'/%3E%3C/svg%3E" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chemistry Lab — LabKit (standalone)</title>
+<style>
+/* LabKit core — lab shell, "flat page" look.
+   One flat page color per lab (lab.page), ink text, paper and ink cards.
+   Every lab built on core/ gets this exact look; only --page (and the
+   bench background) change per lab. Fonts degrade to system fonts offline. */
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=JetBrains+Mono:wght@400;600;700&display=swap");
+
+:root {
+  --page: #ff8a3d;          /* overwritten by lab.page */
+  --accent: #ffb454;        /* overwritten by lab.accent */
+  --ink: #17141f;
+  --paper: #fbf8ff;
+  --soft: #f0edf6;
+  --muted: #625d74;
+  --line: #e2deec;
+  --screen: #0b0e11;
+  --device: #2a2733;
+  --readout: #7dffb0;
+  --danger: #e0655a;
+  --radius: 16px;
+  --font: "Archivo", "Arial Narrow", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+button { font: inherit; color: inherit; cursor: pointer; }
+button:disabled { opacity: 0.45; cursor: default; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible,
+.check input:focus-visible + span, .switch input:focus-visible + span {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+#lab {
+  height: 100vh;
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: 72px minmax(0, 1fr);
+}
+
+/* ---------- Header: ghost, lab name, back link ---------- */
+.lab-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 18px;
+  min-width: 0;
+}
+.lab-header .logo { width: 48px; flex: none; }
+.lab-header h1 {
+  margin: 0;
+  font-weight: 900;
+  font-stretch: 72%;
+  font-size: 44px;
+  line-height: 1;
+  text-transform: lowercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lab-header .back {
+  margin-left: auto;
+  flex: none;
+  font: 700 13px var(--mono);
+  color: var(--paper);
+  background: var(--ink);
+  border-radius: 999px;
+  padding: 8px 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* ---------- Three columns: steps | bench | panel ---------- */
+.lab-main {
+  display: grid;
+  grid-template-columns: 184px minmax(0, 1fr) 360px;
+  gap: 12px;
+  padding: 0 14px 14px;
+  min-height: 0;
+}
+
+/* Steps (left) */
+.rail { display: flex; flex-direction: column; gap: 8px; min-height: 0; min-width: 0; }
+.tab {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 2px 10px;
+  align-items: center;
+  text-align: left;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 14px;
+  background: rgba(251, 248, 255, 0.45);
+  color: var(--ink);
+}
+.tab:hover { background: rgba(251, 248, 255, 0.7); }
+.tab[aria-selected="true"] { background: var(--paper); box-shadow: 0 0 0 3px var(--ink); }
+.tab .no {
+  grid-row: 1 / span 2;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--ink); color: var(--paper);
+  display: grid; place-items: center;
+  font-weight: 800; font-size: 14px;
+}
+.tab b { font-weight: 900; font-stretch: 68%; font-size: 21px; text-transform: uppercase; line-height: 1; }
+.tab small { font-size: 12px; line-height: 1.2; }
+.rail .spacer { flex: 1; }
+.rail .note { margin: 0; font-size: 12px; line-height: 1.35; }
+.time { display: grid; gap: 8px; }
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: 0; border-radius: 999px;
+  padding: 9px 14px;
+  font-weight: 800; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase;
+  background: var(--page); color: var(--ink);
+  white-space: nowrap;
+}
+.btn.ink { background: var(--ink); color: var(--paper); }
+.btn.big { padding: 14px 12px; font-size: 15px; }
+.btn.line { background: rgba(251, 248, 255, 0.35); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.btn.mini { padding: 3px 9px; font-size: 11px; letter-spacing: 0; text-transform: none; background: var(--soft); }
+.ib {
+  width: 22px; height: 22px; padding: 0;
+  border-radius: 50%; border: 1.5px solid var(--muted); background: none; color: var(--muted);
+  display: grid; place-items: center;
+  font: 700 11px var(--mono);
+  flex: none;
+}
+.ib[aria-expanded="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+
+/* Zone headers */
+.zh { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.zh .no {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--ink); color: var(--paper);
+  display: grid; place-items: center; font-weight: 800; font-size: 13px; flex: none;
+}
+.zh h2 { margin: 0; font-weight: 900; font-stretch: 68%; font-size: 26px; line-height: 1; text-transform: uppercase; white-space: nowrap; }
+.zh .hint { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.zh .end { margin-left: auto; flex: none; }
+.zh .guide { width: 34px; margin-left: auto; flex: none; }
+
+/* Bench (center) */
+.bench {
+  background: var(--ink); color: var(--paper);
+  border-radius: var(--radius);
+  padding: 10px 12px 12px;
+  display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px;
+  min-height: 0; min-width: 0;
+}
+.bench .zh .hint, .bench .fps { color: #bdb6d3; }
+.bench .fps { font: 600 12px var(--mono); }
+.stage { position: relative; border-radius: 10px; overflow: hidden; min-height: 0; background: #07090c; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* Panel (right) with one pane per step */
+.panel { background: var(--paper); border-radius: var(--radius); min-height: 0; min-width: 0; display: grid; overflow: hidden; }
+.pane { display: none; padding: 12px 14px 14px; min-height: 0; overflow-y: auto; }
+.pane.on { display: flex; flex-direction: column; gap: 12px; }
+.blk { display: flex; flex-direction: column; gap: 6px; }
+.blk.grow { flex: 1 1 auto; min-height: 230px; }
+.sub { margin: 0; font-weight: 800; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+
+/* Rows: substances, material, laws */
+.elem-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto auto;
+  gap: 10px; align-items: center;
+  background: var(--soft); border-radius: 10px; padding: 6px 10px;
+}
+.elem-row .icon svg { width: 26px; height: 30px; display: block; }
+.elem-row .name { font-weight: 800; font-size: 15px; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.elem-row .live { font: 600 13px var(--mono); color: var(--muted); white-space: nowrap; }
+.elem-row .tools { display: flex; align-items: center; gap: 8px; }
+.elem-row.law { grid-template-columns: 44px minmax(0, 1fr) auto; background: none; padding: 4px 0; }
+.elem-row.law .name { font-size: 16px; white-space: normal; }
+.elem-row.law small { display: block; font-size: 13px; color: var(--muted); }
+.empty { border: 1.5px dashed rgba(23, 20, 31, 0.3); border-radius: 10px; padding: 10px 12px; color: var(--muted); font-size: 13px; margin: 0; }
+.notice { margin: 6px 0 2px 38px; padding: 8px 10px; font-size: 12.5px; color: var(--muted); border-left: 3px solid var(--page); }
+.notice b, .notice i { color: var(--ink); font-style: normal; }
+.elem-row.law + .notice { margin-left: 54px; }
+
+/* Checkbox and switch (real inputs, visually replaced) */
+.check, .switch { position: relative; display: inline-block; flex: none; cursor: pointer; }
+.check input, .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.check span {
+  display: grid; place-items: center;
+  width: 22px; height: 22px; border-radius: 6px;
+  box-shadow: inset 0 0 0 2px var(--ink); background: var(--paper);
+}
+.check input:checked + span {
+  background: var(--ink) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23fbf8ff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 15px no-repeat;
+}
+.switch span {
+  display: block; position: relative;
+  width: 44px; height: 26px; border-radius: 999px;
+  background: var(--line); box-shadow: inset 0 0 0 1.5px var(--ink);
+  transition: background 0.15s;
+}
+.switch span::after {
+  content: ""; position: absolute; top: 4px; left: 4px;
+  width: 18px; height: 18px; border-radius: 50%; background: var(--ink);
+  transition: left 0.15s;
+}
+.switch input:checked + span { background: var(--page); }
+.switch input:checked + span::after { left: 22px; }
+
+/* Instruments: measuring devices with dark screens */
+.devs { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; }
+.dev {
+  background: var(--device); color: #e8e6f0;
+  border-radius: 12px; padding: 8px 10px 10px;
+  display: flex; flex-direction: column; gap: 7px; min-height: 0;
+}
+.dev.grow { flex: 1 1 auto; min-height: 150px; }
+.dh { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.dh svg { width: 18px; height: 18px; flex: none; color: var(--page); }
+.dh b { font-weight: 800; font-size: 14px; text-transform: uppercase; letter-spacing: 0.06em; }
+.dh span { font-size: 11.5px; color: #a9a3bd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.lcd {
+  background: var(--screen); border-radius: 8px; padding: 8px 10px;
+  box-shadow: inset 0 0 0 1px #3a3546;
+  display: grid; grid-template-columns: 1fr; gap: 6px 14px; min-height: 0;
+}
+.lcd.cols2 { grid-template-columns: 1fr 1fr; }
+.dev.grow .lcd { flex: 1 1 auto; align-content: space-around; }
+.rd { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font: 600 12px var(--mono); color: #a9a3bd; min-width: 0; line-height: 1; }
+.rd span { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.rd i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.rd b { font: 700 26px/1 var(--mono); color: var(--readout); }
+.dev.grow .rd b { font-size: 38px; }
+.rd .unit { font-size: 11px; color: #a9a3bd; margin-left: 3px; }
+.lcd.plot { display: flex; flex-direction: column; flex: 1 1 auto; }
+.lcd.plot .lg { display: flex; flex-wrap: wrap; gap: 4px 12px; font: 600 11px var(--mono); }
+.lcd.plot .lg span { display: flex; align-items: center; gap: 5px; }
+.lcd.plot .lg i { width: 14px; height: 3px; border-radius: 2px; }
+.plotbox { position: relative; flex: 1 1 auto; min-height: 90px; }
+.plotbox canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* Knobs (sliders) */
+.controls { display: flex; flex-direction: column; gap: 18px; }
+.control label { display: flex; justify-content: space-between; gap: 8px; font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+.control output { font: 700 14px var(--mono); }
+.control input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 10px; margin: 6px 0; border-radius: 5px;
+  background: linear-gradient(var(--ink), var(--ink)) 0 / var(--p, 50%) 100% no-repeat, var(--line);
+}
+.control input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--page); box-shadow: 0 0 0 3px var(--ink);
+}
+.control input[type="range"]::-moz-range-thumb {
+  width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--ink); background: var(--page);
+}
+
+/* Notebook */
+.notebook { display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; min-height: 0; }
+.prompts { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.prompts li { background: var(--soft); border-radius: 12px 12px 12px 3px; padding: 7px 12px; font-size: 14px; font-weight: 600; line-height: 1.3; }
+.note-area {
+  flex: 1 1 auto; min-height: 90px; resize: none;
+  font: inherit; font-size: 14px; color: var(--ink);
+  border: 1.5px solid var(--ink); border-radius: 12px; padding: 10px 12px;
+  background: var(--paper) repeating-linear-gradient(transparent 0 25px, var(--line) 25px 26px) content-box;
+}
+.note-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.notes, .snapshots { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.notes li, .snapshots li { display: flex; align-items: center; gap: 6px; background: var(--soft); border-radius: 8px; padding: 6px 10px; }
+.notes li .txt, .snapshots li .txt { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.notes .t, .snapshots .t { font: 700 12px var(--mono); }
+
+/* Boot / errors */
+.boot-hint {
+  max-width: 560px; margin: 60px auto; padding: 16px 20px;
+  border-radius: var(--radius); background: var(--paper); color: var(--ink);
+  font-size: 14px; line-height: 1.6;
+}
+.error {
+  margin: 12px; padding: 12px 14px;
+  border-radius: 12px; background: var(--paper); color: #8f2a22;
+  box-shadow: inset 0 0 0 2px var(--danger);
+  font: 12.5px/1.5 var(--mono); white-space: pre-wrap;
+}
+
+/* Narrow screens: steps become a row, bench then panel stacked. */
+@media (max-width: 900px) {
+  #lab { height: auto; grid-template-rows: 64px auto; }
+  .lab-header h1 { font-size: 34px; }
+  .lab-header .logo { width: 40px; }
+  .lab-main { grid-template-columns: minmax(0, 1fr); }
+  .rail { flex-direction: row; flex-wrap: wrap; }
+  .tab { flex: 1 1 140px; }
+  .rail .spacer, .rail .note { display: none; }
+  .time { grid-auto-flow: column; flex: 1 1 100%; }
+  .bench { height: 60vh; }
+  .panel { min-height: 420px; }
+}
+
+</style>
+</head>
+<body>
+<div id="lab"><div class="boot-hint">Loading lab…<br />If this message stays, enable JavaScript or open this file in a recent browser.</div></div>
+<script>
+// ---- core/catalog.js (inlined) ----
+// LabKit core — unified catalog, organized by categories.
+// The catalog is the single list of everything a lab can order:
+// laws, apparatus, instruments (+metrics), substances molds, surfaces.
+// Built-ins ship with the kit; packs and labs extend it. Merged at boot.
+
+const builtinInstruments = {
+  chips: {
+    label: "Counter",
+    notice: {
+      label: "Counter",
+      formule: "Shows one live readout per metric (value + unit), refreshed every frame.",
+      sources: "Kit built-in readout (no model).",
+      limites: "No history; for trends use the curve instrument.",
+    },
+  },
+  curve: {
+    label: "Curve",
+    notice: {
+      label: "Curve",
+      formule: "Samples each listed metric every 0.25 s and draws one line per metric.",
+      sources: "Kit built-in chart (no model).",
+      limites: "Fixed sample count window; linear time axis only.",
+    },
+  },
+};
+
+const builtinControls = {
+  slider: {
+    label: "Slider",
+    notice: {
+      label: "Slider",
+      formule: "Binds a numeric config path to a [min, max] range control.",
+      sources: "Kit built-in control (no model).",
+      limites: "Numbers only; one path per slider.",
+    },
+  },
+};
+
+const builtinSurfaces = {
+  stage: {
+    label: "Stage",
+    notice: {
+      label: "Stage",
+      formule: "Main 2D canvas: background + optional speckles + lab drawing, with motion trails.",
+      sources: "Kit built-in surface (no model).",
+      limites: "2D only; one stage per lab.",
+    },
+  },
+  webgl: {
+    label: "WebGL stage",
+    notice: {
+      label: "WebGL stage",
+      formule: "The lab mounts its own 3D canvas in the stage box; the shell keeps header, steps, instruments and loop.",
+      sources: "Kit built-in surface (no model).",
+      limites: "One stage per lab; 3D content is 100% lab-owned.",
+    },
+  },
+};
+
+// Merge pack manifests + lab-local additions into one catalog.
+// Each manifest: { laws?: {id: lawModule}, apparatus?: {kind: {notice, defaults}} }
+function mergeCatalog(manifests) {
+  const catalog = { laws: {}, apparatus: {} };
+  for (const m of manifests) {
+    if (!m) continue;
+    Object.assign(catalog.laws, m.laws || {});
+    Object.assign(catalog.apparatus, m.apparatus || {});
+  }
+  return catalog;
+}
+
+// Flat list of one category for "+" menus and docs: [{id, label, notice}]
+function listCategory(catalog, category) {
+  const buckets = {
+    laws: catalog.laws,
+    apparatus: catalog.apparatus,
+    instruments: builtinInstruments,
+    controls: builtinControls,
+    surfaces: builtinSurfaces,
+  };
+  const bucket = buckets[category] || {};
+  return Object.keys(bucket).map((id) => ({
+    id,
+    label: (bucket[id] && (bucket[id].label || (bucket[id].notice && bucket[id].notice.label))) || id,
+    notice: (bucket[id] && bucket[id].notice) || null,
+  }));
+}
+
+function getLaw(catalog, id) {
+  return catalog.laws[id] || null;
+}
+
+// ---- core/validate.js (inlined) ----
+// LabKit core — config validation + auto-tuning (shared by browser and Node).
+// Invalid numbers are clamped with a warning; only structural problems are errors.
+// known = { laws: {id: {defaults}}, apparatus: [kinds], instruments: [types],
+//           measures: [ids], surfaces: [names] }
+
+const HEX_COLOR = /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/;
+const BOUNDS = new Set(["wrap", "bounce"]);
+const MAX_PARTICLES = 1500;
+const MAX_SUBSTANCES = 8;
+
+function getPath(obj, path) {
+  let cur = obj;
+  for (const seg of path.split(".")) {
+    if (cur === null || typeof cur !== "object") return undefined;
+    cur = cur[seg];
+  }
+  return cur;
+}
+
+function setPath(obj, path, value) {
+  const segs = path.split(".");
+  let cur = obj;
+  for (let i = 0; i < segs.length - 1; i++) {
+    cur = cur[segs[i]];
+    if (cur === null || typeof cur !== "object") return false;
+  }
+  const leaf = segs[segs.length - 1];
+  if (typeof cur[leaf] !== "number") return false;
+  cur[leaf] = value;
+  return true;
+}
+
+function isFiniteNumber(v) {
+  return typeof v === "number" && Number.isFinite(v);
+}
+
+function clamp(v, min, max) {
+  return Math.min(max, Math.max(min, v));
+}
+
+/**
+ * @param {unknown} raw parsed JSON
+ * @param {object} known catalog references (law ids, apparatus kinds, ...)
+ * @returns {{ config: object|null, warnings: string[], errors: string[] }}
+ */
+function validateConfig(raw, known) {
+  const warnings = [];
+  const errors = [];
+  const fix = (msg) => warnings.push(msg);
+  known = known || { laws: {}, apparatus: [], instruments: [], measures: [], surfaces: [] };
+
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return { config: null, warnings, errors: ["config root must be an object"] };
+  }
+  const config = JSON.parse(JSON.stringify(raw));
+
+  // --- lab ---
+  if (config.lab === null || typeof config.lab !== "object") {
+    errors.push("lab: missing object with title/subtitle/accent");
+  } else {
+    if (typeof config.lab.title !== "string" || !config.lab.title.trim()) {
+      errors.push("lab.title: required non-empty string");
+    }
+    if (typeof config.lab.id !== "string" || !config.lab.id.trim()) {
+      errors.push("lab.id: required non-empty string (used for notebook storage)");
+    }
+    if (typeof config.lab.subtitle !== "string") config.lab.subtitle = "";
+    if (typeof config.lab.accent !== "string" || !HEX_COLOR.test(config.lab.accent)) {
+      errors.push("lab.accent: required hex color like #ffb454");
+    }
+    if (typeof config.lab.note !== "string") config.lab.note = "";
+    // page: the flat page color of the lab (ink text sits on it, keep it mid-light).
+    if (config.lab.page === undefined) {
+      config.lab.page = HEX_COLOR.test(String(config.lab.accent)) ? config.lab.accent : "#ff8a3d";
+    } else if (typeof config.lab.page !== "string" || !HEX_COLOR.test(config.lab.page)) {
+      config.lab.page = HEX_COLOR.test(String(config.lab.accent)) ? config.lab.accent : "#ff8a3d";
+      fix(`lab.page reset to ${config.lab.page} (must be a hex color)`);
+    }
+    // home: where "← all labs" leads (relative to the lab page).
+    if (typeof config.lab.home !== "string" || !config.lab.home.trim()) config.lab.home = "../index.html";
+    if (config.lab.lang === undefined) config.lab.lang = "en";
+    else if (config.lab.lang !== "en" && config.lab.lang !== "fr") {
+      config.lab.lang = "en";
+      fix('lab.lang reset to "en" (must be "en" or "fr")');
+    }
+  }
+
+  // --- bench ---
+  config.bench = config.bench && typeof config.bench === "object" ? config.bench : {};
+  if (typeof config.bench.background !== "string") config.bench.background = "#07090c";
+  if (!isFiniteNumber(config.bench.trail)) {
+    config.bench.trail = 0.25;
+    fix("bench.trail reset to 0.25 (must be a finite number)");
+  } else if (config.bench.trail < 0.05 || config.bench.trail > 1) {
+    config.bench.trail = clamp(config.bench.trail, 0.05, 1);
+    fix(`bench.trail clamped to ${config.bench.trail}`);
+  }
+  if (!isFiniteNumber(config.bench.speckles)) {
+    config.bench.speckles = 0;
+  } else {
+    config.bench.speckles = Math.round(clamp(config.bench.speckles, 0, 600));
+  }
+
+  // --- bounds ---
+  if (!BOUNDS.has(config.bounds)) {
+    config.bounds = "wrap";
+    fix('bounds reset to "wrap"');
+  }
+
+  // --- substances ---
+  if (!Array.isArray(config.substances)) config.substances = [];
+  if (config.substances.length > MAX_SUBSTANCES) {
+    config.substances.length = MAX_SUBSTANCES;
+    fix(`substances truncated to ${MAX_SUBSTANCES}`);
+  }
+  const subIds = new Set();
+  let total = 0;
+  config.substances.forEach((s, i) => {
+    if (s === null || typeof s !== "object") {
+      errors.push(`substances.${i}: must be an object`);
+      return;
+    }
+    if (typeof s.id !== "string" || !s.id.trim()) {
+      errors.push(`substances.${i}.id: required non-empty string`);
+      s.id = `substance-${i}`;
+    }
+    if (subIds.has(s.id)) errors.push(`substances.${i}.id: duplicate id "${s.id}"`);
+    subIds.add(s.id);
+    if (typeof s.label !== "string") s.label = s.id;
+    if (!isFiniteNumber(s.count)) {
+      s.count = 0;
+      fix(`substances.${i}.count reset to 0`);
+    } else {
+      const clamped = Math.round(clamp(s.count, 0, 800));
+      if (clamped !== s.count) fix(`substances.${i}.count clamped to ${clamped}`);
+      s.count = clamped;
+    }
+    total += s.count;
+    if (typeof s.color !== "string" || !HEX_COLOR.test(s.color)) {
+      s.color = "#9ad1ff";
+      fix(`substances.${i}.color reset to #9ad1ff`);
+    }
+    if (!isFiniteNumber(s.radius) || s.radius <= 0) {
+      s.radius = 3;
+      fix(`substances.${i}.radius reset to 3`);
+    } else {
+      s.radius = clamp(s.radius, 0.5, 30);
+    }
+    if (!isFiniteNumber(s.mass) || s.mass <= 0) {
+      s.mass = 1;
+      fix(`substances.${i}.mass reset to 1`);
+    } else {
+      s.mass = clamp(s.mass, 0.1, 100);
+    }
+    if (!isFiniteNumber(s.speed)) s.speed = 60;
+    else s.speed = clamp(s.speed, 0, 600);
+    if (s.ring !== undefined) {
+      if (!Array.isArray(s.ring) || s.ring.length !== 2 || !s.ring.every(isFiniteNumber)) {
+        s.ring = [0.15, 0.42];
+        fix(`substances.${i}.ring reset to [0.15, 0.42]`);
+      }
+    }
+    if (s.links !== undefined && s.links !== null && typeof s.links !== "object") {
+      s.links = null;
+      fix(`substances.${i}.links reset to null`);
+    }
+    if (s.links && !isFiniteNumber(s.links.distance)) {
+      s.links.distance = 80;
+      fix(`substances.${i}.links.distance reset to 80`);
+    }
+    if (typeof s.active !== "boolean") s.active = true;
+  });
+  if (total > MAX_PARTICLES) {
+    errors.push(`total particles ${total} exceeds cap ${MAX_PARTICLES}`);
+  }
+
+  // --- material (apparatus) ---
+  if (!Array.isArray(config.material)) config.material = [];
+  const matIds = new Set();
+  config.material.forEach((m, i) => {
+    if (m === null || typeof m !== "object") {
+      errors.push(`material.${i}: must be an object`);
+      return;
+    }
+    if (typeof m.id !== "string" || !m.id.trim()) {
+      errors.push(`material.${i}.id: required non-empty string`);
+      m.id = `material-${i}`;
+    }
+    if (matIds.has(m.id)) errors.push(`material.${i}.id: duplicate id "${m.id}"`);
+    matIds.add(m.id);
+    if (typeof m.label !== "string") m.label = m.id;
+    if (!known.apparatus.includes(m.kind)) {
+      errors.push(`material.${i}.kind: unknown apparatus "${m.kind}" (known: ${known.apparatus.join(", ") || "none"})`);
+    }
+    for (const k of ["x", "y"]) {
+      if (m[k] === undefined) continue;
+      if (!isFiniteNumber(m[k])) {
+        m[k] = 0.5;
+        fix(`material.${i}.${k} reset to 0.5`);
+      } else {
+        m[k] = clamp(m[k], 0, 1);
+      }
+    }
+    if (m.strength !== undefined) {
+      if (!isFiniteNumber(m.strength)) {
+        m.strength = 0;
+        fix(`material.${i}.strength reset to 0`);
+      } else if (m.strength < -5000 || m.strength > 5000) {
+        m.strength = clamp(m.strength, -5000, 5000);
+        fix(`material.${i}.strength clamped to ${m.strength}`);
+      }
+    }
+    if (m.radius !== undefined && (!isFiniteNumber(m.radius) || m.radius <= 0)) {
+      m.radius = 20;
+      fix(`material.${i}.radius reset to 20`);
+    }
+    if (m.color !== undefined && (typeof m.color !== "string" || !HEX_COLOR.test(m.color))) {
+      m.color = "#ffffff";
+      fix(`material.${i}.color reset to #ffffff`);
+    }
+    if (typeof m.active !== "boolean") m.active = true;
+  });
+
+  // --- laws ---
+  if (!Array.isArray(config.laws)) config.laws = [];
+  config.laws.forEach((l, i) => {
+    if (l === null || typeof l !== "object") {
+      errors.push(`laws.${i}: must be an object`);
+      return;
+    }
+    if (!known.laws[l.law]) {
+      errors.push(`laws.${i}.law: unknown law "${l.law}" (known: ${Object.keys(known.laws).join(", ") || "none"})`);
+      return;
+    }
+    if (l.targets !== undefined) {
+      if (!Array.isArray(l.targets)) {
+        errors.push(`laws.${i}.targets: must be an array of substance ids`);
+      } else {
+        l.targets.forEach((t) => {
+          if (!subIds.has(t)) errors.push(`laws.${i}.targets: unknown substance "${t}"`);
+        });
+      }
+    }
+    if (l.params !== undefined && (l.params === null || typeof l.params !== "object")) {
+      errors.push(`laws.${i}.params: must be an object`);
+    }
+    // pair references (hunt/flee/predation style laws) must name existing substances
+    const pairs = l.params && l.params.pairs;
+    if (pairs !== undefined) {
+      if (!Array.isArray(pairs)) {
+        errors.push(`laws.${i}.params.pairs: must be an array of [a, b] substance pairs`);
+      } else {
+        pairs.forEach((p) => {
+          if (!Array.isArray(p) || p.length !== 2 || !subIds.has(p[0]) || !subIds.has(p[1])) {
+            errors.push(`laws.${i}.params.pairs: each pair must be two existing substance ids`);
+          }
+        });
+      }
+    }
+    if (typeof l.active !== "boolean") l.active = true;
+  });
+
+  // --- metrics ---
+  if (!Array.isArray(config.metrics)) config.metrics = [];
+  const metricIds = new Set();
+  config.metrics.forEach((m, i) => {
+    if (m === null || typeof m !== "object") {
+      errors.push(`metrics.${i}: must be an object`);
+      return;
+    }
+    if (typeof m.id !== "string" || !m.id.trim()) {
+      errors.push(`metrics.${i}.id: required non-empty string`);
+      m.id = `metric-${i}`;
+    }
+    if (metricIds.has(m.id)) errors.push(`metrics.${i}.id: duplicate id "${m.id}"`);
+    metricIds.add(m.id);
+    if (typeof m.label !== "string") m.label = m.id;
+    if (typeof m.unit !== "string") m.unit = "";
+    if (typeof m.source !== "string") {
+      errors.push(`metrics.${i}.source: required string (counts.<substance> or a lab measure)`);
+    } else if (m.source.startsWith("counts.")) {
+      if (!subIds.has(m.source.slice(7))) errors.push(`metrics.${i}.source: unknown substance in "${m.source}"`);
+    } else if (!known.measures.includes(m.source)) {
+      errors.push(`metrics.${i}.source: unknown measure "${m.source}" (known: counts.<substance>, ${known.measures.join(", ") || "none"})`);
+    }
+    if (typeof m.color !== "string" || !HEX_COLOR.test(m.color)) {
+      m.color = "#e8e6e1";
+      fix(`metrics.${i}.color reset to #e8e6e1`);
+    }
+  });
+
+  // --- instruments ---
+  if (!Array.isArray(config.instruments)) config.instruments = [];
+  config.instruments.forEach((ins, i) => {
+    if (ins === null || typeof ins !== "object") {
+      errors.push(`instruments.${i}: must be an object`);
+      return;
+    }
+    if (!known.instruments.includes(ins.type)) {
+      errors.push(`instruments.${i}.type: unknown instrument "${ins.type}" (known: ${known.instruments.join(", ") || "none"})`);
+    }
+    if (typeof ins.title !== "string") ins.title = "";
+    if (!Array.isArray(ins.metrics)) {
+      errors.push(`instruments.${i}.metrics: required array of metric ids`);
+      ins.metrics = [];
+    } else {
+      ins.metrics.forEach((id) => {
+        if (!metricIds.has(id)) errors.push(`instruments.${i}.metrics: unknown metric "${id}"`);
+      });
+    }
+    if (ins.samples !== undefined) {
+      if (!isFiniteNumber(ins.samples)) ins.samples = 120;
+      else ins.samples = Math.round(clamp(ins.samples, 10, 600));
+    }
+    if (typeof ins.active !== "boolean") ins.active = true;
+  });
+
+  // --- controls (paths resolve into lab state skeleton) ---
+  const skeleton = { substances: {}, material: {}, laws: [], bench: { trail: 0, speckles: 0 } };
+  config.substances.forEach((s) => {
+    skeleton.substances[s.id] = { count: 0, radius: 0, mass: 0, speed: 0 };
+  });
+  config.material.forEach((m) => {
+    skeleton.material[m.id] = { x: 0, y: 0, strength: 0, radius: 0 };
+  });
+  config.laws.forEach((l) => {
+    const defs = (known.laws[l.law] && known.laws[l.law].defaults) || {};
+    const leaf = {};
+    Object.keys(defs).forEach((k) => {
+      leaf[k] = 0;
+    });
+    skeleton.laws.push(leaf);
+  });
+  if (!Array.isArray(config.controls)) config.controls = [];
+  config.controls.forEach((c, i) => {
+    if (c === null || typeof c !== "object") {
+      errors.push(`controls.${i}: must be an object`);
+      return;
+    }
+    if (typeof c.path !== "string" || getPath(skeleton, c.path) === undefined) {
+      errors.push(`controls.${i}.path: must point to a numeric value (substances.<id>.count, material.<id>.strength, laws.<n>.<param>)`);
+    }
+    if (typeof c.label !== "string") c.label = c.path;
+    for (const k of ["min", "max", "step"]) {
+      if (!isFiniteNumber(c[k])) errors.push(`controls.${i}.${k}: required finite number`);
+    }
+    if (isFiniteNumber(c.min) && isFiniteNumber(c.max) && c.min >= c.max) {
+      errors.push(`controls.${i}: min must be < max`);
+    }
+  });
+
+  // --- notebook ---
+  config.notebook = config.notebook && typeof config.notebook === "object" ? config.notebook : {};
+  if (typeof config.notebook.enabled !== "boolean") config.notebook.enabled = true;
+  if (!Array.isArray(config.notebook.prompts)) config.notebook.prompts = [];
+  config.notebook.prompts = config.notebook.prompts.filter((p) => typeof p === "string");
+
+  if (errors.length > 0) return { config: null, warnings, errors };
+  return { config, warnings, errors };
+}
+
+// ---- core/time.js (inlined) ----
+// LabKit core — time services: clock, play/pause/reset/step wiring (no DOM inside).
+function createClock() {
+  return {
+    t: 0,
+    running: true,
+    advance(dt) {
+      this.t += dt;
+    },
+    reset() {
+      this.t = 0;
+    },
+  };
+}
+
+// ---- core/controls.js (inlined) ----
+// LabKit core — controls: build config-declared sliders bound to live state paths.
+
+function el(tag, cls, html) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (html !== undefined) n.innerHTML = html;
+  return n;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+}
+
+function hexToRgb(hex) {
+  const h = String(hex).replace("#", "");
+  const v = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)];
+}
+
+// parent: the Knobs pane; onChange called after every input (for resync/redraw).
+function buildControls(parent, config, state, onChange) {
+  if (config.controls.length === 0) return;
+  const sec = el("section", "controls");
+  for (const c of config.controls) {
+    const wrap = el("div", "control");
+    const label = el("label", "", `<span>${escapeHtml(c.label)}</span> <output></output>`);
+    const out = label.querySelector("output");
+    const input = el("input");
+    input.type = "range";
+    input.min = String(c.min);
+    input.max = String(c.max);
+    input.step = String(c.step);
+    input.id = `ctl-${sec.childElementCount}`;
+    label.htmlFor = input.id;
+    const show = (v) => {
+      out.textContent = String(Math.round(v * 100) / 100);
+      input.style.setProperty("--p", `${((v - c.min) / (c.max - c.min || 1)) * 100}%`);
+    };
+    const current = () => getPath(state, c.path);
+    input.value = String(current());
+    show(current());
+    input.addEventListener("input", () => {
+      const v = parseFloat(input.value);
+      if (setPath(state, c.path, v)) {
+        show(v);
+        onChange(c.path);
+      }
+    });
+    // Refresh shown value when state changes elsewhere (snapshot restore).
+    wrap.refresh = () => {
+      input.value = String(current());
+      show(current());
+    };
+    wrap.appendChild(label);
+    wrap.appendChild(input);
+    sec.appendChild(wrap);
+  }
+  sec.refreshAll = () => {
+    sec.querySelectorAll(":scope > .control").forEach((w) => {
+      if (w.refresh) w.refresh();
+    });
+  };
+  parent.appendChild(sec);
+}
+
+// ---- core/strings.js (inlined) ----
+// LabKit core — shell UI strings (English/French). Labs pick via lab.lang ("en" default).
+const STR = {
+  en: {
+    allLabs: "← all labs",
+    labSteps: "Lab steps",
+    stepLab: "Lab", stepLabHint: "Substances, material, instruments",
+    stepLaws: "Laws", stepLawsHint: "How it behaves",
+    stepKnobs: "Knobs", stepKnobsHint: "Change the amounts",
+    stepNotebook: "Notebook", stepNotebookHint: "Write what you see",
+    bench: "Bench", benchHint: "Watch it happen",
+    substances: "Substances", material: "Material",
+    noSubstance: "No substance in this lab.", noMaterial: "No material in this lab.",
+    instruments: "Instruments · measuring devices",
+    lawsOn: "on",
+    enable: "Enable", about: "About",
+    reset: "Reset", step1: "+1 step", pause: "❚❚ Pause", play: "▶ Play",
+    autotuned: (n) => `Auto-tuned ${n} value(s), see console.`,
+    invalidConfig: "Invalid config:",
+    counter: "Counter", liveValues: "Live values", curve: "Curve", history: "History",
+    notePlaceholder: "Write what you see…", noteAria: "Notebook note", noteBtn: "Note",
+    recordBtn: "● Record measures", recordTitle: "Record measures at this instant",
+    snapshots: "Snapshots", restore: "Restore", deleteNote: "Delete note", deleteSnapshot: "Delete snapshot",
+  },
+  fr: {
+    allLabs: "← tous les labos",
+    labSteps: "Étapes du labo",
+    stepLab: "Labo", stepLabHint: "Substances, matériel, instruments",
+    stepLaws: "Lois", stepLawsHint: "Comment ça se comporte",
+    stepKnobs: "Réglages", stepKnobsHint: "Changer les quantités",
+    stepNotebook: "Carnet", stepNotebookHint: "Écris ce que tu vois",
+    bench: "Paillasse", benchHint: "Regarde ce qui se passe",
+    substances: "Substances", material: "Matériel",
+    noSubstance: "Aucune substance dans ce labo.", noMaterial: "Aucun matériel dans ce labo.",
+    instruments: "Instruments · appareils de mesure",
+    lawsOn: "sur",
+    enable: "Activer", about: "À propos de",
+    reset: "Réinitialiser", step1: "+1 pas", pause: "❚❚ Pause", play: "▶ Lecture",
+    autotuned: (n) => `${n} valeur(s) auto-réglée(s), voir la console.`,
+    invalidConfig: "Config invalide :",
+    counter: "Compteur", liveValues: "Valeurs directes", curve: "Courbe", history: "Historique",
+    notePlaceholder: "Écris ce que tu vois…", noteAria: "Note du carnet", noteBtn: "Noter",
+    recordBtn: "● Enregistrer les mesures", recordTitle: "Enregistrer les mesures à cet instant",
+    snapshots: "Instantanés", restore: "Restaurer", deleteNote: "Supprimer la note", deleteSnapshot: "Supprimer l'instantané",
+  },
+};
+
+function strings(config) {
+  const lang = config && config.lab && config.lab.lang;
+  return STR[lang] || STR.en;
+}
+
+// ---- core/headless.js (inlined) ----
+// LabKit core — headless boot for custom-UI labs: validate + catalog + clock, no DOM.
+// The lab mounts its own interface and drives the loop itself.
+// packManifests: catalog contributions [{ laws, apparatus, measures }].
+// labManifest: { measures: [{ id }] } extra measure ids beyond counts.*.
+
+async function bootHeadless(source, packManifests, labManifest) {
+  let raw;
+  if (typeof source === "string") {
+    const res = await fetch(source, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status} loading ${source}`);
+    raw = await res.json();
+  } else {
+    raw = source;
+  }
+  const catalog = mergeCatalog(packManifests || []);
+  const known = {
+    laws: {},
+    apparatus: [],
+    instruments: Object.keys(builtinInstruments),
+    measures: [],
+    surfaces: ["stage", "webgl"],
+  };
+  (packManifests || []).forEach((m) => {
+    Object.keys((m && m.laws) || {}).forEach((id) => {
+      known.laws[id] = { defaults: m.laws[id].defaults || {} };
+    });
+    Object.keys((m && m.apparatus) || {}).forEach((k) => {
+      known.apparatus.push(k);
+    });
+    ((m && m.measures) || []).forEach((x) => {
+      known.measures.push(x.id);
+    });
+  });
+  ((labManifest && labManifest.measures) || []).forEach((x) => {
+    known.measures.push(x.id);
+  });
+  const { config, warnings, errors } = validateConfig(raw, known);
+  if (!config) throw new Error(`Invalid config:\n- ${errors.join("\n- ")}`);
+  if (warnings.length > 0) console.info("[labkit] auto-tuned config:", warnings);
+  const clock = createClock();
+  const active = {};
+  const key = (cat, id) => `${cat}:${id}`;
+  (config.substances || []).forEach((s) => {
+    active[key("substances", s.id)] = s.active;
+  });
+  (config.material || []).forEach((m) => {
+    active[key("material", m.id)] = m.active;
+  });
+  (config.laws || []).forEach((l, i) => {
+    active[key("laws", `${l.law}#${i}`)] = l.active;
+  });
+  return {
+    config,
+    catalog,
+    clock,
+    warnings,
+    isActive: (cat, id) => active[key(cat, id)] !== false,
+    setActive: (cat, id, v) => {
+      active[key(cat, id)] = v;
+    },
+  };
+}
+
+// ---- core/instruments.js (inlined) ----
+// LabKit core — instruments as measuring devices: a counter (live readouts)
+// and a curve (history chart). Fed by metric values; the lab decides what they mean.
+
+const GAUGE =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17a9 9 0 0 1 18 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>' +
+  '<path d="M12 17l5-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="17" r="2" fill="currentColor"/></svg>';
+
+function device(name, hint) {
+  const box = el("div", "dev");
+  box.appendChild(el("div", "dh", `${GAUGE}<b>${escapeHtml(name)}</b><span>${escapeHtml(hint)}</span>`));
+  return box;
+}
+
+// Counter ("chips" type): one readout per metric. Returns { update(values), sample() }.
+function buildChips(parent, entry, metricsById, L) {
+  const box = device(L.counter, L.liveValues);
+  const screen = el("div", entry.metrics.length > 3 ? "lcd cols2" : "lcd");
+  const cells = entry.metrics.map((id) => {
+    const m = metricsById[id];
+    const unit = m.unit ? `<span class="unit">${escapeHtml(m.unit)}</span>` : "";
+    const r = el("div", "rd", `<span><i style="background:${m.color}"></i>${escapeHtml(m.label)}</span><b>0</b>`);
+    if (unit) r.querySelector("b").insertAdjacentHTML("afterend", unit);
+    screen.appendChild(r);
+    return r.querySelector("b");
+  });
+  box.appendChild(screen);
+  parent.appendChild(box);
+  return {
+    element: box,
+    update(values) {
+      entry.metrics.forEach((id, i) => {
+        const v = values[id];
+        cells[i].textContent = v === undefined ? "–" : String(Math.round(v * 100) / 100);
+      });
+    },
+    sample() {},
+  };
+}
+
+// Curve: one line per metric over a sliding window; sized to its box.
+function buildCurve(parent, entry, metricsById, L) {
+  const box = device(L.curve, entry.title || L.history);
+  box.classList.add("grow");
+  const screen = el("div", "lcd plot");
+  screen.appendChild(el("div", "lg", entry.metrics.map((id) => {
+    const m = metricsById[id];
+    return `<span><i style="background:${m.color}"></i>${escapeHtml(m.label)}</span>`;
+  }).join("")));
+  const plot = el("div", "plotbox");
+  const hc = el("canvas");
+  plot.appendChild(hc);
+  screen.appendChild(plot);
+  box.appendChild(screen);
+  parent.appendChild(box);
+  const ctx = hc.getContext("2d");
+  const samples = entry.samples || 120;
+  const series = entry.metrics.map(() => []);
+
+  function draw() {
+    const w = plot.clientWidth;
+    const h = plot.clientHeight;
+    if (!w || !h) return; // hidden pane: redrawn on next sample once visible
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (hc.width !== Math.round(w * dpr) || hc.height !== Math.round(h * dpr)) {
+      hc.width = Math.round(w * dpr);
+      hc.height = Math.round(h * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    let peak = 4;
+    for (const s of series) for (const v of s) if (v > peak) peak = v;
+    series.forEach((s, i) => {
+      if (s.length < 2) return;
+      ctx.strokeStyle = metricsById[entry.metrics[i]].color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      s.forEach((v, k) => {
+        const x = (k / (samples - 1)) * w;
+        const y = h - 4 - (v / peak) * (h - 10);
+        if (k === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    });
+  }
+
+  return {
+    element: box,
+    update() {},
+    sample(values) {
+      entry.metrics.forEach((id, i) => {
+        series[i].push(values[id] === undefined ? 0 : values[id]);
+        if (series[i].length > samples) series[i].shift();
+      });
+      draw();
+    },
+    reset() {
+      series.forEach((s) => { s.length = 0; });
+      draw();
+    },
+    redraw: draw,
+  };
+}
+
+// ---- core/notebook.js (inlined) ----
+// LabKit core — notebook: timestamped notes + measure snapshots at instant t.
+// Snapshots store metric values and tunable params; restoring re-applies params.
+
+function storageKey(labId) {
+  return `labkit.${labId}.notebook`;
+}
+
+function load(labId) {
+  try {
+    const raw = localStorage.getItem(storageKey(labId));
+    if (!raw) return { notes: [], snapshots: [] };
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data.notes)) data.notes = [];
+    if (!Array.isArray(data.snapshots)) data.snapshots = [];
+    return data;
+  } catch {
+    return { notes: [], snapshots: [] };
+  }
+}
+
+function save(labId, data) {
+  try {
+    localStorage.setItem(storageKey(labId), JSON.stringify(data));
+  } catch {
+    /* private mode: notebook works for the session only */
+  }
+}
+
+// getState: () => ({ t, metrics: {id: value}, params: clonable })
+// onRestore(params): re-apply params + resync + redraw
+function buildNotebook(parent, config, getState, onRestore) {
+  if (!config.notebook.enabled) return null;
+  const L = strings(config);
+  const data = load(config.lab.id);
+  const sec = el("section", "notebook");
+
+  if (config.notebook.prompts.length > 0) {
+    const ul = el("ul", "prompts");
+    config.notebook.prompts.forEach((p) => {
+      ul.appendChild(el("li", "", escapeHtml(p)));
+    });
+    sec.appendChild(ul);
+  }
+
+  const noteInput = el("textarea", "note-area");
+  noteInput.placeholder = L.notePlaceholder;
+  noteInput.setAttribute("aria-label", L.noteAria);
+  const noteBtn = el("button", "btn ink", L.noteBtn);
+  noteBtn.type = "button";
+  noteBtn.addEventListener("click", () => {
+    const text = noteInput.value.trim();
+    if (!text) return;
+    data.notes.push({ t: getState().t, text });
+    noteInput.value = "";
+    save(config.lab.id, data);
+    renderNotes();
+  });
+  noteInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) noteBtn.click();
+  });
+  const snapBtn = el("button", "btn", L.recordBtn);
+  snapBtn.type = "button";
+  snapBtn.title = L.recordTitle;
+  const actions = el("div", "note-actions");
+  actions.appendChild(noteBtn);
+  actions.appendChild(snapBtn);
+  sec.appendChild(noteInput);
+  sec.appendChild(actions);
+
+  const notesList = el("ul", "notes");
+  sec.appendChild(notesList);
+  const snapsTitle = el("h3", "sub", L.snapshots);
+  const snapsList = el("ul", "snapshots");
+  snapBtn.addEventListener("click", () => {
+    const s = getState();
+    data.snapshots.push({
+      t: s.t,
+      metrics: s.metrics,
+      params: JSON.parse(JSON.stringify(s.params)),
+    });
+    save(config.lab.id, data);
+    renderSnaps();
+  });
+  sec.appendChild(snapsTitle);
+  sec.appendChild(snapsList);
+
+  parent.appendChild(sec);
+
+  function fmtT(t) {
+    const m = Math.floor(t / 60);
+    const s = Math.floor(t % 60);
+    return `${m}:${String(s).padStart(2, "0")}`;
+  }
+
+  function renderNotes() {
+    notesList.innerHTML = "";
+    data.notes.forEach((n, i) => {
+      const li = el("li", "", `<span class="t">${fmtT(n.t)}</span><span class="txt">${escapeHtml(n.text)}</span>`);
+      const del = el("button", "btn mini", "×");
+      del.setAttribute("aria-label", L.deleteNote);
+      del.addEventListener("click", () => {
+        data.notes.splice(i, 1);
+        save(config.lab.id, data);
+        renderNotes();
+      });
+      li.appendChild(del);
+      notesList.appendChild(li);
+    });
+  }
+
+  function renderSnaps() {
+    snapsList.innerHTML = "";
+    snapsTitle.hidden = data.snapshots.length === 0;
+    data.snapshots.forEach((s, i) => {
+      const summary = Object.keys(s.metrics)
+        .slice(0, 4)
+        .map((k) => `${k}=${Math.round(s.metrics[k] * 100) / 100}`)
+        .join(", ");
+      const li = el("li", "", `<span class="t">${fmtT(s.t)}</span><span class="txt">${escapeHtml(summary)}</span>`);
+      const back = el("button", "btn mini", L.restore);
+      back.addEventListener("click", () => onRestore(JSON.parse(JSON.stringify(s.params))));
+      li.appendChild(back);
+      const del = el("button", "btn mini", "×");
+      del.setAttribute("aria-label", L.deleteSnapshot);
+      del.addEventListener("click", () => {
+        data.snapshots.splice(i, 1);
+        save(config.lab.id, data);
+        renderSnaps();
+      });
+      li.appendChild(del);
+      snapsList.appendChild(li);
+    });
+  }
+
+  renderNotes();
+  renderSnaps();
+  return { element: sec };
+}
+
+// ---- core/ghost.js (inlined) ----
+// LabKit core — the flask ghost (logo + notebook guide).
+// Classic script on purpose (no import/export): the portal loads it with a
+// plain <script src>, the shell imports it for its side effect, and the
+// standalone build inlines it as is. Exposes window.AuraGhost.mount(host, theme).
+(function () {
+  if (typeof window === "undefined" || window.AuraGhost) return;
+
+  const BODY =
+    "M41 22 H59 V36 Q81 45 81 68 V86 Q75.8 80 70.7 86 Q65.5 92 60.3 86 Q55.2 80 50 86 " +
+    "Q44.8 92 39.7 86 Q34.5 80 29.3 86 Q24.2 92 19 86 V68 Q19 45 41 36 Z";
+  const THEMES = {
+    white: { body: "#fbf8ff", eye: "#17141f", hl: "#fbf8ff", bub: "#17141f", cheek: "#ff8a3d" },
+    ink: { body: "#17141f", eye: "#fbf8ff", hl: "#17141f", bub: "#fbf8ff", cheek: "#ff8a3d" },
+    inkpaper: { body: "#17141f", eye: "#fbf8ff", hl: "#17141f", bub: "#ff8a3d", cheek: "#ff8a3d" },
+  };
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const ghosts = [];
+  let started = false;
+
+  const style = document.createElement("style");
+  style.textContent =
+    ".aura-ghost{display:block}.aura-ghost svg{display:block;width:100%;height:auto;overflow:visible}" +
+    ".aura-ghost .happy{display:none}.aura-ghost.joy .pupil,.aura-ghost.joy .hl{display:none}.aura-ghost.joy .happy{display:inline}" +
+    ".aura-ghost .pupil{transform-box:fill-box;transform-origin:center;animation:aura-blink 6s infinite}" +
+    "@keyframes aura-blink{0%,95%,100%{transform:scaleY(1)}97.5%{transform:scaleY(.08)}}" +
+    "@media (prefers-reduced-motion: reduce){.aura-ghost .pupil{animation:none}}";
+  document.head.appendChild(style);
+
+  function eye(cx, t) {
+    return `<g><ellipse class="pupil" cx="${cx}" cy="62" rx="5.2" ry="6.9" fill="${t.eye}"/>` +
+      `<g class="hlg"><circle class="hl" cx="${cx - 1.6}" cy="59.4" r="1.6" fill="${t.hl}"/>` +
+      `<circle class="hl" cx="${cx + 1.7}" cy="64.8" r=".75" fill="${t.hl}"/></g></g>`;
+  }
+
+  function svg(t) {
+    return `<svg viewBox="0 0 100 100" aria-hidden="true">` +
+      `<rect x="36" y="18" width="28" height="6" rx="3" fill="${t.body}"/><path d="${BODY}" fill="${t.body}"/>` +
+      `<ellipse cx="31.5" cy="71" rx="4.6" ry="2.6" fill="${t.cheek}" opacity=".6"/>` +
+      `<ellipse cx="68.5" cy="71" rx="4.6" ry="2.6" fill="${t.cheek}" opacity=".6"/>` +
+      `<path d="M46.5 71.5 Q50 75 53.5 71.5" fill="none" stroke="${t.eye}" stroke-width="1.7" stroke-linecap="round"/>` +
+      `<g class="eyes">${eye(41, t)}${eye(59, t)}` +
+      `<path class="happy" d="M36.8 64 Q41 57.6 45.2 64 M54.8 64 Q59 57.6 63.2 64" fill="none" stroke="${t.eye}" stroke-width="2.6" stroke-linecap="round"/></g>` +
+      `<g class="bubl"></g></svg>`;
+  }
+
+  // Eyes follow the pointer; hovering the ghost closes its eyes (^ ^).
+  function onPointer(ev) {
+    for (const g of ghosts) {
+      const r = g.host.getBoundingClientRect();
+      if (!r.width) continue;
+      const dx = ev.clientX - (r.left + r.width / 2);
+      const dy = ev.clientY - (r.top + r.height * 0.6);
+      const d = Math.hypot(dx, dy) || 1;
+      const k = Math.min(1, d / 260);
+      g.tx = (dx / d) * 3.2 * k;
+      g.ty = (dy / d) * 2.6 * k;
+      g.host.classList.toggle("joy", ev.clientX > r.left && ev.clientX < r.right && ev.clientY > r.top && ev.clientY < r.bottom);
+    }
+  }
+
+  // Bubbles rise from the flask neck, sway, then pop.
+  function update(g, dt) {
+    if (!reduce) {
+      const sm = Math.min(1, dt * 9);
+      g.ex += (g.tx - g.ex) * sm;
+      g.ey += (g.ty - g.ey) * sm;
+    }
+    g.eyes.setAttribute("transform", `translate(${g.ex.toFixed(2)} ${g.ey.toFixed(2)})`);
+    g.hls.forEach((h) => h.setAttribute("transform", `translate(${(-g.ex * 0.55).toFixed(2)} ${(-g.ey * 0.55).toFixed(2)})`));
+    if (reduce) return;
+    g.next -= dt;
+    if (g.next <= 0 && g.bubs.length < 4) {
+      g.bubs.push({ x: 47 + Math.random() * 6, y: 40, r: 0.9, R: 2.4 + Math.random() * 1.8, vy: -(13 + Math.random() * 6), ph: Math.random() * 6.28, life: 0, max: 1.7 + Math.random() * 0.6, pop: 0, px: 0 });
+      g.next = 0.6 + Math.random() * 0.9;
+    }
+    let out = "";
+    g.bubs = g.bubs.filter((b) => {
+      b.life += dt;
+      if (!b.pop) {
+        b.y += b.vy * dt;
+        b.r += (b.R - b.r) * Math.min(1, dt * 1.6);
+        const x = b.x + (b.y < 20 ? Math.sin(b.life * 4 + b.ph) * (20 - b.y) * 0.12 : 0);
+        if (b.life <= b.max) {
+          out += `<circle cx="${x.toFixed(2)}" cy="${b.y.toFixed(2)}" r="${b.r.toFixed(2)}" fill="${g.col}"/>`;
+          return true;
+        }
+        b.pop = 0.001;
+        b.px = x;
+      }
+      b.pop += dt;
+      if (b.pop > 0.3) return false;
+      const k = b.pop / 0.3;
+      out += `<circle cx="${b.px.toFixed(2)}" cy="${b.y.toFixed(2)}" r="${(b.r * (1 + k * 1.2)).toFixed(2)}" fill="none" stroke="${g.col}" stroke-width="${(1 - k * 0.8).toFixed(2)}" opacity="${(1 - k).toFixed(2)}"/>`;
+      return true;
+    });
+    g.bubl.innerHTML = out;
+  }
+
+  let last = 0;
+  function frame(ts) {
+    const dt = Math.min(0.05, (ts - last) / 1000 || 0.016);
+    last = ts;
+    for (let i = ghosts.length - 1; i >= 0; i--) {
+      if (!ghosts[i].host.isConnected) ghosts.splice(i, 1);
+      else update(ghosts[i], dt);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function mount(host, themeName) {
+    const t = THEMES[themeName] || THEMES.white;
+    host.classList.add("aura-ghost");
+    host.innerHTML = svg(t);
+    const s = host.querySelector("svg");
+    const g = {
+      host, col: t.bub, eyes: s.querySelector(".eyes"), hls: [...s.querySelectorAll(".hlg")],
+      bubl: s.querySelector(".bubl"), tx: 0, ty: 0, ex: 0, ey: 0, bubs: [], next: Math.random(),
+    };
+    if (reduce) g.bubl.innerHTML = `<circle cx="54" cy="12" r="3" fill="${t.bub}"/>`;
+    ghosts.push(g);
+    if (!started) {
+      started = true;
+      window.addEventListener("pointermove", onPointer);
+      requestAnimationFrame(frame);
+    }
+    return host;
+  }
+
+  window.AuraGhost = { mount };
+})();
+
+// ---- core/shell.js (inlined) ----
+// LabKit core — shell: validates config, builds the lab page, binds everything,
+// runs the loop. Knows categories and presentation; knows zero science.
+// Page: header (ghost, lab name, back link) / steps | bench | panel.
+// Every lab built on this shell gets the same look; config only sets colors.
+
+const JAR = (c) =>
+  `<svg viewBox="0 0 30 34" aria-hidden="true"><path d="M5 17h20v11a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z" fill="${c}"/>` +
+  '<path d="M10 2h10M11 2v6L4 15v13a4 4 0 0 0 4 4h14a4 4 0 0 0 4-4V15l-7-7V2" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+const APPARATUS = (c) =>
+  `<svg viewBox="0 0 30 34" aria-hidden="true"><circle cx="15" cy="17" r="12" fill="${c}" opacity=".35"/>` +
+  `<circle cx="15" cy="17" r="6.5" fill="${c}" stroke="currentColor" stroke-width="2"/></svg>`;
+
+// source: config URL (fetch) or config object (standalone).
+// buildLab(api, config): lab wiring, returns { state, step?, draw?, reset, resync, setSize?, measures() }.
+// labManifest: { measures: [{id}] } extra measure ids beyond counts.*.
+// packManifests: catalog contributions [{ laws, apparatus, measures }].
+async function boot(source, buildLab, labManifest, packManifests) {
+  const root = document.getElementById("lab");
+  root.innerHTML = "";
+  let raw;
+  if (typeof source === "string") {
+    try {
+      const res = await fetch(source, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      raw = await res.json();
+    } catch (err) {
+      root.appendChild(el("div", "error", `Could not load ${source}: ${String(err)}`));
+      return null;
+    }
+  } else {
+    raw = source;
+  }
+
+  const L = strings(raw);
+  const catalog = mergeCatalog(packManifests || []);
+  const known = {
+    laws: {},
+    apparatus: Object.keys(catalog.apparatus),
+    instruments: Object.keys(builtinInstruments),
+    measures: [],
+    surfaces: ["stage"],
+  };
+  Object.keys(catalog.laws).forEach((id) => {
+    known.laws[id] = { defaults: catalog.laws[id].defaults || {} };
+  });
+  (packManifests || []).forEach((m) => {
+    (m.measures || []).forEach((x) => known.measures.push(x.id));
+  });
+  ((labManifest && labManifest.measures) || []).forEach((x) => known.measures.push(x.id));
+
+  const { config, warnings, errors } = validateConfig(raw, known);
+  if (!config) {
+    root.appendChild(el("div", "error", L.invalidConfig + "\n- " + errors.join("\n- ")));
+    return null;
+  }
+  if (warnings.length > 0) console.info("[labkit] auto-tuned config:", warnings);
+
+  document.documentElement.style.setProperty("--accent", config.lab.accent);
+  document.documentElement.style.setProperty("--page", config.lab.page);
+  document.title = `${config.lab.title} — LabKit`;
+
+  // --- active flags (checkboxes and switches) ---
+  const active = {};
+  const key = (cat, id) => `${cat}:${id}`;
+  config.substances.forEach((s) => { active[key("substances", s.id)] = s.active; });
+  config.material.forEach((m) => { active[key("material", m.id)] = m.active; });
+  config.laws.forEach((l, i) => { active[key("laws", `${l.law}#${i}`)] = l.active; });
+  const isActive = (cat, id) => active[key(cat, id)] !== false;
+  const lawKey = (i) => `${config.laws[i].law}#${i}`;
+  const ghost = (host, theme) => {
+    if (window.AuraGhost) window.AuraGhost.mount(host, theme);
+    return host;
+  };
+
+  // --- layout ---
+  const header = el("header", "lab-header");
+  header.appendChild(ghost(el("span", "logo"), "white"));
+  header.appendChild(el("h1", "", escapeHtml(config.lab.title)));
+  const back = el("a", "back", L.allLabs);
+  back.href = config.lab.home;
+  header.appendChild(back);
+
+  const main = el("div", "lab-main");
+  const rail = el("nav", "rail");
+  rail.setAttribute("role", "tablist");
+  rail.setAttribute("aria-label", L.labSteps);
+  const bench = el("section", "bench");
+  const benchHead = el("div", "zh", '<h2>' + L.bench + '</h2><span class="hint">' + L.benchHint + '</span>');
+  const fpsChip = el("span", "end fps", "– fps");
+  benchHead.appendChild(fpsChip);
+  const stage = el("div", "stage");
+  // Created after buildLab: webgl labs mount their own surface instead.
+  let canvas = null;
+  bench.appendChild(benchHead);
+  bench.appendChild(stage);
+  const panel = el("section", "panel");
+  main.appendChild(rail);
+  main.appendChild(bench);
+  main.appendChild(panel);
+  root.appendChild(header);
+  root.appendChild(main);
+
+  // One step on the left = one pane on the right. Only declared parts get a step.
+  const steps = [{ id: "lab", label: L.stepLab, hint: L.stepLabHint }];
+  if (config.laws.length > 0) steps.push({ id: "laws", label: L.stepLaws, hint: L.stepLawsHint });
+  if (config.controls.length > 0) steps.push({ id: "knobs", label: L.stepKnobs, hint: L.stepKnobsHint });
+  if (config.notebook.enabled) steps.push({ id: "notebook", label: L.stepNotebook, hint: L.stepNotebookHint });
+  const panes = {};
+  const tabs = [];
+  const instruments = [];
+  function select(id) {
+    tabs.forEach((t) => t.setAttribute("aria-selected", String(t.dataset.step === id)));
+    Object.keys(panes).forEach((k) => panes[k].classList.toggle("on", k === id));
+    instruments.forEach((ins) => { if (ins.redraw) ins.redraw(); });
+  }
+  steps.forEach((st, i) => {
+    const tab = el("button", "tab", `<span class="no">${i + 1}</span><b>${st.label}</b><small>${st.hint}</small>`);
+    tab.type = "button";
+    tab.id = `tab-${st.id}`;
+    tab.dataset.step = st.id;
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-controls", `pane-${st.id}`);
+    tab.addEventListener("click", () => select(st.id));
+    rail.appendChild(tab);
+    tabs.push(tab);
+    const pane = el("div", "pane");
+    pane.id = `pane-${st.id}`;
+    pane.setAttribute("role", "tabpanel");
+    pane.setAttribute("aria-labelledby", tab.id);
+    const head = el("div", "zh", `<span class="no">${i + 1}</span><h2>${st.label}</h2><span class="hint">${st.hint}</span>`);
+    if (st.id === "notebook") head.appendChild(ghost(el("span", "guide"), "inkpaper"));
+    pane.appendChild(head);
+    panel.appendChild(pane);
+    panes[st.id] = pane;
+  });
+  rail.appendChild(el("div", "spacer"));
+
+  // --- lab wiring ---
+  const clock = createClock();
+  const api = {
+    stage: { canvas: null, ctx: null, container: stage, W: 800, H: 600 },
+    params: config,
+    catalog,
+    isActive,
+    time: clock,
+  };
+  const lab = buildLab(api, config);
+  const is3d = lab.surface === "webgl";
+  if (!is3d) {
+    canvas = el("canvas");
+    canvas.setAttribute("aria-label", `${config.lab.title} : ${L.bench}`);
+    stage.appendChild(canvas);
+    api.stage.canvas = canvas;
+    api.stage.ctx = canvas.getContext("2d");
+  }
+  const usesTime = () => typeof lab.step === "function";
+
+  const speckles = [];
+  let sized = false;
+  function resize() {
+    const r = stage.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    api.stage.W = r.width;
+    api.stage.H = r.height;
+    if (!is3d) {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.max(50, Math.floor(r.width * dpr));
+      canvas.height = Math.max(50, Math.floor(r.height * dpr));
+    }
+    if (lab.setSize) lab.setSize(api.stage.W, api.stage.H);
+    // First real size known: respawn so nothing starts outside the bench.
+    if (!sized) {
+      sized = true;
+      if (lab.reset) lab.reset();
+    }
+    speckles.length = 0;
+    for (let i = 0; i < config.bench.speckles; i++) {
+      speckles.push({ x: Math.random(), y: Math.random(), s: 0.4 + Math.random() * 1.3, a: 0.25 + Math.random() * 0.5 });
+    }
+    drawOnce();
+  }
+  // The canvas always matches the bench's real pixel size: the scene is never stretched.
+  if ("ResizeObserver" in window) new ResizeObserver(resize).observe(stage);
+  else window.addEventListener("resize", resize);
+
+  // --- rows ---
+  const liveSpans = {};
+  function noticeBlock(notice) {
+    if (!notice) return null;
+    const nb = el(
+      "div", "notice",
+      `<b>${escapeHtml(notice.label || "")}</b><br>` +
+      `<i>Rule:</i> ${escapeHtml(notice.formule || "–")}<br>` +
+      `<i>Sources:</i> ${escapeHtml(notice.sources || "–")}<br>` +
+      `<i>Limits:</i> ${escapeHtml(notice.limites || "–")}`
+    );
+    nb.hidden = true;
+    return nb;
+  }
+  function infoButton(nb, label) {
+    const b = el("button", "ib", "i");
+    b.type = "button";
+    b.setAttribute("aria-label", `${L.about} ${label}`);
+    b.setAttribute("aria-expanded", "false");
+    b.addEventListener("click", () => {
+      nb.hidden = !nb.hidden;
+      b.setAttribute("aria-expanded", String(!nb.hidden));
+    });
+    return b;
+  }
+  // kind: "check" (box) or "switch" (laws). Real checkbox, restyled in CSS.
+  function toggle(cat, id, label, kind) {
+    const wrap = el("label", kind);
+    const box = el("input");
+    box.type = "checkbox";
+    box.checked = isActive(cat, id);
+    box.setAttribute("aria-label", `${L.enable} ${label}`);
+    box.addEventListener("change", () => {
+      active[key(cat, id)] = box.checked;
+      drawOnce();
+    });
+    wrap.appendChild(box);
+    wrap.appendChild(el("span"));
+    return wrap;
+  }
+  // Substance / material row: icon, name, live text, notice button, enable box.
+  function itemRow(cat, id, label, icon, notice) {
+    const outer = el("div", "elem");
+    const row = el("div", "elem-row", `<span class="icon">${icon}</span><span class="name">${escapeHtml(label)}</span>`);
+    const live = el("span", "live", "");
+    row.appendChild(live);
+    const tools = el("span", "tools");
+    const nb = noticeBlock(notice);
+    if (nb) tools.appendChild(infoButton(nb, label));
+    tools.appendChild(toggle(cat, id, label, "check"));
+    row.appendChild(tools);
+    outer.appendChild(row);
+    if (nb) outer.appendChild(nb);
+    outer.addEventListener("click", (e) => {
+      if (e.target.closest(".switch, .check, .ib")) return;
+      const box = row.querySelector("input[type=checkbox]");
+      if (box && !box.disabled) box.click();
+    });
+    return { outer, live };
+  }
+  function block(parent, title, cls) {
+    const b = el("div", cls || "blk", `<h3 class="sub">${escapeHtml(title)}</h3>`);
+    parent.appendChild(b);
+    return b;
+  }
+  function lawsTargeting(subId, lawIdx) {
+    const entry = config.laws[lawIdx];
+    if (entry.targets) return entry.targets.includes(subId);
+    const pairs = entry.params && entry.params.pairs;
+    if (pairs) return pairs.some((p) => p.includes(subId));
+    return true;
+  }
+
+  // Pane "Lab": substances, material and instruments, all visible at once.
+  const subsBlk = block(panes.lab, L.substances);
+  if (config.substances.length === 0) subsBlk.appendChild(el("p", "empty", L.noSubstance));
+  config.substances.forEach((s) => {
+    const lawNames = config.laws
+      .map((l, i) => ({ l, i }))
+      .filter(({ i }) => lawsTargeting(s.id, i))
+      .map(({ l }) => (catalog.laws[l.law] ? catalog.laws[l.law].notice.label : l.law));
+    const r = itemRow("substances", s.id, s.label, JAR(s.color), {
+      label: s.label,
+      formule: `Group of ${s.count}: simulated by ${lawNames.join(", ") || "no law"}.`,
+      sources: "Declared in this lab config.",
+      limites: "Behavior comes from active laws only; switch a law off to remove its effect.",
+    });
+    liveSpans[s.id] = r.live;
+    subsBlk.appendChild(r.outer);
+  });
+  const matBlk = block(panes.lab, L.material);
+  if (config.material.length === 0) matBlk.appendChild(el("p", "empty", L.noMaterial));
+  config.material.forEach((m) => {
+    const app = catalog.apparatus[m.kind];
+    const r = itemRow("material", m.id, m.label, APPARATUS(m.color || "#ffffff"), app ? app.notice : null);
+    r.live.textContent = (app && app.label ? app.label : m.kind).toLowerCase();
+    matBlk.appendChild(r.outer);
+  });
+
+  // Instruments are measuring devices (counter, curve), shown apart from substances.
+  const metricsById = {};
+  config.metrics.forEach((m) => { metricsById[m.id] = m; });
+  const metricValues = () => {
+    const flat = lab.measures();
+    const out = {};
+    config.metrics.forEach((m) => { out[m.id] = flat[m.source]; });
+    return out;
+  };
+  if (config.instruments.length > 0) {
+    const insBlk = block(panes.lab, L.instruments, "blk grow");
+    const devs = el("div", "devs");
+    insBlk.appendChild(devs);
+    config.instruments.forEach((entry) => {
+      if (entry.type === "chips") instruments.push(buildChips(devs, entry, metricsById, L));
+      else if (entry.type === "curve") instruments.push(buildCurve(devs, entry, metricsById, L));
+    });
+    // A lone counter takes the free space; with a curve, the curve does.
+    if (!config.instruments.some((x) => x.type === "curve")) instruments[0].element.classList.add("grow");
+  }
+
+  // Pane "Laws": one switch per law, with its notice.
+  if (panes.laws) {
+    config.laws.forEach((l, i) => {
+      const mod = catalog.laws[l.law];
+      const label = mod ? mod.notice.label : l.law;
+      const pairs = l.params && l.params.pairs ? l.params.pairs.map((p) => p.join(" → ")).join(", ") : "";
+      const scope = l.targets ? `${L.lawsOn} ${l.targets.join(", ")}` : pairs;
+      const outer = el("div", "elem");
+      const row = el("div", "elem-row law");
+      row.appendChild(toggle("laws", lawKey(i), label, "switch"));
+      const scopeHtml = scope ? `<small>${escapeHtml(scope)}</small>` : "";
+      row.appendChild(el("span", "", `<span class="name">${escapeHtml(label)}</span>${scopeHtml}`));
+      const nb = noticeBlock(mod ? mod.notice : null);
+      if (nb) row.appendChild(infoButton(nb, label));
+      outer.appendChild(row);
+      if (nb) outer.appendChild(nb);
+      outer.addEventListener("click", (e) => {
+        if (e.target.closest(".switch, .check, .ib")) return;
+        const box = row.querySelector("input[type=checkbox]");
+        if (box && !box.disabled) box.click();
+      });
+      panes.laws.appendChild(outer);
+    });
+  }
+
+  // Pane "Knobs": config-declared sliders.
+  if (panes.knobs) {
+    buildControls(panes.knobs, config, lab.state, () => {
+      if (lab.resync) lab.resync();
+      if (!usesTime()) drawOnce();
+    });
+  }
+
+  // Bottom of the steps column: lab note + time buttons.
+  if (config.lab.note) rail.appendChild(el("p", "note", escapeHtml(config.lab.note)));
+  if (warnings.length > 0) rail.appendChild(el("p", "note", L.autotuned(warnings.length)));
+  const timeBox = el("div", "time");
+  const pauseBtn = el("button", "btn ink big");
+  const resetBtn = el("button", "btn line", L.reset);
+  const stepBtn = el("button", "btn line", L.step1);
+  [pauseBtn, resetBtn, stepBtn].forEach((b) => {
+    b.type = "button";
+    timeBox.appendChild(b);
+  });
+  rail.appendChild(timeBox);
+  const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduced || !usesTime()) clock.running = false;
+  const paintPause = () => { pauseBtn.textContent = clock.running ? L.pause : L.play; };
+  paintPause();
+  if (!usesTime()) pauseBtn.disabled = true;
+  pauseBtn.addEventListener("click", () => {
+    clock.running = !clock.running;
+    paintPause();
+  });
+  resetBtn.addEventListener("click", () => {
+    if (lab.reset) lab.reset();
+    clock.reset();
+    instruments.forEach((ins) => { if (ins.reset) ins.reset(); });
+    drawOnce();
+  });
+  stepBtn.addEventListener("click", () => {
+    if (usesTime() && !clock.running && lab.step) {
+      lab.step(1 / 60, isActive);
+      clock.advance(1 / 60);
+      sampleOnce();
+      drawOnce();
+    }
+  });
+
+  // Pane "Notebook".
+  if (panes.notebook) {
+    buildNotebook(panes.notebook, config,
+      () => ({
+        t: clock.t,
+        metrics: metricValues(),
+        params: {
+          substances: JSON.parse(JSON.stringify(config.substances)),
+          material: JSON.parse(JSON.stringify(config.material)),
+          laws: JSON.parse(JSON.stringify(config.laws)),
+        },
+      }),
+      (params) => {
+        config.substances = params.substances;
+        config.material = params.material;
+        config.laws = params.laws;
+        if (lab.resync) lab.resync();
+        root.querySelectorAll("section").forEach((sec) => { if (sec.refreshAll) sec.refreshAll(); });
+        drawOnce();
+      }
+    );
+  }
+  select("lab");
+
+  // --- loop ---
+  resize();
+  let last = performance.now();
+  let fpsAcc = 0;
+  let fpsN = 0;
+  let fpsT = 0;
+  let histT = 0;
+
+  function sampleOnce() {
+    const v = metricValues();
+    instruments.forEach((ins) => ins.sample(v));
+  }
+
+  function drawOnce() {
+    if (is3d) {
+      if (lab.draw) lab.draw(null, api.stage.W, api.stage.H, isActive, hexToRgb);
+    } else {
+      const canvas2d = api.stage.canvas;
+      const ctx = api.stage.ctx;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const W = canvas2d.width / dpr;
+      const H = canvas2d.height / dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = config.bench.background;
+      ctx.globalAlpha = config.bench.trail;
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
+      for (const s of speckles) {
+        ctx.globalAlpha = s.a;
+        ctx.fillStyle = "#cdd6e0";
+        ctx.fillRect(s.x * W, s.y * H, s.s, s.s);
+      }
+      ctx.globalAlpha = 1;
+      if (lab.draw) lab.draw(ctx, W, H, isActive, hexToRgb);
+    }
+    const v = metricValues();
+    instruments.forEach((ins) => ins.update(v));
+    const flat = lab.measures();
+    config.substances.forEach((s) => {
+      const span = liveSpans[s.id];
+      const n = flat[`counts.${s.id}`];
+      if (span) span.textContent = `× ${n === undefined ? "–" : n}`;
+    });
+  }
+
+  function draw() {
+    requestAnimationFrame(draw);
+    const now = performance.now();
+    let dt = (now - last) / 1000;
+    last = now;
+    if (!(dt > 0)) return;
+    dt = Math.min(dt, 0.05);
+    fpsAcc += dt;
+    fpsN += 1;
+    fpsT += dt;
+    if (fpsT >= 0.5) {
+      fpsChip.textContent = `${Math.round(fpsN / fpsAcc)} fps`;
+      fpsAcc = 0;
+      fpsN = 0;
+      fpsT = 0;
+    }
+    if (clock.running && usesTime()) {
+      lab.step(dt, isActive);
+      clock.advance(dt);
+      histT += dt;
+      if (histT >= 0.25) {
+        histT = 0;
+        sampleOnce();
+      }
+    }
+    drawOnce();
+  }
+  sampleOnce();
+  requestAnimationFrame(draw);
+  return { config, lab };
+}
+
+// ---- engines/chimie/laws/melange-couleurs.js (inlined) ----
+// Law: melange-couleurs — mixed doses blend (blue + yellow -> green); volume adds up.
+const melangeCouleurs = {
+  id: "melange-couleurs",
+  notice: {
+    label: "Color mixing",
+    formule: "Blue + yellow → green. Volume = sum of doses (1 dose = 100 mL).",
+    sources: "Simplified mixing rule (subtractive synthesis).",
+    limites: "Two colors only; no precipitate or real reaction.",
+  },
+  defaults: {},
+  apply(world, dt, params, targets, active) {
+    const d = world.doses();
+    world.mixed = d.bleu > 0 && d.jaune > 0;
+    world.volume = (d.bleu + d.jaune + d.acide) * 100;
+  },
+};
+
+// ---- engines/chimie/laws/reaction-acide.js (inlined) ----
+// Law: reaction-acide — acid in the mix fizzes, heats and drops the pH.
+const reactionAcide = {
+  id: "reaction-acide",
+  notice: {
+    label: "Acid reaction",
+    formule: "Acid + mix → bubbles; +3 °C/s per acid dose; pH → 2.5.",
+    sources: "Simplified school model (acid + base → gas + heat).",
+    limites: "No stoichiometry; binary pH (7 or 2.5).",
+  },
+  defaults: {},
+  apply(world, dt, params, targets, active) {
+    const d = world.doses();
+    if (d.acide > 0 && d.bleu + d.jaune > 0) {
+      world.fizz = 1;
+      world.temp = Math.min(100, world.temp + 3 * d.acide * dt);
+      world.ph = 2.5;
+    }
+  },
+};
+
+// ---- engines/chimie/laws/chauffage.js (inlined) ----
+// Law: chauffage — the bunsen burner heats toward boiling; cooling is always on.
+const chauffage = {
+  id: "chauffage",
+  notice: {
+    label: "Heating",
+    formule: "Burner on: +22 °C/s at full power; drifts back to 19 °C otherwise. Boils at 100 °C.",
+    sources: "First-order thermal model (simplified Newton cooling).",
+    limites: "Losses not modelled; one heated body.",
+  },
+  defaults: {},
+  apply(world, dt, params, targets, active) {
+    const b = world.material.bruleur;
+    if (b && active("material", "bruleur") && b.strength > 0) {
+      world.heating = true;
+      world.temp = Math.min(100, world.temp + (b.strength / 100) * 22 * dt);
+    }
+  },
+};
+
+// ---- engines/chimie/world.js (inlined) ----
+// Chemistry world: doses in one flask (level, color, fizz, heat).
+// Reads live config refs (sliders edit counts/strength in place); rebind() refreshes refs.
+function createWorld({ substances, material, laws }) {
+  const byId = (arr) => {
+    const o = {};
+    (arr || []).forEach((x) => { o[x.id] = x; });
+    return o;
+  };
+  return {
+    groups: byId(substances),
+    material: byId(material),
+    laws: laws || [],
+    t: 0,
+    temp: 19,
+    ph: 7,
+    volume: 0,
+    fizz: 0,
+    heating: false,
+    mixed: false,
+    W: 800,
+    H: 600,
+    doses() {
+      const g = this.groups;
+      return {
+        bleu: (g.bleu && g.bleu.count) || 0,
+        jaune: (g.jaune && g.jaune.count) || 0,
+        acide: (g.acide && g.acide.count) || 0,
+      };
+    },
+    rebind(substances, mat) {
+      this.groups = byId(substances);
+      this.material = byId(mat);
+    },
+    reset() {
+      this.t = 0; this.temp = 19; this.ph = 7; this.volume = 0;
+      this.fizz = 0; this.heating = false; this.mixed = false;
+    },
+    setSize(w, h) { this.W = w; this.H = h; },
+    step(dt, isActive) {
+      this.t += dt;
+      this.fizz = 0; this.heating = false; this.mixed = false; this.ph = 7; this.volume = 0;
+      for (const l of this.laws) {
+        if (isActive("laws", l.id)) l.mod.apply(this, dt, l.params, l.targetIds, isActive);
+      }
+      this.temp += (19 - this.temp) * Math.min(1, 0.25 * dt);
+      if (this.temp >= 99.5) this.fizz = 1;
+      this.temp = Math.max(0, Math.min(100, this.temp));
+    },
+    measures() {
+      const out = {
+        temp: Math.round(this.temp * 10) / 10,
+        ph: this.ph,
+        volume: this.volume,
+      };
+      for (const id of Object.keys(this.groups)) out[`counts.${id}`] = this.groups[id].count || 0;
+      return out;
+    },
+    draw(ctx, W, H) {
+      const ink = "#e8e6e1";
+      const benchY = H * 0.68;
+      // Wooden bench.
+      const wood = ctx.createLinearGradient(0, benchY, 0, H);
+      wood.addColorStop(0, "#5b4a33"); wood.addColorStop(1, "#3f3423");
+      ctx.fillStyle = wood;
+      ctx.fillRect(0, benchY, W, H - benchY);
+      // Flask geometry (fractions of the smallest side).
+      const s = Math.min(W, H);
+      const fx = W * 0.36;
+      const baseY = benchY - 6;
+      const topW = s * 0.11, botW = s * 0.21, fh = s * 0.4, neckH = s * 0.1;
+      const topY = baseY - fh;
+      const flask = () => {
+        ctx.beginPath();
+        ctx.moveTo(fx - topW, topY);
+        ctx.lineTo(fx + topW, topY);
+        ctx.lineTo(fx + botW, baseY);
+        ctx.lineTo(fx - botW, baseY);
+        ctx.closePath();
+      };
+      // Liquid (clipped to the flask).
+      const d = this.doses();
+      const frac = Math.min(1, this.volume / 500);
+      let color = null;
+      if (d.bleu + d.jaune + d.acide > 0) {
+        if (d.bleu > 0 && d.jaune > 0) color = d.acide > 0 ? "#65a30d" : "#16a34a";
+        else if (d.bleu > 0) color = "#2563eb";
+        else if (d.jaune > 0) color = "#facc15";
+        else color = "#fb923c";
+      }
+      if (color && frac > 0) {
+        ctx.save();
+        flask(); ctx.clip();
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.9;
+        ctx.fillRect(fx - botW - 2, baseY - fh * frac, botW * 2 + 4, fh * frac + 2);
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      }
+      // Bubbles.
+      if (this.fizz && frac > 0) {
+        const liqTop = baseY - fh * frac;
+        ctx.fillStyle = "#ffffff";
+        for (let i = 0; i < 14; i++) {
+          const px = fx + (((i * 53) % 60) - 30) / 60 * botW * 1.3;
+          const py = baseY - 4 - ((this.t * (36 + i * 5) + i * 97) % Math.max(8, fh * frac - 6));
+          if (py < liqTop + 2) continue;
+          ctx.globalAlpha = 0.85;
+          ctx.beginPath();
+          ctx.arc(px, py, 1.6 + (i % 3), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+      // Flask glass + neck.
+      ctx.strokeStyle = "#e8e6e1"; ctx.lineWidth = Math.max(2, s * 0.008);
+      flask(); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(fx - topW, topY); ctx.lineTo(fx - topW, topY - neckH);
+      ctx.moveTo(fx + topW, topY); ctx.lineTo(fx + topW, topY - neckH);
+      ctx.stroke();
+      // Flame.
+      if (this.heating) {
+        const fl = s * 0.05 + Math.sin(this.t * 13) * s * 0.006;
+        ctx.fillStyle = "#f97316";
+        ctx.beginPath();
+        ctx.moveTo(fx, baseY + 8);
+        ctx.quadraticCurveTo(fx - s * 0.03, baseY + 8 + fl, fx, baseY + 14 + fl * 1.6);
+        ctx.quadraticCurveTo(fx + s * 0.03, baseY + 8 + fl, fx, baseY + 8);
+        ctx.fill();
+        ctx.fillStyle = "#fde047";
+        ctx.beginPath(); ctx.arc(fx, baseY + 12, s * 0.012, 0, Math.PI * 2); ctx.fill();
+      }
+      // Vapor above the neck when hot.
+      if (this.temp > 80) {
+        ctx.fillStyle = "#78716c";
+        for (let i = 0; i < 3; i++) {
+          const vy = topY - neckH - 10 - ((this.t * 30 + i * 40) % 90);
+          ctx.globalAlpha = 0.22;
+          ctx.beginPath();
+          ctx.ellipse(fx + Math.sin(this.t * 2 + i) * 8, vy, 12, 7, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+      // Thermometer.
+      const tx = W * 0.8, ty0 = H * 0.16, ty1 = H * 0.6, tw = Math.max(10, s * 0.03);
+      ctx.fillStyle = "#1a241d"; ctx.strokeStyle = "#e8e6e1"; ctx.lineWidth = 3;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(tx - tw / 2, ty0, tw, ty1 - ty0, tw / 2);
+      else ctx.rect(tx - tw / 2, ty0, tw, ty1 - ty0);
+      ctx.fill(); ctx.stroke();
+      const fillH = (ty1 - ty0 - 8) * (this.temp / 100);
+      ctx.fillStyle = "#dc2626";
+      ctx.fillRect(tx - tw / 2 + 4, ty1 - 4 - fillH, tw - 8, fillH);
+      ctx.beginPath(); ctx.arc(tx, ty1 + 6, tw * 0.75, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#e8e6e1"; ctx.stroke();
+      // Labels.
+      ctx.fillStyle = ink;
+      ctx.font = `${Math.max(12, Math.round(s * 0.032))}px sans-serif`;
+      ctx.fillText("Erlenmeyer 500 mL", Math.max(8, fx - botW - 130), baseY - fh - neckH - 8);
+      ctx.fillText(`${Math.round(this.temp)} °C`, tx + tw, ty0 + 14);
+    },
+  };
+}
+
+// ---- engines/chimie/index.js (inlined) ----
+// Chemistry pack manifest — mixing laws, glassware apparatus, exposed measures.
+
+const chimieLaws = {
+  "melange-couleurs": melangeCouleurs,
+  "reaction-acide": reactionAcide,
+  chauffage,
+};
+
+const chimiePack = {
+  id: "chimie",
+  laws: chimieLaws,
+  apparatus: {
+    recipient: {
+      label: "Flask",
+      notice: {
+        label: "Erlenmeyer",
+        formule: "Holds up to 500 mL; the level follows the poured volume.",
+        sources: "Glassware declared by the lab.",
+        limites: "One flask; no overflow simulated.",
+      },
+      defaults: { x: 0.4, y: 0.62 },
+    },
+    bruleur: {
+      label: "Bunsen burner",
+      notice: {
+        label: "Bunsen burner",
+        formule: "Heats at strength % (0–100) when the box is checked.",
+        sources: "Apparatus declared by the lab.",
+        limites: "Single flame; no air control.",
+      },
+      defaults: { x: 0.4, y: 0.9, strength: 60 },
+    },
+  },
+  measures: [
+    { id: "temp", label: "Temperature", unit: "°C" },
+    { id: "ph", label: "pH", unit: "" },
+    { id: "volume", label: "Volume", unit: "mL" },
+  ],
+};
+
+// ---- app-chimie/lab.js (inlined) ----
+// Chemistry Lab wiring: chemistry world + catalog laws declared in config.json.
+
+const labManifest = { measures: [{ id: "temp" }, { id: "ph" }, { id: "volume" }] };
+
+function byId(arr) {
+  const o = {};
+  arr.forEach((x) => {
+    o[x.id] = x;
+  });
+  return o;
+}
+
+function buildLab(api, config) {
+  const laws = config.laws.map((entry, i) => {
+    const mod = api.catalog.laws[entry.law];
+    return {
+      id: `${entry.law}#${i}`,
+      mod,
+      targetIds: entry.targets || null,
+      params: { ...mod.defaults, ...(entry.params || {}) },
+    };
+  });
+  const world = createWorld({
+    substances: config.substances,
+    material: config.material,
+    laws,
+  });
+  return {
+    state: {
+      substances: byId(config.substances),
+      material: byId(config.material),
+      laws: laws.map((l) => l.params),
+      bench: config.bench,
+    },
+    step: (dt, isActive) => world.step(dt, isActive),
+    draw: (ctx, W, H, isActive, hexToRgb) => world.draw(ctx, W, H, isActive, hexToRgb),
+    reset: () => world.reset(),
+    resync: () => world.rebind(config.substances, config.material),
+    setSize: (w, h) => world.setSize(w, h),
+    measures: () => world.measures(),
+  };
+}
+
+boot({
+  "lab": {
+    "id": "chimie",
+    "title": "Chemistry Lab",
+    "subtitle": "Flask, colors and bunsen burner — same shell as the other labs.",
+    "accent": "#a8e05f",
+    "page": "#58b368",
+    "note": "Same kit as Bridge Lab. Only this lab differs: substances, material, laws and instruments.",
+    "lang": "en"
+  },
+  "bench": {
+    "background": "#0a0f0c",
+    "trail": 1,
+    "speckles": 0
+  },
+  "bounds": "wrap",
+  "substances": [
+    { "id": "bleu", "label": "Blue solution", "count": 1, "color": "#2563eb", "radius": 3, "mass": 1, "speed": 0 },
+    { "id": "jaune", "label": "Yellow solution", "count": 1, "color": "#facc15", "radius": 3, "mass": 1, "speed": 0 },
+    { "id": "acide", "label": "Mild acid", "count": 0, "color": "#f97316", "radius": 3, "mass": 1, "speed": 0 }
+  ],
+  "material": [
+    { "id": "erlenmeyer", "kind": "recipient", "label": "Erlenmeyer 500 mL", "x": 0.38, "y": 0.62 },
+    { "id": "bruleur", "kind": "bruleur", "label": "Bunsen burner", "x": 0.38, "y": 0.9, "strength": 60 }
+  ],
+  "laws": [
+    { "law": "melange-couleurs" },
+    { "law": "reaction-acide" },
+    { "law": "chauffage" }
+  ],
+  "metrics": [
+    { "id": "temperature", "label": "Temperature", "unit": "°C", "source": "temp", "color": "#dc2626" },
+    { "id": "ph", "label": "pH", "unit": "", "source": "ph", "color": "#16a34a" },
+    { "id": "volume", "label": "Volume", "unit": "mL", "source": "volume", "color": "#2563eb" }
+  ],
+  "instruments": [
+    { "type": "chips", "metrics": ["temperature", "ph", "volume"] },
+    { "type": "curve", "metrics": ["temperature"] }
+  ],
+  "controls": [
+    { "path": "substances.bleu.count", "label": "Blue doses", "min": 0, "max": 2, "step": 1 },
+    { "path": "substances.jaune.count", "label": "Yellow doses", "min": 0, "max": 2, "step": 1 },
+    { "path": "substances.acide.count", "label": "Acid doses", "min": 0, "max": 1, "step": 1 },
+    { "path": "material.bruleur.strength", "label": "Burner power", "min": 0, "max": 100, "step": 5 }
+  ],
+  "notebook": {
+    "enabled": true,
+    "prompts": [
+      "Blue + yellow: what color do you get?",
+      "What does the acid change: bubbles, heat, pH?"
+    ]
+  }
+}
+, buildLab, labManifest, [chimiePack]);
+</script>
+</body>
+</html>
