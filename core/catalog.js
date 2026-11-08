@@ -5,10 +5,10 @@
 
 export const builtinInstruments = {
   chips: {
-    label: "Chips",
+    label: "Counter",
     notice: {
-      label: "Chips",
-      formule: "Each chip shows one live metric value + unit, refreshed every frame.",
+      label: "Counter",
+      formule: "Shows one live readout per metric (value + unit), refreshed every frame.",
       sources: "Kit built-in readout (no model).",
       limites: "No history; for trends use the curve instrument.",
     },

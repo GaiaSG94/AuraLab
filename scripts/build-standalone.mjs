@@ -25,6 +25,7 @@ const CORE = [
   "core/controls.js",
   "core/instruments.js",
   "core/notebook.js",
+  "core/ghost.js",
   "core/shell.js",
 ];
 const PACK = [

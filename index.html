@@ -3,99 +3,148 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>AuraLab — visual lab template</title>
+<title>auralab — one kit, many labs</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=JetBrains+Mono:wght@400;600;700&display=swap" />
 <style>
+  /* Portal: same flat-page language as the labs (core/styles.css). */
   :root {
-    --bg: #0b0e11;
-    --panel: #12161b;
-    --line: #232b34;
-    --text: #e8e6e1;
-    --muted: #9aa3ab;
-    --font: "Segoe UI", system-ui, -apple-system, sans-serif;
-    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    --page: #ff8a3d;
+    --ink: #17141f;
+    --paper: #fbf8ff;
+    --font: "Archivo", "Arial Narrow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
   }
   * { box-sizing: border-box; }
-  html, body {
-    margin: 0; min-height: 100%;
-    background: var(--bg); color: var(--text);
-    font-family: var(--font); font-size: 14px; line-height: 1.45;
+  html, body { margin: 0; min-height: 100%; background: var(--page); color: var(--ink); font-family: var(--font); }
+  a:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+  .poster {
+    min-height: 100vh; min-height: 100dvh;
+    display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto;
+    gap: 18px; padding: 22px 36px 18px;
+    max-width: 1400px; margin: 0 auto;
   }
-  .top {
-    display: flex; align-items: baseline; gap: 12px;
-    padding: 14px 20px 12px;
-    border-bottom: 1px solid var(--line);
-    background: var(--panel);
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 900; font-stretch: 72%; font-size: 32px; line-height: 1; }
+  .brand .logo { width: 30px; }
+  .main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 400px); gap: 24px; align-items: center; min-height: 0; }
+  h1 { margin: 0; font-weight: 900; font-stretch: 68%; text-transform: uppercase; line-height: 0.86; font-size: clamp(64px, 10vw, 136px); }
+  h1 span { display: block; color: var(--paper); }
+  .lede { font-weight: 500; font-size: 17px; max-width: 42ch; margin: 18px 0 0; }
+  .hero-ghost { width: 100%; max-width: 390px; justify-self: center; padding-top: 40px; }
+  .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .card {
+    display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: 12px;
+    background: var(--ink); color: var(--paper); text-decoration: none;
+    border-radius: 18px; padding: 14px 16px; min-height: 160px;
   }
-  .top h1 { margin: 0; font-size: 18px; font-weight: 650; }
-  .top h1 .dot { color: var(--muted); }
-  .top p { margin: 0; color: var(--muted); font-size: 12.5px; }
-  .top .tag {
-    margin-left: auto;
-    font-family: var(--mono); font-size: 11px; color: var(--muted);
-    border: 1px solid var(--line); border-radius: 4px;
-    padding: 3px 8px; white-space: nowrap;
+  .card:hover { box-shadow: 0 0 0 3px var(--paper); }
+  .card .t { display: flex; flex-direction: column; min-width: 0; }
+  .card h2 { margin: 0; font-weight: 900; font-stretch: 68%; text-transform: uppercase; line-height: 0.9; font-size: 36px; }
+  .card h2 em { font-style: normal; color: var(--c); }
+  .card p { margin: 6px 0 0; font-size: 13px; color: #cfc9e3; line-height: 1.35; }
+  .card .open { margin-top: auto; padding-top: 8px; font: 700 12px var(--mono); color: var(--c); }
+  .card .vis { position: relative; border-radius: 12px; background: #0c0a12; overflow: hidden; }
+  .card .vis canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .card .tree { margin: 0; padding: 10px; font: 400 11px/1.7 var(--mono); color: #cfc9e3; white-space: pre; }
+  .card .tree b { color: #ff8a3d; font-weight: 400; }
+  footer { font-size: 13px; display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: space-between; }
+  footer a { color: var(--ink); font-weight: 700; }
+  footer code { font-family: var(--mono); font-size: 12px; }
+  @media (max-width: 900px) {
+    .poster { padding: 18px 16px; }
+    .main { grid-template-columns: 1fr; }
+    .hero-ghost { max-width: 220px; padding-top: 10px; order: -1; }
+    .cards { grid-template-columns: 1fr; }
   }
-  main { max-width: 960px; margin: 0 auto; padding: 26px 20px 40px; }
-  main h2 {
-    margin: 0 0 4px; font-size: 11px; font-weight: 700;
-    letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
-  }
-  main > p { margin: 0 0 18px; color: var(--muted); font-size: 13px; max-width: 640px; }
-  .labs {
-    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
-  }
-  .lab {
-    display: block; text-decoration: none; color: var(--text);
-    background: var(--panel); border: 1px solid var(--line);
-    border-radius: 6px; padding: 16px 16px 14px;
-  }
-  .lab:hover { border-color: var(--accent, var(--muted)); }
-  .lab h3 { margin: 0 0 6px; font-size: 16px; font-weight: 650; }
-  .lab h3 .dash { color: var(--accent, var(--muted)); }
-  .lab p { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; min-height: 54px; }
-  .lab .open {
-    font-family: var(--mono); font-size: 12px;
-    color: var(--accent, var(--text));
-  }
-  footer {
-    max-width: 960px; margin: 0 auto; padding: 0 20px 30px;
-    color: var(--muted); font-size: 12px;
-  }
-  footer a { color: var(--muted); }
-  @media (max-width: 760px) { .labs { grid-template-columns: 1fr; } .lab p { min-height: 0; } }
 </style>
 </head>
 <body>
-  <header class="top">
-    <h1>Aura<span class="dot">Lab</span></h1>
-    <p>One lean kit, many visual laboratories. No account, no install, works offline.</p>
-    <span class="tag">auralab template</span>
-  </header>
-  <main>
-    <h2>Enter</h2>
-    <p>Each laboratory below runs standalone — click one and start experimenting. Both are powered by the same kit.</p>
-    <div class="labs">
-      <a class="lab" style="--accent:#e8e6e1" href="https://github.com/GaiaSG94/AuraLab">
-        <h3>The <span class="dash">Kit</span></h3>
-        <p>The lean template itself: shell, engines, configs and docs. Browse the source on GitHub.</p>
-        <span class="open">Open repository →</span>
-      </a>
-      <a class="lab" style="--accent:#ffb454" href="dist/aura-space.html">
-        <h3>Space<span class="dash">Lab</span></h3>
-        <p>Gravity well, planets and an asteroid belt. Same kit, space configuration.</p>
-        <span class="open">Open laboratory →</span>
-      </a>
-      <a class="lab" style="--accent:#7fd069" href="dist/aura-eco.html">
-        <h3>Eco<span class="dash">Lab</span></h3>
-        <p>Rabbits, foxes, bushes and a living population chart. Same kit, eco configuration.</p>
-        <span class="open">Open laboratory →</span>
-      </a>
+  <div class="poster">
+    <span class="brand"><span class="logo" data-ghost="ink"></span>auralab</span>
+    <div class="main">
+      <div>
+        <h1>One kit. <span>Many labs.</span></h1>
+        <p class="lede">No account, no install, works offline. Each laboratory runs standalone: pick one and start experimenting.</p>
+      </div>
+      <span class="hero-ghost" data-ghost="white"></span>
     </div>
-  </main>
-  <footer>
-    Modular sources (need a static server): <a href="app-space/">app-space/</a> ·
-    <a href="app-eco/">app-eco/</a> · run <span style="font-family:var(--mono)">start-lab.bat</span> locally.
-  </footer>
+    <nav class="cards" aria-label="Laboratories">
+      <a class="card" style="--c:#fbf8ff" href="https://github.com/GaiaSG94/AuraLab">
+        <div class="t"><h2>The <em>Kit</em></h2><p>Shell, engines, configs and docs. Copy a lab folder, edit its config: same look, new lab.</p><span class="open">Open repository →</span></div>
+        <div class="vis"><pre class="tree">auralab/
+├ <b>core/</b>
+├ <b>engines/</b>
+├ <b>app-space/</b>
+└ <b>app-eco/</b></pre></div>
+      </a>
+      <a class="card" style="--c:#5b8cff" href="dist/aura-space.html">
+        <div class="t"><h2>Space<em>Lab</em></h2><p>Gravity well, planets and an asteroid belt.</p><span class="open">Open laboratory →</span></div>
+        <div class="vis"><canvas data-mini="orbit" aria-hidden="true"></canvas></div>
+      </a>
+      <a class="card" style="--c:#6cc95a" href="dist/aura-eco.html">
+        <div class="t"><h2>Eco<em>Lab</em></h2><p>Rabbits, foxes, bushes and a living population chart.</p><span class="open">Open laboratory →</span></div>
+        <div class="vis"><canvas data-mini="eco" aria-hidden="true"></canvas></div>
+      </a>
+    </nav>
+    <footer>
+      <span>auralab template · Kiroween Skeleton Crew</span>
+      <span>Modular sources (need a static server): <a href="app-space/">app-space/</a> · <a href="app-eco/">app-eco/</a> · run <code>start-lab.bat</code></span>
+    </footer>
+  </div>
+  <script src="core/ghost.js"></script>
+  <script>
+    // Ghosts (shared with the labs) + two tiny previews of the labs.
+    document.querySelectorAll("[data-ghost]").forEach((h) => window.AuraGhost && window.AuraGhost.mount(h, h.dataset.ghost));
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let seed = 61;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+    function fit(cv) {
+      const w = cv.offsetWidth, h = cv.offsetHeight, c = cv.getContext("2d");
+      cv.width = w * 2; cv.height = h * 2; c.scale(2, 2);
+      return { c, w, h };
+    }
+    function orbit(cv) {
+      const o = fit(cv), m = Math.min(o.w, o.h), cx = o.w / 2, cy = o.h / 2, K = 2.2 * Math.pow(m * 0.3, 1.5);
+      const planets = [0.15, 0.24, 0.33].map((f) => ({ r: f * m, a: rnd() * 6.28 }));
+      const belt = Array.from({ length: 70 }, () => ({ r: (0.42 + rnd() * 0.05) * m, a: rnd() * 6.28 }));
+      return (dt) => {
+        const c = o.c; c.clearRect(0, 0, o.w, o.h);
+        c.fillStyle = "#ffd9a0"; c.beginPath(); c.arc(cx, cy, m * 0.04, 0, 6.28); c.fill();
+        c.fillStyle = "#8a94a0"; belt.forEach((b) => { b.a += dt * K / Math.pow(b.r, 1.5); c.fillRect(cx + Math.cos(b.a) * b.r, cy + Math.sin(b.a) * b.r, 1, 1); });
+        c.fillStyle = "#7fc4ff"; planets.forEach((p) => { p.a += dt * K / Math.pow(p.r, 1.5); c.beginPath(); c.arc(cx + Math.cos(p.a) * p.r, cy + Math.sin(p.a) * p.r, 2.4, 0, 6.28); c.fill(); });
+      };
+    }
+    function eco(cv) {
+      const o = fit(cv), pad = 5;
+      const mk = () => ({ x: pad + rnd() * (o.w - 2 * pad), y: pad + rnd() * (o.h - 2 * pad), a: rnd() * 6.28 });
+      const R = Array.from({ length: 30 }, mk), F = Array.from({ length: 4 }, mk), B = Array.from({ length: 10 }, mk);
+      const move = (p, a, sp, dt) => {
+        p.x += Math.cos(a) * sp * dt; p.y += Math.sin(a) * sp * dt;
+        if (p.x < pad || p.x > o.w - pad) { p.a = Math.PI - a; p.x = Math.max(pad, Math.min(o.w - pad, p.x)); }
+        if (p.y < pad || p.y > o.h - pad) { p.a = -a; p.y = Math.max(pad, Math.min(o.h - pad, p.y)); }
+      };
+      return (dt) => {
+        const c = o.c; c.clearRect(0, 0, o.w, o.h);
+        R.forEach((p) => { p.a += (rnd() - 0.5) * 3 * dt; move(p, p.a, 22, dt); });
+        F.forEach((p) => {
+          let best = null, bd = 1e9;
+          R.forEach((q) => { const d = Math.hypot(q.x - p.x, q.y - p.y); if (d < bd) { bd = d; best = q; } });
+          if (best) { p.a = Math.atan2(best.y - p.y, best.x - p.x); if (bd < 4) Object.assign(best, mk()); }
+          move(p, p.a, 26, dt);
+        });
+        c.fillStyle = "#2f6b3a"; B.forEach((p) => { c.beginPath(); c.arc(p.x, p.y, 3.2, 0, 6.28); c.fill(); });
+        c.fillStyle = "#a8e05f"; R.forEach((p) => { c.beginPath(); c.arc(p.x, p.y, 2, 0, 6.28); c.fill(); });
+        c.fillStyle = "#e0784a"; F.forEach((p) => { c.beginPath(); c.arc(p.x, p.y, 3, 0, 6.28); c.fill(); });
+      };
+    }
+    const loops = [...document.querySelectorAll("canvas[data-mini]")].map((cv) => (cv.dataset.mini === "orbit" ? orbit(cv) : eco(cv)));
+    let last = 0;
+    function frame(ts) {
+      const dt = reduce ? 0 : Math.min(0.05, (ts - last) / 1000 || 0.016);
+      last = ts;
+      loops.forEach((f) => f(dt));
+      if (!reduce) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  </script>
 </body>
 </html>

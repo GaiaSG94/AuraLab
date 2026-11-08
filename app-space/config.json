@@ -4,6 +4,7 @@
     "title": "Aura-Space",
     "subtitle": "Gravity well, planets and an asteroid belt — rendered by the shared AuraLab core.",
     "accent": "#ffb454",
+    "page": "#5b8cff",
     "note": "Same kit as Aura-Eco. Only this lab differs: substances, material, laws and instruments."
   },
   "bench": {

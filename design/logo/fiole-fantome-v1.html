@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>auralab · fiole-fantôme v1</title>
+<!--
+  Version 1 du logo animé, gelée le 2026-11-08.
+  Comportement : les yeux suivent le curseur (3.2 unités max en x, 2.6 en y,
+  pleine amplitude à 260 px), clignement toutes les 6 s. Couleurs : fond nuit,
+  corps #efeaff, yeux #0f0d16, bulles #ff8a3d.
+-->
+<style>
+  html, body { margin: 0; height: 100%; background: #0f0d16; display: grid; place-items: center; }
+  svg { width: min(60vmin, 420px); height: auto; overflow: visible; }
+  .lid { transform-box: fill-box; transform-origin: center; animation: blink 6s infinite; }
+  @keyframes blink { 0%, 95%, 100% { transform: scaleY(1); } 97.5% { transform: scaleY(.08); } }
+  @media (prefers-reduced-motion: reduce) { .lid { animation: none; } }
+</style>
+</head>
+<body>
+<svg id="ghost" viewBox="0 0 100 100" role="img" aria-label="auralab">
+  <circle cx="67" cy="16" r="3.6" fill="#ff8a3d"/>
+  <circle cx="74" cy="6.5" r="2.2" fill="#ff8a3d" opacity=".75"/>
+  <rect x="36" y="18" width="28" height="6" rx="3" fill="#efeaff"/>
+  <path d="M41 22 H59 V36 Q81 45 81 68 V86 Q75.8 80 70.7 86 Q65.5 92 60.3 86 Q55.2 80 50 86 Q44.8 92 39.7 86 Q34.5 80 29.3 86 Q24.2 92 19 86 V68 Q19 45 41 36 Z" fill="#efeaff"/>
+  <g id="eyes">
+    <ellipse class="lid" cx="41" cy="62" rx="4.6" ry="6.2" fill="#0f0d16"/>
+    <ellipse class="lid" cx="59" cy="62" rx="4.6" ry="6.2" fill="#0f0d16"/>
+  </g>
+</svg>
+<script>
+  const ghost = document.getElementById("ghost");
+  const eyes = document.getElementById("eyes");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  addEventListener("pointermove", (e) => {
+    if (reduce) return;
+    const r = ghost.getBoundingClientRect();
+    const dx = e.clientX - (r.left + r.width / 2);
+    const dy = e.clientY - (r.top + r.height * 0.6);
+    const d = Math.hypot(dx, dy) || 1;
+    const k = Math.min(1, d / 260);
+    eyes.setAttribute("transform", `translate(${(dx / d * 3.2 * k).toFixed(2)} ${(dy / d * 2.6 * k).toFixed(2)})`);
+  });
+</script>
+</body>
+</html>

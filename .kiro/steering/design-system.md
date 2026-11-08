@@ -1,18 +1,28 @@
 # Steering — Design system
 
-Visual rules for the AuraLab dashboard (dark lab aesthetic).
+Visual rules for every AuraLab page. They live in `core/styles.css`,
+`core/shell.js` and `core/ghost.js`, so any lab built on `core/` looks the
+same without writing CSS.
 
-- Canvas: near-black background (`#07090c`-ish, per lab), thin motion trails,
-  restrained glow only on wells and bodies — never on UI panels.
-- UI: flat dark panels (`#12161b`), 1px hairline borders (`#232b34`),
-  small radii (4–6px), no gradients, no glassmorphism, no hero sections.
-- Accent: exactly one per lab, injected from `lab.accent`. Used sparingly:
-  title marker, slider fill, numeric readouts, primary button.
-- Type: system stack for labels, monospace for numbers/HUD chips. Uppercase
-  micro-labels only for sidebar section titles.
-- HUD: small translucent chips over the canvas (counts, fps), plus one
-  optional history chart bottom-left. Never cover the action.
-- Motion: pause/reset always available; start paused when
-  `prefers-reduced-motion` is set.
-- New labs inherit all of this for free by using `core/` — do not restyle
-  per lab beyond `accent` and `background`.
+- Page: one flat color per lab, from `lab.page` (space `#5b8cff`, eco
+  `#6cc95a`, portal `#ff8a3d`). Ink text (`#17141f`) sits on it, so keep the
+  color mid-light. No gradients, no glassmorphism, no shadows on cards.
+- Layout (lab): header (ghost logo, lab name in lowercase, "← all labs"),
+  then three columns that never overlap: steps | bench | panel.
+  - Steps (left): Lab, Laws, Knobs, Notebook (only the declared ones), then
+    the lab note and Pause / Reset / +1 step at the bottom.
+  - Bench (center): ink card holding the canvas at its real pixel size.
+    Nothing is drawn over the scene.
+  - Panel (right): paper card showing one step at a time. The Lab step shows
+    substances (jar icons), material and instruments together.
+- Instruments are measuring devices, never styled like substances: grey box,
+  gauge icon, black screen with green mono readouts (counter) or lines (curve).
+- Type: Archivo condensed 900 in caps for titles, Archivo for text,
+  JetBrains Mono for numbers. System fonts take over offline.
+- Accent `lab.accent` stays in the config for older labs; the page color does
+  the theming. Particle colors come from the substances.
+- The flask ghost (`core/ghost.js`) is the logo and the notebook guide: eyes
+  follow the pointer, blink, close on hover; bubbles rise from the flask.
+  Static when `prefers-reduced-motion` is set; the lab then starts paused.
+- New labs inherit all of this by using `core/`. Do not restyle per lab beyond
+  `lab.page` and `bench.background`.
