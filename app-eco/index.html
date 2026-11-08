@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aura-Eco — AuraLab</title>
+  <link rel="stylesheet" href="../core/styles.css" />
+</head>
+<body>
+  <div id="lab"><div class="boot-hint">Loading lab…<br />If this message stays, don't double-click this file: run <b>start-lab.bat</b> and open <b>http://localhost:8080/app-eco/</b> instead.</div></div>
+  <script type="module">
+    import { boot } from "../core/shell.js";
+    import { buildLab, labManifest } from "./lab.js";
+    import { particlePack } from "../engines/particles/index.js";
+    boot("config.json", buildLab, labManifest, [particlePack]);
+  </script>
+</body>
+</html>

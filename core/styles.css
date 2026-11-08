@@ -1,0 +1,335 @@
+/* AuraLab core — dark lab dashboard (generic, accent comes from lab config) */
+:root {
+  --bg: #0b0e11;
+  --panel: #12161b;
+  --panel-2: #171d24;
+  --line: #232b34;
+  --text: #e8e6e1;
+  --muted: #9aa3ab;
+  --accent: #ffb454;
+  --danger: #e0655a;
+  --radius: 6px;
+  --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.lab-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 14px 20px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.lab-header h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.lab-header h1 .dot {
+  color: var(--accent);
+}
+
+.lab-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.lab-header .template-tag {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.lab-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 264px;
+  gap: 0;
+  min-height: calc(100vh - 57px);
+}
+
+.stage {
+  position: relative;
+  min-width: 0;
+  background: #07090c;
+}
+
+.stage canvas {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 57px);
+}
+
+.hud {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.chip {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: rgba(11, 14, 17, 0.82);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 9px;
+  color: var(--text);
+}
+
+.chip b { font-weight: 700; }
+.chip .unit { color: var(--muted); font-size: 10.5px; }
+.chip .swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 6px;
+  vertical-align: baseline;
+}
+
+.history {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  background: rgba(11, 14, 17, 0.88);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px 10px 6px;
+}
+
+.history h2 {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.history canvas { width: 220px; height: 64px; }
+
+.sidebar {
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+  padding: 14px 14px 20px;
+  overflow-y: auto;
+}
+
+.sidebar section { margin-bottom: 18px; }
+
+.sidebar h2 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.control { margin-bottom: 12px; }
+
+.control label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  margin-bottom: 4px;
+}
+
+.control label output {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.control input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.btn-row { display: flex; gap: 8px; }
+
+button {
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.btn-row button { flex: 1; }
+
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: 0.45; cursor: default; }
+button:disabled:hover { border-color: var(--line); }
+
+button.mini {
+  font-size: 11px;
+  padding: 1px 7px;
+  margin-left: 6px;
+}
+
+button.wide { width: 100%; margin: 6px 0 8px; }
+
+/* Category element rows: checkbox + name + live value + notice. */
+.elem { margin-bottom: 8px; }
+
+.elem-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.elem-row input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.elem-row .swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+
+button.elem-name {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  font-size: 12.5px;
+}
+
+button.elem-name:hover { color: var(--accent); }
+button.elem-name:disabled:hover { color: var(--text); }
+
+.elem-row .live {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--accent);
+}
+
+.notice {
+  margin: 4px 0 6px 22px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  border-left: 2px solid var(--line);
+}
+
+.notice b { color: var(--text); font-weight: 600; }
+.notice i { font-style: normal; color: var(--text); }
+
+/* Notebook. */
+.notebook .prompts {
+  margin: 0 0 10px 16px;
+  padding: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.note-row { display: flex; gap: 8px; margin-bottom: 8px; }
+
+.note-row input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px 9px;
+}
+
+.notes, .snapshots {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  font-size: 12px;
+}
+
+.notes li, .snapshots li {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.notes .t, .snapshots .t {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  margin-right: 6px;
+}
+
+.note {
+  font-size: 12px;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.boot-hint {
+  max-width: 560px;
+  margin: 60px auto;
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.boot-hint b { color: var(--text); font-weight: 600; }
+
+.error {
+  margin: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  color: #f2b8b3;
+  background: #1c1214;
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  .lab-main { grid-template-columns: 1fr; }
+  .sidebar { border-left: 0; border-top: 1px solid var(--line); }
+  .stage canvas { height: 60vh; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage canvas { image-rendering: auto; }
+}

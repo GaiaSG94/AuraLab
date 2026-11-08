@@ -1,0 +1,2073 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Aura-Space — AuraLab (standalone)</title>
+<style>
+/* AuraLab core — dark lab dashboard (generic, accent comes from lab config) */
+:root {
+  --bg: #0b0e11;
+  --panel: #12161b;
+  --panel-2: #171d24;
+  --line: #232b34;
+  --text: #e8e6e1;
+  --muted: #9aa3ab;
+  --accent: #ffb454;
+  --danger: #e0655a;
+  --radius: 6px;
+  --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.lab-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 14px 20px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.lab-header h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.lab-header h1 .dot {
+  color: var(--accent);
+}
+
+.lab-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.lab-header .template-tag {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.lab-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 264px;
+  gap: 0;
+  min-height: calc(100vh - 57px);
+}
+
+.stage {
+  position: relative;
+  min-width: 0;
+  background: #07090c;
+}
+
+.stage canvas {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 57px);
+}
+
+.hud {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.chip {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: rgba(11, 14, 17, 0.82);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 9px;
+  color: var(--text);
+}
+
+.chip b { font-weight: 700; }
+.chip .unit { color: var(--muted); font-size: 10.5px; }
+.chip .swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 6px;
+  vertical-align: baseline;
+}
+
+.history {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  background: rgba(11, 14, 17, 0.88);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px 10px 6px;
+}
+
+.history h2 {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.history canvas { width: 220px; height: 64px; }
+
+.sidebar {
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+  padding: 14px 14px 20px;
+  overflow-y: auto;
+}
+
+.sidebar section { margin-bottom: 18px; }
+
+.sidebar h2 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.control { margin-bottom: 12px; }
+
+.control label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  margin-bottom: 4px;
+}
+
+.control label output {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.control input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.btn-row { display: flex; gap: 8px; }
+
+button {
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.btn-row button { flex: 1; }
+
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: 0.45; cursor: default; }
+button:disabled:hover { border-color: var(--line); }
+
+button.mini {
+  font-size: 11px;
+  padding: 1px 7px;
+  margin-left: 6px;
+}
+
+button.wide { width: 100%; margin: 6px 0 8px; }
+
+/* Category element rows: checkbox + name + live value + notice. */
+.elem { margin-bottom: 8px; }
+
+.elem-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.elem-row input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.elem-row .swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+
+button.elem-name {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  font-size: 12.5px;
+}
+
+button.elem-name:hover { color: var(--accent); }
+button.elem-name:disabled:hover { color: var(--text); }
+
+.elem-row .live {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--accent);
+}
+
+.notice {
+  margin: 4px 0 6px 22px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  border-left: 2px solid var(--line);
+}
+
+.notice b { color: var(--text); font-weight: 600; }
+.notice i { font-style: normal; color: var(--text); }
+
+/* Notebook. */
+.notebook .prompts {
+  margin: 0 0 10px 16px;
+  padding: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.note-row { display: flex; gap: 8px; margin-bottom: 8px; }
+
+.note-row input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px 9px;
+}
+
+.notes, .snapshots {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  font-size: 12px;
+}
+
+.notes li, .snapshots li {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.notes .t, .snapshots .t {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+  margin-right: 6px;
+}
+
+.note {
+  font-size: 12px;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.boot-hint {
+  max-width: 560px;
+  margin: 60px auto;
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.boot-hint b { color: var(--text); font-weight: 600; }
+
+.error {
+  margin: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  color: #f2b8b3;
+  background: #1c1214;
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  .lab-main { grid-template-columns: 1fr; }
+  .sidebar { border-left: 0; border-top: 1px solid var(--line); }
+  .stage canvas { height: 60vh; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage canvas { image-rendering: auto; }
+}
+
+</style>
+</head>
+<body>
+<div id="lab"><div class="boot-hint">Loading lab…<br />If this message stays, enable JavaScript or open this file in a recent browser.</div></div>
+<script>
+// ---- core/catalog.js (inlined) ----
+// AuraLab core — unified catalog, organized by categories.
+// The catalog is the single list of everything a lab can order:
+// laws, apparatus, instruments (+metrics), substances molds, surfaces.
+// Built-ins ship with the kit; packs and labs extend it. Merged at boot.
+
+const builtinInstruments = {
+  chips: {
+    label: "Chips",
+    notice: {
+      label: "Chips",
+      formule: "Each chip shows one live metric value + unit, refreshed every frame.",
+      sources: "Kit built-in readout (no model).",
+      limites: "No history; for trends use the curve instrument.",
+    },
+  },
+  curve: {
+    label: "Curve",
+    notice: {
+      label: "Curve",
+      formule: "Samples each listed metric every 0.25 s and draws one line per metric.",
+      sources: "Kit built-in chart (no model).",
+      limites: "Fixed sample count window; linear time axis only.",
+    },
+  },
+};
+
+const builtinControls = {
+  slider: {
+    label: "Slider",
+    notice: {
+      label: "Slider",
+      formule: "Binds a numeric config path to a [min, max] range control.",
+      sources: "Kit built-in control (no model).",
+      limites: "Numbers only; one path per slider.",
+    },
+  },
+};
+
+const builtinSurfaces = {
+  stage: {
+    label: "Stage",
+    notice: {
+      label: "Stage",
+      formule: "Main 2D canvas: background + optional speckles + lab drawing, with motion trails.",
+      sources: "Kit built-in surface (no model).",
+      limites: "2D only; one stage per lab.",
+    },
+  },
+};
+
+// Merge pack manifests + lab-local additions into one catalog.
+// Each manifest: { laws?: {id: lawModule}, apparatus?: {kind: {notice, defaults}} }
+function mergeCatalog(manifests) {
+  const catalog = { laws: {}, apparatus: {} };
+  for (const m of manifests) {
+    if (!m) continue;
+    Object.assign(catalog.laws, m.laws || {});
+    Object.assign(catalog.apparatus, m.apparatus || {});
+  }
+  return catalog;
+}
+
+// Flat list of one category for "+" menus and docs: [{id, label, notice}]
+function listCategory(catalog, category) {
+  const buckets = {
+    laws: catalog.laws,
+    apparatus: catalog.apparatus,
+    instruments: builtinInstruments,
+    controls: builtinControls,
+    surfaces: builtinSurfaces,
+  };
+  const bucket = buckets[category] || {};
+  return Object.keys(bucket).map((id) => ({
+    id,
+    label: (bucket[id] && (bucket[id].label || (bucket[id].notice && bucket[id].notice.label))) || id,
+    notice: (bucket[id] && bucket[id].notice) || null,
+  }));
+}
+
+function getLaw(catalog, id) {
+  return catalog.laws[id] || null;
+}
+
+// ---- core/validate.js (inlined) ----
+// AuraLab core — config validation + auto-tuning (shared by browser and Node).
+// Invalid numbers are clamped with a warning; only structural problems are errors.
+// known = { laws: {id: {defaults}}, apparatus: [kinds], instruments: [types],
+//           measures: [ids], surfaces: [names] }
+
+const HEX_COLOR = /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/;
+const BOUNDS = new Set(["wrap", "bounce"]);
+const MAX_PARTICLES = 1500;
+const MAX_SUBSTANCES = 8;
+
+function getPath(obj, path) {
+  let cur = obj;
+  for (const seg of path.split(".")) {
+    if (cur === null || typeof cur !== "object") return undefined;
+    cur = cur[seg];
+  }
+  return cur;
+}
+
+function setPath(obj, path, value) {
+  const segs = path.split(".");
+  let cur = obj;
+  for (let i = 0; i < segs.length - 1; i++) {
+    cur = cur[segs[i]];
+    if (cur === null || typeof cur !== "object") return false;
+  }
+  const leaf = segs[segs.length - 1];
+  if (typeof cur[leaf] !== "number") return false;
+  cur[leaf] = value;
+  return true;
+}
+
+function isFiniteNumber(v) {
+  return typeof v === "number" && Number.isFinite(v);
+}
+
+function clamp(v, min, max) {
+  return Math.min(max, Math.max(min, v));
+}
+
+/**
+ * @param {unknown} raw parsed JSON
+ * @param {object} known catalog references (law ids, apparatus kinds, ...)
+ * @returns {{ config: object|null, warnings: string[], errors: string[] }}
+ */
+function validateConfig(raw, known) {
+  const warnings = [];
+  const errors = [];
+  const fix = (msg) => warnings.push(msg);
+  known = known || { laws: {}, apparatus: [], instruments: [], measures: [], surfaces: [] };
+
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return { config: null, warnings, errors: ["config root must be an object"] };
+  }
+  const config = JSON.parse(JSON.stringify(raw));
+
+  // --- lab ---
+  if (config.lab === null || typeof config.lab !== "object") {
+    errors.push("lab: missing object with title/subtitle/accent");
+  } else {
+    if (typeof config.lab.title !== "string" || !config.lab.title.trim()) {
+      errors.push("lab.title: required non-empty string");
+    }
+    if (typeof config.lab.id !== "string" || !config.lab.id.trim()) {
+      errors.push("lab.id: required non-empty string (used for notebook storage)");
+    }
+    if (typeof config.lab.subtitle !== "string") config.lab.subtitle = "";
+    if (typeof config.lab.accent !== "string" || !HEX_COLOR.test(config.lab.accent)) {
+      errors.push("lab.accent: required hex color like #ffb454");
+    }
+    if (typeof config.lab.note !== "string") config.lab.note = "";
+  }
+
+  // --- bench ---
+  config.bench = config.bench && typeof config.bench === "object" ? config.bench : {};
+  if (typeof config.bench.background !== "string") config.bench.background = "#07090c";
+  if (!isFiniteNumber(config.bench.trail)) {
+    config.bench.trail = 0.25;
+    fix("bench.trail reset to 0.25 (must be a finite number)");
+  } else if (config.bench.trail < 0.05 || config.bench.trail > 1) {
+    config.bench.trail = clamp(config.bench.trail, 0.05, 1);
+    fix(`bench.trail clamped to ${config.bench.trail}`);
+  }
+  if (!isFiniteNumber(config.bench.speckles)) {
+    config.bench.speckles = 0;
+  } else {
+    config.bench.speckles = Math.round(clamp(config.bench.speckles, 0, 600));
+  }
+
+  // --- bounds ---
+  if (!BOUNDS.has(config.bounds)) {
+    config.bounds = "wrap";
+    fix('bounds reset to "wrap"');
+  }
+
+  // --- substances ---
+  if (!Array.isArray(config.substances)) config.substances = [];
+  if (config.substances.length > MAX_SUBSTANCES) {
+    config.substances.length = MAX_SUBSTANCES;
+    fix(`substances truncated to ${MAX_SUBSTANCES}`);
+  }
+  const subIds = new Set();
+  let total = 0;
+  config.substances.forEach((s, i) => {
+    if (s === null || typeof s !== "object") {
+      errors.push(`substances.${i}: must be an object`);
+      return;
+    }
+    if (typeof s.id !== "string" || !s.id.trim()) {
+      errors.push(`substances.${i}.id: required non-empty string`);
+      s.id = `substance-${i}`;
+    }
+    if (subIds.has(s.id)) errors.push(`substances.${i}.id: duplicate id "${s.id}"`);
+    subIds.add(s.id);
+    if (typeof s.label !== "string") s.label = s.id;
+    if (!isFiniteNumber(s.count)) {
+      s.count = 0;
+      fix(`substances.${i}.count reset to 0`);
+    } else {
+      const clamped = Math.round(clamp(s.count, 0, 800));
+      if (clamped !== s.count) fix(`substances.${i}.count clamped to ${clamped}`);
+      s.count = clamped;
+    }
+    total += s.count;
+    if (typeof s.color !== "string" || !HEX_COLOR.test(s.color)) {
+      s.color = "#9ad1ff";
+      fix(`substances.${i}.color reset to #9ad1ff`);
+    }
+    if (!isFiniteNumber(s.radius) || s.radius <= 0) {
+      s.radius = 3;
+      fix(`substances.${i}.radius reset to 3`);
+    } else {
+      s.radius = clamp(s.radius, 0.5, 30);
+    }
+    if (!isFiniteNumber(s.mass) || s.mass <= 0) {
+      s.mass = 1;
+      fix(`substances.${i}.mass reset to 1`);
+    } else {
+      s.mass = clamp(s.mass, 0.1, 100);
+    }
+    if (!isFiniteNumber(s.speed)) s.speed = 60;
+    else s.speed = clamp(s.speed, 0, 600);
+    if (s.ring !== undefined) {
+      if (!Array.isArray(s.ring) || s.ring.length !== 2 || !s.ring.every(isFiniteNumber)) {
+        s.ring = [0.15, 0.42];
+        fix(`substances.${i}.ring reset to [0.15, 0.42]`);
+      }
+    }
+    if (s.links !== undefined && s.links !== null && typeof s.links !== "object") {
+      s.links = null;
+      fix(`substances.${i}.links reset to null`);
+    }
+    if (s.links && !isFiniteNumber(s.links.distance)) {
+      s.links.distance = 80;
+      fix(`substances.${i}.links.distance reset to 80`);
+    }
+    if (typeof s.active !== "boolean") s.active = true;
+  });
+  if (total > MAX_PARTICLES) {
+    errors.push(`total particles ${total} exceeds cap ${MAX_PARTICLES}`);
+  }
+
+  // --- material (apparatus) ---
+  if (!Array.isArray(config.material)) config.material = [];
+  const matIds = new Set();
+  config.material.forEach((m, i) => {
+    if (m === null || typeof m !== "object") {
+      errors.push(`material.${i}: must be an object`);
+      return;
+    }
+    if (typeof m.id !== "string" || !m.id.trim()) {
+      errors.push(`material.${i}.id: required non-empty string`);
+      m.id = `material-${i}`;
+    }
+    if (matIds.has(m.id)) errors.push(`material.${i}.id: duplicate id "${m.id}"`);
+    matIds.add(m.id);
+    if (typeof m.label !== "string") m.label = m.id;
+    if (!known.apparatus.includes(m.kind)) {
+      errors.push(`material.${i}.kind: unknown apparatus "${m.kind}" (known: ${known.apparatus.join(", ") || "none"})`);
+    }
+    for (const k of ["x", "y"]) {
+      if (m[k] === undefined) continue;
+      if (!isFiniteNumber(m[k])) {
+        m[k] = 0.5;
+        fix(`material.${i}.${k} reset to 0.5`);
+      } else {
+        m[k] = clamp(m[k], 0, 1);
+      }
+    }
+    if (m.strength !== undefined) {
+      if (!isFiniteNumber(m.strength)) {
+        m.strength = 0;
+        fix(`material.${i}.strength reset to 0`);
+      } else if (m.strength < -5000 || m.strength > 5000) {
+        m.strength = clamp(m.strength, -5000, 5000);
+        fix(`material.${i}.strength clamped to ${m.strength}`);
+      }
+    }
+    if (m.radius !== undefined && (!isFiniteNumber(m.radius) || m.radius <= 0)) {
+      m.radius = 20;
+      fix(`material.${i}.radius reset to 20`);
+    }
+    if (m.color !== undefined && (typeof m.color !== "string" || !HEX_COLOR.test(m.color))) {
+      m.color = "#ffffff";
+      fix(`material.${i}.color reset to #ffffff`);
+    }
+    if (typeof m.active !== "boolean") m.active = true;
+  });
+
+  // --- laws ---
+  if (!Array.isArray(config.laws)) config.laws = [];
+  config.laws.forEach((l, i) => {
+    if (l === null || typeof l !== "object") {
+      errors.push(`laws.${i}: must be an object`);
+      return;
+    }
+    if (!known.laws[l.law]) {
+      errors.push(`laws.${i}.law: unknown law "${l.law}" (known: ${Object.keys(known.laws).join(", ") || "none"})`);
+      return;
+    }
+    if (l.targets !== undefined) {
+      if (!Array.isArray(l.targets)) {
+        errors.push(`laws.${i}.targets: must be an array of substance ids`);
+      } else {
+        l.targets.forEach((t) => {
+          if (!subIds.has(t)) errors.push(`laws.${i}.targets: unknown substance "${t}"`);
+        });
+      }
+    }
+    if (l.params !== undefined && (l.params === null || typeof l.params !== "object")) {
+      errors.push(`laws.${i}.params: must be an object`);
+    }
+    // pair references (hunt/flee/predation style laws) must name existing substances
+    const pairs = l.params && l.params.pairs;
+    if (pairs !== undefined) {
+      if (!Array.isArray(pairs)) {
+        errors.push(`laws.${i}.params.pairs: must be an array of [a, b] substance pairs`);
+      } else {
+        pairs.forEach((p) => {
+          if (!Array.isArray(p) || p.length !== 2 || !subIds.has(p[0]) || !subIds.has(p[1])) {
+            errors.push(`laws.${i}.params.pairs: each pair must be two existing substance ids`);
+          }
+        });
+      }
+    }
+    if (typeof l.active !== "boolean") l.active = true;
+  });
+
+  // --- metrics ---
+  if (!Array.isArray(config.metrics)) config.metrics = [];
+  const metricIds = new Set();
+  config.metrics.forEach((m, i) => {
+    if (m === null || typeof m !== "object") {
+      errors.push(`metrics.${i}: must be an object`);
+      return;
+    }
+    if (typeof m.id !== "string" || !m.id.trim()) {
+      errors.push(`metrics.${i}.id: required non-empty string`);
+      m.id = `metric-${i}`;
+    }
+    if (metricIds.has(m.id)) errors.push(`metrics.${i}.id: duplicate id "${m.id}"`);
+    metricIds.add(m.id);
+    if (typeof m.label !== "string") m.label = m.id;
+    if (typeof m.unit !== "string") m.unit = "";
+    if (typeof m.source !== "string") {
+      errors.push(`metrics.${i}.source: required string (counts.<substance> or a lab measure)`);
+    } else if (m.source.startsWith("counts.")) {
+      if (!subIds.has(m.source.slice(7))) errors.push(`metrics.${i}.source: unknown substance in "${m.source}"`);
+    } else if (!known.measures.includes(m.source)) {
+      errors.push(`metrics.${i}.source: unknown measure "${m.source}" (known: counts.<substance>, ${known.measures.join(", ") || "none"})`);
+    }
+    if (typeof m.color !== "string" || !HEX_COLOR.test(m.color)) {
+      m.color = "#e8e6e1";
+      fix(`metrics.${i}.color reset to #e8e6e1`);
+    }
+  });
+
+  // --- instruments ---
+  if (!Array.isArray(config.instruments)) config.instruments = [];
+  config.instruments.forEach((ins, i) => {
+    if (ins === null || typeof ins !== "object") {
+      errors.push(`instruments.${i}: must be an object`);
+      return;
+    }
+    if (!known.instruments.includes(ins.type)) {
+      errors.push(`instruments.${i}.type: unknown instrument "${ins.type}" (known: ${known.instruments.join(", ") || "none"})`);
+    }
+    if (typeof ins.title !== "string") ins.title = "";
+    if (!Array.isArray(ins.metrics)) {
+      errors.push(`instruments.${i}.metrics: required array of metric ids`);
+      ins.metrics = [];
+    } else {
+      ins.metrics.forEach((id) => {
+        if (!metricIds.has(id)) errors.push(`instruments.${i}.metrics: unknown metric "${id}"`);
+      });
+    }
+    if (ins.samples !== undefined) {
+      if (!isFiniteNumber(ins.samples)) ins.samples = 120;
+      else ins.samples = Math.round(clamp(ins.samples, 10, 600));
+    }
+    if (typeof ins.active !== "boolean") ins.active = true;
+  });
+
+  // --- controls (paths resolve into lab state skeleton) ---
+  const skeleton = { substances: {}, material: {}, laws: [], bench: { trail: 0, speckles: 0 } };
+  config.substances.forEach((s) => {
+    skeleton.substances[s.id] = { count: 0, radius: 0, mass: 0, speed: 0 };
+  });
+  config.material.forEach((m) => {
+    skeleton.material[m.id] = { x: 0, y: 0, strength: 0, radius: 0 };
+  });
+  config.laws.forEach((l) => {
+    const defs = (known.laws[l.law] && known.laws[l.law].defaults) || {};
+    const leaf = {};
+    Object.keys(defs).forEach((k) => {
+      leaf[k] = 0;
+    });
+    skeleton.laws.push(leaf);
+  });
+  if (!Array.isArray(config.controls)) config.controls = [];
+  config.controls.forEach((c, i) => {
+    if (c === null || typeof c !== "object") {
+      errors.push(`controls.${i}: must be an object`);
+      return;
+    }
+    if (typeof c.path !== "string" || getPath(skeleton, c.path) === undefined) {
+      errors.push(`controls.${i}.path: must point to a numeric value (substances.<id>.count, material.<id>.strength, laws.<n>.<param>)`);
+    }
+    if (typeof c.label !== "string") c.label = c.path;
+    for (const k of ["min", "max", "step"]) {
+      if (!isFiniteNumber(c[k])) errors.push(`controls.${i}.${k}: required finite number`);
+    }
+    if (isFiniteNumber(c.min) && isFiniteNumber(c.max) && c.min >= c.max) {
+      errors.push(`controls.${i}: min must be < max`);
+    }
+  });
+
+  // --- notebook ---
+  config.notebook = config.notebook && typeof config.notebook === "object" ? config.notebook : {};
+  if (typeof config.notebook.enabled !== "boolean") config.notebook.enabled = true;
+  if (!Array.isArray(config.notebook.prompts)) config.notebook.prompts = [];
+  config.notebook.prompts = config.notebook.prompts.filter((p) => typeof p === "string");
+
+  if (errors.length > 0) return { config: null, warnings, errors };
+  return { config, warnings, errors };
+}
+
+// ---- core/time.js (inlined) ----
+// AuraLab core — time services: clock, play/pause/reset/step wiring (no DOM inside).
+function createClock() {
+  return {
+    t: 0,
+    running: true,
+    advance(dt) {
+      this.t += dt;
+    },
+    reset() {
+      this.t = 0;
+    },
+  };
+}
+
+// ---- core/controls.js (inlined) ----
+// AuraLab core — controls: build config-declared sliders bound to live state paths.
+
+function el(tag, cls, html) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (html !== undefined) n.innerHTML = html;
+  return n;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+}
+
+function hexToRgb(hex) {
+  const h = String(hex).replace("#", "");
+  const v = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)];
+}
+
+// parent: sidebar element; onChange called after every input (for resync/redraw).
+function buildControls(parent, config, state, onChange) {
+  if (config.controls.length === 0) return;
+  const sec = el("section", "", "<h2>Controls</h2>");
+  for (const c of config.controls) {
+    const wrap = el("div", "control");
+    const label = el("label", "", `${escapeHtml(c.label)} <output></output>`);
+    const out = label.querySelector("output");
+    const input = el("input");
+    input.type = "range";
+    input.min = String(c.min);
+    input.max = String(c.max);
+    input.step = String(c.step);
+    const show = (v) => {
+      out.textContent = String(Math.round(v * 100) / 100);
+    };
+    const current = () => getPath(state, c.path);
+    input.value = String(current());
+    show(current());
+    input.addEventListener("input", () => {
+      const v = parseFloat(input.value);
+      if (setPath(state, c.path, v)) {
+        show(v);
+        onChange(c.path);
+      }
+    });
+    // Refresh shown value when state changes elsewhere (snapshot restore).
+    wrap.refresh = () => {
+      input.value = String(current());
+      show(current());
+    };
+    wrap.appendChild(label);
+    wrap.appendChild(input);
+    sec.appendChild(wrap);
+  }
+  sec.refreshAll = () => {
+    sec.querySelectorAll(":scope > .control").forEach((w) => {
+      if (w.refresh) w.refresh();
+    });
+  };
+  parent.appendChild(sec);
+}
+
+// ---- core/instruments.js (inlined) ----
+// AuraLab core — instruments: chips (live values) and curve (history chart).
+// Fed by metric values each frame; the lab decides what metrics mean.
+
+// Returns { update(values), sample() } where values = {metricId: number}.
+function buildChips(hud, entry, metricsById) {
+  const cells = entry.metrics.map((id) => {
+    const m = metricsById[id];
+    const c = el(
+      "span",
+      "chip",
+      `<span class="swatch" style="background:${m.color}"></span>${escapeHtml(m.label)}: <b>0</b>${m.unit ? ` <span class="unit">${escapeHtml(m.unit)}</span>` : ""}`
+    );
+    hud.appendChild(c);
+    return c.querySelector("b");
+  });
+  const box = el("span", "chip", "");
+  box.style.display = "none";
+  return {
+    element: null,
+    update(values) {
+      entry.metrics.forEach((id, i) => {
+        const v = values[id];
+        cells[i].textContent = v === undefined ? "–" : String(Math.round(v * 100) / 100);
+      });
+    },
+    sample() {},
+    setVisible() {},
+  };
+}
+
+// Small multiples-free single chart; one line per metric.
+function buildCurve(stage, entry, metricsById) {
+  const box = el("div", "history", `<h2>${escapeHtml(entry.title || "History")}</h2>`);
+  const hc = el("canvas");
+  hc.width = 440;
+  hc.height = 128;
+  box.appendChild(hc);
+  stage.appendChild(box);
+  const ctx = hc.getContext("2d");
+  const samples = entry.samples || 120;
+  const series = entry.metrics.map(() => []);
+  return {
+    element: box,
+    update() {},
+    sample(values) {
+      entry.metrics.forEach((id, i) => {
+        series[i].push(values[id] === undefined ? 0 : values[id]);
+        if (series[i].length > samples) series[i].shift();
+      });
+      draw();
+    },
+    reset() {
+      series.forEach((s) => {
+        s.length = 0;
+      });
+      draw();
+    },
+    setVisible(v) {
+      box.style.display = v ? "" : "none";
+    },
+  };
+  function draw() {
+    const hw = 440;
+    const hh = 128;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, hw, hh);
+    ctx.fillStyle = "#0b0e11";
+    ctx.fillRect(0, 0, hw, hh);
+    let peak = 4;
+    for (const s of series) for (const v of s) if (v > peak) peak = v;
+    series.forEach((s, i) => {
+      if (s.length < 2) return;
+      ctx.strokeStyle = metricsById[entry.metrics[i]].color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      s.forEach((v, k) => {
+        const x = (k / (samples - 1)) * hw;
+        const y = hh - 6 - (v / peak) * (hh - 14);
+        if (k === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    });
+  }
+}
+
+// ---- core/notebook.js (inlined) ----
+// AuraLab core — notebook: timestamped notes + measure snapshots at instant t.
+// Snapshots store metric values and tunable params; restoring re-applies params.
+
+function storageKey(labId) {
+  return `auralab.${labId}.notebook`;
+}
+
+function load(labId) {
+  try {
+    const raw = localStorage.getItem(storageKey(labId));
+    if (!raw) return { notes: [], snapshots: [] };
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data.notes)) data.notes = [];
+    if (!Array.isArray(data.snapshots)) data.snapshots = [];
+    return data;
+  } catch {
+    return { notes: [], snapshots: [] };
+  }
+}
+
+function save(labId, data) {
+  try {
+    localStorage.setItem(storageKey(labId), JSON.stringify(data));
+  } catch {
+    /* private mode: notebook works for the session only */
+  }
+}
+
+// getState: () => ({ t, metrics: {id: value}, params: clonable })
+// onRestore(params): re-apply params + resync + redraw
+function buildNotebook(parent, config, getState, onRestore) {
+  if (!config.notebook.enabled) return null;
+  const data = load(config.lab.id);
+  const sec = el("section", "notebook", "<h2>Notebook</h2>");
+
+  if (config.notebook.prompts.length > 0) {
+    const ul = el("ul", "prompts");
+    config.notebook.prompts.forEach((p) => {
+      ul.appendChild(el("li", "", escapeHtml(p)));
+    });
+    sec.appendChild(ul);
+  }
+
+  const noteRow = el("div", "note-row");
+  const noteInput = el("input");
+  noteInput.type = "text";
+  noteInput.placeholder = "Note an observation…";
+  noteInput.setAttribute("aria-label", "Notebook note");
+  const noteBtn = el("button", "", "Note");
+  noteBtn.addEventListener("click", () => {
+    const text = noteInput.value.trim();
+    if (!text) return;
+    data.notes.push({ t: getState().t, text });
+    noteInput.value = "";
+    save(config.lab.id, data);
+    renderNotes();
+  });
+  noteInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") noteBtn.click();
+  });
+  noteRow.appendChild(noteInput);
+  noteRow.appendChild(noteBtn);
+  sec.appendChild(noteRow);
+
+  const notesList = el("ul", "notes");
+  sec.appendChild(notesList);
+
+  const snapBtn = el("button", "wide", "Record measures at this instant");
+  const snapsList = el("ul", "snapshots");
+  snapBtn.addEventListener("click", () => {
+    const s = getState();
+    data.snapshots.push({
+      t: s.t,
+      metrics: s.metrics,
+      params: JSON.parse(JSON.stringify(s.params)),
+    });
+    save(config.lab.id, data);
+    renderSnaps();
+  });
+  sec.appendChild(snapBtn);
+  sec.appendChild(snapsList);
+
+  parent.appendChild(sec);
+
+  function fmtT(t) {
+    const m = Math.floor(t / 60);
+    const s = Math.floor(t % 60);
+    return `${m}:${String(s).padStart(2, "0")}`;
+  }
+
+  function renderNotes() {
+    notesList.innerHTML = "";
+    data.notes.forEach((n, i) => {
+      const li = el("li", "", `<span class="t">${fmtT(n.t)}</span> ${escapeHtml(n.text)} `);
+      const del = el("button", "mini", "×");
+      del.setAttribute("aria-label", "Delete note");
+      del.addEventListener("click", () => {
+        data.notes.splice(i, 1);
+        save(config.lab.id, data);
+        renderNotes();
+      });
+      li.appendChild(del);
+      notesList.appendChild(li);
+    });
+  }
+
+  function renderSnaps() {
+    snapsList.innerHTML = "";
+    data.snapshots.forEach((s, i) => {
+      const summary = Object.keys(s.metrics)
+        .slice(0, 4)
+        .map((k) => `${k}=${Math.round(s.metrics[k] * 100) / 100}`)
+        .join(", ");
+      const li = el("li", "", `<span class="t">${fmtT(s.t)}</span> ${escapeHtml(summary)} `);
+      const back = el("button", "mini", "Restore");
+      back.addEventListener("click", () => onRestore(JSON.parse(JSON.stringify(s.params))));
+      li.appendChild(back);
+      const del = el("button", "mini", "×");
+      del.setAttribute("aria-label", "Delete snapshot");
+      del.addEventListener("click", () => {
+        data.snapshots.splice(i, 1);
+        save(config.lab.id, data);
+        renderSnaps();
+      });
+      li.appendChild(del);
+      snapsList.appendChild(li);
+    });
+  }
+
+  renderNotes();
+  renderSnaps();
+  return { element: sec };
+}
+
+// ---- core/shell.js (inlined) ----
+// AuraLab core — shell: validates config, builds the dashboard, binds everything,
+// runs the loop. Knows categories and presentation; knows zero science.
+
+// source: config URL (fetch) or config object (standalone).
+// buildLab(api, config): lab wiring, returns { state, step?, draw?, reset, resync, setSize?, measures() }.
+// labManifest: { measures: [{id}] } extra measure ids beyond counts.*.
+// packManifests: catalog contributions [{ laws, apparatus, measures }].
+async function boot(source, buildLab, labManifest, packManifests) {
+  const root = document.getElementById("lab");
+  root.innerHTML = "";
+  let raw;
+  if (typeof source === "string") {
+    try {
+      const res = await fetch(source, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      raw = await res.json();
+    } catch (err) {
+      root.appendChild(el("div", "error", `Could not load ${source}: ${String(err)}`));
+      return null;
+    }
+  } else {
+    raw = source;
+  }
+
+  const catalog = mergeCatalog(packManifests || []);
+  const known = {
+    laws: {},
+    apparatus: Object.keys(catalog.apparatus),
+    instruments: Object.keys(builtinInstruments),
+    measures: [],
+    surfaces: ["stage"],
+  };
+  Object.keys(catalog.laws).forEach((id) => {
+    known.laws[id] = { defaults: catalog.laws[id].defaults || {} };
+  });
+  (packManifests || []).forEach((m) => {
+    (m.measures || []).forEach((x) => known.measures.push(x.id));
+  });
+  ((labManifest && labManifest.measures) || []).forEach((x) => known.measures.push(x.id));
+
+  const { config, warnings, errors } = validateConfig(raw, known);
+  if (!config) {
+    root.appendChild(el("div", "error", `Invalid config:\n- ${errors.join("\n- ")}`));
+    return null;
+  }
+  if (warnings.length > 0) console.info("[auralab] auto-tuned config:", warnings);
+
+  document.documentElement.style.setProperty("--accent", config.lab.accent);
+  document.title = `${config.lab.title} — AuraLab`;
+
+  // --- active flags (checkboxes) ---
+  const active = {};
+  const key = (cat, id) => `${cat}:${id}`;
+  config.substances.forEach((s) => { active[key("substances", s.id)] = s.active; });
+  config.material.forEach((m) => { active[key("material", m.id)] = m.active; });
+  config.laws.forEach((l, i) => { active[key("laws", `${l.law}#${i}`)] = l.active; });
+  const isActive = (cat, id) => active[key(cat, id)] !== false;
+  const lawKey = (i) => `${config.laws[i].law}#${i}`;
+
+  // --- layout ---
+  const header = el("header", "lab-header");
+  header.appendChild(el("h1", "", `${escapeHtml(config.lab.title).replace(/-([^-]*)$/, '<span class="dot">-$1</span>')}`));
+  header.appendChild(el("p", "", escapeHtml(config.lab.subtitle)));
+  header.appendChild(el("span", "template-tag", "auralab template"));
+  const main = el("div", "lab-main");
+  const stage = el("div", "stage");
+  const canvas = el("canvas");
+  stage.appendChild(canvas);
+  const hud = el("div", "hud");
+  stage.appendChild(hud);
+  const sidebar = el("aside", "sidebar");
+  main.appendChild(stage);
+  main.appendChild(sidebar);
+  root.appendChild(header);
+  root.appendChild(main);
+
+  // --- lab wiring ---
+  const clock = createClock();
+  const ctx = canvas.getContext("2d");
+  const api = {
+    stage: { canvas, ctx, W: 800, H: 600 },
+    params: config,
+    catalog,
+    isActive,
+    time: clock,
+  };
+  const lab = buildLab(api, config);
+
+  const speckles = [];
+  function resize() {
+    const r = stage.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.max(50, Math.floor(r.width * dpr));
+    canvas.height = Math.max(50, Math.floor((window.innerHeight - 57) * dpr));
+    api.stage.W = canvas.width / dpr;
+    api.stage.H = canvas.height / dpr;
+    if (lab.setSize) lab.setSize(api.stage.W, api.stage.H);
+    speckles.length = 0;
+    for (let i = 0; i < config.bench.speckles; i++) {
+      speckles.push({ x: Math.random(), y: Math.random(), s: 0.4 + Math.random() * 1.3, a: 0.25 + Math.random() * 0.5 });
+    }
+    drawOnce();
+  }
+  window.addEventListener("resize", resize);
+
+  // --- metrics + instruments ---
+  const metricsById = {};
+  config.metrics.forEach((m) => { metricsById[m.id] = m; });
+  const metricValues = () => {
+    const flat = lab.measures();
+    const out = {};
+    config.metrics.forEach((m) => { out[m.id] = flat[m.source]; });
+    return out;
+  };
+  const instruments = [];
+  const fpsChip = el("span", "chip", "fps <b>–</b>");
+  hud.appendChild(fpsChip);
+  const fpsVal = fpsChip.querySelector("b");
+  config.instruments.forEach((entry) => {
+    if (entry.type === "chips") instruments.push(buildChips(hud, entry, metricsById));
+    else if (entry.type === "curve") instruments.push(buildCurve(stage, entry, metricsById));
+  });
+
+  // --- category sections with selectable rows ---
+  const liveSpans = {};
+  function noticeBlock(notice) {
+    if (!notice) return null;
+    return el(
+      "div", "notice",
+      `<b>${escapeHtml(notice.label || "")}</b><br>` +
+      `<i>Rule:</i> ${escapeHtml(notice.formule || "–")}<br>` +
+      `<i>Sources:</i> ${escapeHtml(notice.sources || "–")}<br>` +
+      `<i>Limits:</i> ${escapeHtml(notice.limites || "–")}`
+    );
+  }
+  function row(cat, id, label, swatch, notice, liveId) {
+    const wrap = el("div", "elem-row");
+    const box = el("input");
+    box.type = "checkbox";
+    box.checked = isActive(cat, id);
+    box.setAttribute("aria-label", `Enable ${label}`);
+    box.addEventListener("change", () => {
+      active[key(cat, id)] = box.checked;
+      drawOnce();
+    });
+    wrap.appendChild(box);
+    if (swatch) {
+      const s = el("span", "swatch");
+      s.style.background = swatch;
+      wrap.appendChild(s);
+    }
+    const nameBtn = el("button", "elem-name", escapeHtml(label));
+    const nb = noticeBlock(notice);
+    if (nb) {
+      nb.style.display = "none";
+      nameBtn.addEventListener("click", () => {
+        nb.style.display = nb.style.display === "none" ? "" : "none";
+      });
+    } else {
+      nameBtn.disabled = true;
+    }
+    wrap.appendChild(nameBtn);
+    if (liveId) {
+      const live = el("span", "live", "0");
+      liveSpans[liveId] = live;
+      wrap.appendChild(live);
+    }
+    const outer = el("div", "elem");
+    outer.appendChild(wrap);
+    if (nb) outer.appendChild(nb);
+    return outer;
+  }
+  function section(title, rows) {
+    if (rows.length === 0) return;
+    const sec = el("section", "", `<h2>${escapeHtml(title)}</h2>`);
+    rows.forEach((r) => sec.appendChild(r));
+    sidebar.appendChild(sec);
+  }
+  function lawsTargeting(subId, lawIdx) {
+    const entry = config.laws[lawIdx];
+    if (entry.targets) return entry.targets.includes(subId);
+    const pairs = entry.params && entry.params.pairs;
+    if (pairs) return pairs.some((p) => p.includes(subId));
+    return true;
+  }
+  section("Substances", config.substances.map((s) => {
+    const lawNames = config.laws
+      .map((l, i) => ({ l, i }))
+      .filter(({ i }) => lawsTargeting(s.id, i))
+      .map(({ l }) => (catalog.laws[l.law] ? catalog.laws[l.law].notice.label : l.law));
+    return row("substances", s.id, s.label, s.color, {
+      label: s.label,
+      formule: `Group of ${s.count}: simulated by ${lawNames.join(", ") || "no law"}.`,
+      sources: "Declared in this lab config.",
+      limites: "Behavior comes from active laws only; uncheck a law to remove its effect.",
+    }, `sub:${s.id}`);
+  }));
+  section("Material", config.material.map((m) => {
+    const app = catalog.apparatus[m.kind];
+    return row("material", m.id, m.label, m.color || null, app ? app.notice : null, null);
+  }));
+  section("Laws", config.laws.map((l, i) => {
+    const mod = catalog.laws[l.law];
+    const pairs = l.params && l.params.pairs ? ` (${l.params.pairs.map((p) => p.join("→")).join(", ")})` : "";
+    const targets = l.targets ? ` → ${l.targets.join(", ")}` : pairs;
+    return row("laws", lawKey(i), (mod ? mod.notice.label : l.law) + targets, null, mod ? mod.notice : null, null);
+  }));
+
+  // --- controls + time buttons ---
+  const redrawStatic = () => {
+    if (lab.resync) lab.resync();
+    drawOnce();
+  };
+  buildControls(sidebar, config, lab.state, () => {
+    if (lab.resync) lab.resync();
+    if (!usesTime()) drawOnce();
+  });
+  const usesTime = () => typeof lab.step === "function";
+  const runSec = el("section");
+  const rowBtns = el("div", "btn-row");
+  const pauseBtn = el("button", "", "Pause");
+  const resetBtn = el("button", "", "Reset");
+  const stepBtn = el("button", "", "+1 step");
+  const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduced || !usesTime()) {
+    clock.running = false;
+    pauseBtn.textContent = "Play";
+  }
+  if (!usesTime()) pauseBtn.disabled = true;
+  pauseBtn.addEventListener("click", () => {
+    clock.running = !clock.running;
+    pauseBtn.textContent = clock.running ? "Pause" : "Play";
+  });
+  const doReset = () => {
+    if (lab.reset) lab.reset();
+    clock.reset();
+    instruments.forEach((ins) => { if (ins.reset) ins.reset(); });
+    drawOnce();
+  };
+  resetBtn.addEventListener("click", doReset);
+  stepBtn.addEventListener("click", () => {
+    if (usesTime() && !clock.running && lab.step) {
+      lab.step(1 / 60, isActive);
+      clock.advance(1 / 60);
+      sampleOnce();
+      drawOnce();
+    }
+  });
+  rowBtns.appendChild(pauseBtn);
+  rowBtns.appendChild(resetBtn);
+  rowBtns.appendChild(stepBtn);
+  runSec.appendChild(rowBtns);
+  sidebar.appendChild(runSec);
+  if (config.lab.note) sidebar.appendChild(el("p", "note", escapeHtml(config.lab.note)));
+  if (warnings.length > 0) {
+    sidebar.appendChild(el("p", "note", `Auto-tuned ${warnings.length} value(s) — see console.`));
+  }
+
+  // --- notebook ---
+  const controlsSec = () => sidebar.querySelectorAll("section");
+  buildNotebook(sidebar, config,
+    () => ({
+      t: clock.t,
+      metrics: metricValues(),
+      params: {
+        substances: JSON.parse(JSON.stringify(config.substances)),
+        material: JSON.parse(JSON.stringify(config.material)),
+        laws: JSON.parse(JSON.stringify(config.laws)),
+      },
+    }),
+    (params) => {
+      config.substances = params.substances;
+      config.material = params.material;
+      config.laws = params.laws;
+      if (lab.resync) lab.resync();
+      controlsSec().forEach((sec) => { if (sec.refreshAll) sec.refreshAll(); });
+      drawOnce();
+    }
+  );
+
+  // --- loop ---
+  resize();
+  let last = performance.now();
+  let fpsAcc = 0;
+  let fpsN = 0;
+  let fpsT = 0;
+  let histT = 0;
+
+  function sampleOnce() {
+    const v = metricValues();
+    instruments.forEach((ins) => ins.sample(v));
+  }
+
+  function drawOnce() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const W = canvas.width / dpr;
+    const H = canvas.height / dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = config.bench.background;
+    ctx.globalAlpha = config.bench.trail;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+    for (const s of speckles) {
+      ctx.globalAlpha = s.a;
+      ctx.fillStyle = "#cdd6e0";
+      ctx.fillRect(s.x * W, s.y * H, s.s, s.s);
+    }
+    ctx.globalAlpha = 1;
+    if (lab.draw) lab.draw(ctx, W, H, isActive, hexToRgb);
+    const v = metricValues();
+    instruments.forEach((ins) => ins.update(v));
+    const flat = lab.measures();
+    config.substances.forEach((s) => {
+      const span = liveSpans[`sub:${s.id}`];
+      if (span) span.textContent = String(flat[`counts.${s.id}`] === undefined ? "–" : flat[`counts.${s.id}`]);
+    });
+  }
+
+  function draw(t) {
+    requestAnimationFrame(draw);
+    const now = performance.now();
+    let dt = (now - last) / 1000;
+    last = now;
+    if (!(dt > 0)) return;
+    dt = Math.min(dt, 0.05);
+    fpsAcc += dt;
+    fpsN += 1;
+    fpsT += dt;
+    if (fpsT >= 0.5) {
+      fpsVal.textContent = String(Math.round(fpsN / fpsAcc));
+      fpsAcc = 0;
+      fpsN = 0;
+      fpsT = 0;
+    }
+    if (clock.running && usesTime()) {
+      lab.step(dt, isActive);
+      clock.advance(dt);
+      histT += dt;
+      if (histT >= 0.25) {
+        histT = 0;
+        sampleOnce();
+      }
+    }
+    drawOnce();
+  }
+  sampleOnce();
+  requestAnimationFrame(draw);
+  return { config, lab };
+}
+
+// ---- engines/particles/laws/gravitation.js (inlined) ----
+// Law: gravitation — point attraction (positive strength) or repulsion (negative).
+const gravitation = {
+  id: "gravitation",
+  notice: {
+    label: "Gravitation",
+    formule: "a = sign(S) * min(|S|, |S|*9000/(d^2+4000)) toward each attractor, divided by mass.",
+    sources: "Simplified Newtonian point-mass gravity (softened core).",
+    limites: "No collisions, no relativity; one softening length for all pairs.",
+  },
+  defaults: {},
+  apply(world, dt, params, targets, active) {
+    for (const p of world.particles) {
+      const def = world.groups[p.e].def;
+      for (const a of world.attractors) {
+        if (!active("material", a.def.id)) continue;
+        const dx = a.px - p.x;
+        const dy = a.py - p.y;
+        const d2 = dx * dx + dy * dy;
+        const d = Math.sqrt(d2) || 0.001;
+        const s = Math.abs(a.def.strength);
+        const m = Math.min(s, (s * 9000) / (d2 + 4000));
+        const acc = Math.sign(a.def.strength) * m / def.mass;
+        p.ax += (dx / d) * acc;
+        p.ay += (dy / d) * acc;
+      }
+    }
+  },
+};
+
+// ---- engines/particles/laws/placement-circulaire.js (inlined) ----
+// Law: placement-circulaire — ring placement with orbital velocity (init only).
+const placementCirculaire = {
+  id: "placement-circulaire",
+  notice: {
+    label: "Circular placement",
+    formule: "Place on a ring around the first attractor with v = sqrt(a*r) tangential.",
+    sources: "Circular-orbit initial condition (derived from the gravitation law).",
+    limites: "Init only; stability then depends on the gravitation law staying active.",
+  },
+  defaults: {},
+  // Returns true when it claimed the particle (skips default random velocity).
+  place(world, p, def) {
+    const a = world.attractors.find((x) => x.def.active !== false);
+    if (!a || !def.ring) return false;
+    const W = world.W;
+    const H = world.H;
+    const rng = world.rng;
+    const radius = (def.ring[0] + rng() * (def.ring[1] - def.ring[0])) * Math.min(W, H);
+    const ang = rng() * Math.PI * 2;
+    p.x = a.px + Math.cos(ang) * radius;
+    p.y = a.py + Math.sin(ang) * radius;
+    const d2 = radius * radius;
+    const s = Math.abs(a.def.strength);
+    const m = Math.min(s, (s * 9000) / (d2 + 4000));
+    const v = Math.sqrt(Math.max(m, 1) * Math.max(radius, 1));
+    const dir = rng() < 0.85 ? 1 : -1;
+    p.vx = -Math.sin(ang) * v * dir;
+    p.vy = Math.cos(ang) * v * dir;
+    return true;
+  },
+};
+
+// ---- engines/particles/laws/errance.js (inlined) ----
+// Law: errance — smooth random walk at group speed.
+const errance = {
+  id: "errance",
+  notice: {
+    label: "Wander",
+    formule: "Heading drifts randomly; velocity eases toward speed * heading.",
+    sources: "Ad-hoc steering rule written for this lab.",
+    limites: "No goals, no memory; needs bounds or fields to stay in frame.",
+  },
+  defaults: { turn: 4 },
+  apply(world, dt, params, targets) {
+    for (const p of world.particles) {
+      if (!targets.includes(p.e)) continue;
+      const def = world.groups[p.e].def;
+      p.seed += (world.rng() - 0.5) * params.turn * dt;
+      world.steer(p, Math.cos(p.seed) * def.speed, Math.sin(p.seed) * def.speed, 2, dt);
+    }
+  },
+};
+
+// ---- engines/particles/laws/derive.js (inlined) ----
+// Law: derive — ballistic drift with a gentle pull toward the center.
+const derive = {
+  id: "derive",
+  notice: {
+    label: "Drift",
+    formule: "Keeps initial velocity; weak pull toward the center keeps bodies in frame.",
+    sources: "Ad-hoc steering rule written for this lab.",
+    limites: "No friction model; pull is arbitrary, not physical.",
+  },
+  defaults: { pull: 0.02 },
+  apply(world, dt, params, targets) {
+    for (const p of world.particles) {
+      if (!targets.includes(p.e)) continue;
+      p.ax += (world.W / 2 - p.x) * params.pull;
+      p.ay += (world.H / 2 - p.y) * params.pull;
+    }
+  },
+};
+
+// ---- engines/particles/laws/poursuite.js (inlined) ----
+// Law: poursuite — steer toward the nearest target (seek).
+const poursuite = {
+  id: "poursuite",
+  notice: {
+    label: "Pursuit",
+    formule: "Velocity eases toward the nearest target particle at 1.35x group speed.",
+    sources: "Ad-hoc steering rule written for this lab.",
+    limites: "Omniscient nearest-target search; no vision cone, no stamina.",
+  },
+  defaults: { gain: 1.35 },
+  apply(world, dt, params, targets) {
+    for (const [hunterId, preyId] of params.pairs || []) {
+      const h = world.groupIndex(hunterId);
+      const q = world.groupIndex(preyId);
+      if (h === -1 || q === -1) continue;
+      for (const p of world.particles) {
+        if (p.e !== h) continue;
+        const def = world.groups[p.e].def;
+        const t = world.nearest(q, p.x, p.y, p);
+        if (t !== null && t.d > 0.01) {
+          const sp = def.speed * params.gain;
+          world.steer(p, ((t.p.x - p.x) / t.d) * sp, ((t.p.y - p.y) / t.d) * sp, 3, dt);
+        } else {
+          world.wanderStep(p, def, 4, dt);
+        }
+      }
+    }
+  },
+};
+
+// ---- engines/particles/laws/fuite.js (inlined) ----
+// Law: fuite — steer away from the nearest threat (flee), wander when safe.
+const fuite = {
+  id: "fuite",
+  notice: {
+    label: "Flight",
+    formule: "Within range, velocity eases away from the nearest threat; else wander.",
+    sources: "Ad-hoc steering rule written for this lab.",
+    limites: "Single threat type; fixed panic range for all pairs.",
+  },
+  defaults: { gain: 1.35, range: 240 },
+  apply(world, dt, params, targets) {
+    for (const [fleerId, threatId] of params.pairs || []) {
+      const f = world.groupIndex(fleerId);
+      const t0 = world.groupIndex(threatId);
+      if (f === -1 || t0 === -1) continue;
+      for (const p of world.particles) {
+        if (p.e !== f) continue;
+        const def = world.groups[p.e].def;
+        const t = world.nearest(t0, p.x, p.y, p);
+        if (t !== null && t.d > 0.01 && t.d < params.range) {
+          const sp = def.speed * params.gain;
+          world.steer(p, ((p.x - t.p.x) / t.d) * sp, ((p.y - t.p.y) / t.d) * sp, 3, dt);
+        } else {
+          world.wanderStep(p, def, 4, dt);
+        }
+      }
+    }
+  },
+};
+
+// ---- engines/particles/laws/predation.js (inlined) ----
+// Law: predation — remove-on-contact between pairs, counted in stats.consumed.
+const predation = {
+  id: "predation",
+  notice: {
+    label: "Predation",
+    formule: "On contact (r1+r2+margin), the prey particle is removed; counter +1.",
+    sources: "Ad-hoc interaction rule written for this lab.",
+    limites: "No handling time, no satiation, no energy transfer.",
+  },
+  defaults: { margin: 3 },
+  apply(world, dt, params, targets) {
+    for (let k = world.particles.length - 1; k >= 0; k--) {
+      const p = world.particles[k];
+      for (const [predId, preyId] of params.pairs || []) {
+        if (world.groups[p.e].def.id !== predId) continue;
+        const q = world.groupIndex(preyId);
+        if (q === -1) continue;
+        const t = world.nearest(q, p.x, p.y, null);
+        if (t !== null && t.d < p.r + t.p.r + params.margin) {
+          const qi = world.particles.indexOf(t.p);
+          if (qi !== -1) {
+            world.particles.splice(qi, 1);
+            world.stats.consumed += 1;
+          }
+        }
+      }
+    }
+  },
+};
+
+// ---- engines/particles/laws/reproduction.js (inlined) ----
+// Law: reproduction — refill target groups up to their count (rate-limited).
+const reproduction = {
+  id: "reproduction",
+  notice: {
+    label: "Regrowth",
+    formule: "Missing particles respawn at the edges, at most <rate> per step.",
+    sources: "Ad-hoc population rule written for this lab.",
+    limites: "Not a birth model; rate cap keeps collapses visible.",
+  },
+  defaults: { rate: 3 },
+  apply(world, dt, params, targets) {
+    for (const g of targets) {
+      const def = world.groups[g].def;
+      let count = 0;
+      for (const p of world.particles) if (p.e === g) count += 1;
+      const refill = Math.min(def.count - count, params.rate);
+      for (let k = 0; k < refill; k++) world.spawn(g, true);
+    }
+  },
+};
+
+// ---- engines/particles/world.js (inlined) ----
+// Particle pack — world: holds groups, attractors and particles; runs active laws.
+// DOM-free: importable in browsers and Node. Laws plug in; the world schedules them.
+
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// defs: { substances: [live defs], material: [live attractor defs],
+//         laws: [{ mod, targets: [groupIdx]|null, params }], bounds }
+function createWorld(defs, seed = 1337) {
+  const rng = mulberry32(seed);
+  const groups = defs.substances.map((def) => ({ def }));
+  const attractors = defs.material
+    .filter((def) => def.kind === "attractor")
+    .map((def) => ({ def, px: 0, py: 0 }));
+  const particles = [];
+  const stats = { consumed: 0, born: 0 };
+  let W = 800;
+  let H = 600;
+  let time = 0;
+
+  const world = {
+    rng, particles, groups, attractors, stats, bounds: defs.bounds || "wrap",
+    get W() { return W; },
+    get H() { return H; },
+    get time() { return time; },
+    step, reset, spawn, syncCounts, counts, measures,
+    nearest, steer, wanderStep, groupIndex, draw, setSize,
+  };
+
+  function groupIndex(id) {
+    return groups.findIndex((g) => g.def.id === id);
+  }
+
+  function layoutAttractors() {
+    for (const a of attractors) {
+      a.px = a.def.x * W;
+      a.py = a.def.y * H;
+    }
+  }
+
+  function targetsOf(entry) {
+    if (!entry.targetIds) return groups.map((_, i) => i);
+    return entry.targetIds.map((id) => groupIndex(id)).filter((i) => i >= 0);
+  }
+
+  function spawn(g, edge = false) {
+    const def = groups[g].def;
+    const p = {
+      e: g,
+      x: edge ? (rng() < 0.5 ? rng() * W : W - rng() * 4) : rng() * W,
+      y: rng() * H,
+      vx: 0, vy: 0, ax: 0, ay: 0,
+      r: def.radius * (0.7 + rng() * 0.6),
+      seed: rng() * Math.PI * 2,
+    };
+    let claimed = false;
+    for (const entry of defs.laws) {
+      if (entry.mod.place && targetsOf(entry).includes(g)) {
+        claimed = entry.mod.place(world, p, def) || claimed;
+      }
+    }
+    if (!claimed) {
+      const ang = rng() * Math.PI * 2;
+      const sp = def.speed * (0.3 + rng() * 0.7);
+      p.vx = Math.cos(ang) * sp;
+      p.vy = Math.sin(ang) * sp;
+    }
+    particles.push(p);
+    stats.born += 1;
+    return p;
+  }
+
+  function reset() {
+    particles.length = 0;
+    stats.consumed = 0;
+    stats.born = 0;
+    time = 0;
+    layoutAttractors();
+    groups.forEach((g, i) => {
+      for (let k = 0; k < g.def.count; k++) spawn(i);
+    });
+  }
+
+  function syncCounts() {
+    const countsArr = new Array(groups.length).fill(0);
+    for (const p of particles) countsArr[p.e] += 1;
+    groups.forEach((g, i) => {
+      while (countsArr[i] < g.def.count) {
+        spawn(i, true);
+        countsArr[i] += 1;
+      }
+    });
+    for (let k = particles.length - 1; k >= 0; k--) {
+      const i = particles[k].e;
+      if (countsArr[i] > groups[i].def.count) {
+        particles.splice(k, 1);
+        countsArr[i] -= 1;
+      }
+    }
+  }
+
+  function nearest(groupIdx, x, y, exclude) {
+    let best = null;
+    let bestD2 = Infinity;
+    for (const q of particles) {
+      if (q.e !== groupIdx || q === exclude) continue;
+      const dx = q.x - x;
+      const dy = q.y - y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        best = q;
+      }
+    }
+    return best === null ? null : { p: best, d: Math.sqrt(bestD2) };
+  }
+
+  function steer(p, dx, dy, rate, dt) {
+    const k = Math.min(1, rate * dt);
+    p.vx += (dx - p.vx) * k;
+    p.vy += (dy - p.vy) * k;
+  }
+
+  function wanderStep(p, def, turn, dt) {
+    p.seed += (rng() - 0.5) * turn * dt;
+    steer(p, Math.cos(p.seed) * def.speed, Math.sin(p.seed) * def.speed, 2, dt);
+  }
+
+  function step(dt, active) {
+    time += dt;
+    const isActive = active || (() => true);
+    for (const p of particles) {
+      p.ax = 0;
+      p.ay = 0;
+    }
+    for (const entry of defs.laws) {
+      if (!isActive("laws", entry.id)) continue;
+      const targets = targetsOf(entry);
+      if (entry.mod.apply) entry.mod.apply(world, dt, entry.params, targets, isActive);
+    }
+    for (const p of particles) {
+      if (!isActive("substances", groups[p.e].def.id)) continue; // frozen while off
+      p.vx += p.ax * dt;
+      p.vy += p.ay * dt;
+      const sp2 = p.vx * p.vx + p.vy * p.vy;
+      const maxV = 900;
+      if (sp2 > maxV * maxV) {
+        const k = maxV / Math.sqrt(sp2);
+        p.vx *= k;
+        p.vy *= k;
+      }
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      if (world.bounds === "bounce") {
+        if (p.x < 0) { p.x = 0; p.vx = Math.abs(p.vx); }
+        if (p.x > W) { p.x = W; p.vx = -Math.abs(p.vx); }
+        if (p.y < 0) { p.y = 0; p.vy = Math.abs(p.vy); }
+        if (p.y > H) { p.y = H; p.vy = -Math.abs(p.vy); }
+      } else {
+        if (p.x < -20) p.x = W + 20;
+        if (p.x > W + 20) p.x = -20;
+        if (p.y < -20) p.y = H + 20;
+        if (p.y > H + 20) p.y = -20;
+      }
+    }
+  }
+
+  function counts() {
+    const out = new Array(groups.length).fill(0);
+    for (const p of particles) out[p.e] += 1;
+    return out;
+  }
+
+  function measures() {
+    const out = {};
+    groups.forEach((g, i) => {
+      out[`counts.${g.def.id}`] = counts()[i];
+    });
+    out.consumed = stats.consumed;
+    return out;
+  }
+
+  function draw(ctx, Wpx, Hpx, isActive, hexToRgb) {
+    for (const a of attractors) {
+      if (!isActive("material", a.def.id)) continue;
+      const g = ctx.createRadialGradient(a.px, a.py, 0, a.px, a.py, a.def.radius * 3);
+      const [r, gg, b] = hexToRgb(a.def.color);
+      g.addColorStop(0, `rgba(${r},${gg},${b},0.9)`);
+      g.addColorStop(0.35, `rgba(${r},${gg},${b},0.28)`);
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(a.px, a.py, a.def.radius * 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = a.def.color;
+      ctx.beginPath();
+      ctx.arc(a.px, a.py, Math.max(2, a.def.radius * 0.45), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Links first (under particles).
+    groups.forEach((g, i) => {
+      if (!g.def.links || !isActive("substances", g.def.id)) return;
+      const pts = particles.filter((p) => p.e === i);
+      const maxD = g.def.links.distance;
+      ctx.lineWidth = 1;
+      for (let a2 = 0; a2 < pts.length; a2++) {
+        for (let b = a2 + 1; b < pts.length; b++) {
+          const dx = pts[a2].x - pts[b].x;
+          const dy = pts[a2].y - pts[b].y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < maxD * maxD) {
+            const [r, gg, bl] = hexToRgb(g.def.color);
+            ctx.strokeStyle = `rgba(${r},${gg},${bl},${(0.28 * (1 - Math.sqrt(d2) / maxD)).toFixed(3)})`;
+            ctx.beginPath();
+            ctx.moveTo(pts[a2].x, pts[a2].y);
+            ctx.lineTo(pts[b].x, pts[b].y);
+            ctx.stroke();
+          }
+        }
+      }
+    });
+    for (const p of particles) {
+      if (!isActive("substances", groups[p.e].def.id)) continue;
+      ctx.fillStyle = groups[p.e].def.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function setSize(w, h) {
+    W = Math.max(50, w);
+    H = Math.max(50, h);
+    layoutAttractors();
+  }
+
+  reset();
+  return world;
+}
+
+// ---- engines/particles/index.js (inlined) ----
+// Particle pack manifest — this pack's catalog contribution:
+// composable laws, apparatus kinds and exposed measures.
+
+const particleLaws = {
+  gravitation,
+  "placement-circulaire": placementCirculaire,
+  errance,
+  derive,
+  poursuite,
+  fuite,
+  predation,
+  reproduction,
+};
+
+const particlePack = {
+  id: "particles",
+  laws: particleLaws,
+  apparatus: {
+    attractor: {
+      label: "Attractor",
+      notice: {
+        label: "Attractor",
+        formule: "Point at (x, y) with strength S; positive attracts, negative repels.",
+        sources: "Pack-defined apparatus (used by the gravitation law).",
+        limites: "Static position; single strength value.",
+      },
+      defaults: { x: 0.5, y: 0.5, strength: 100, radius: 20, color: "#ffffff" },
+    },
+  },
+  measures: [{ id: "consumed", label: "Consumed", unit: "" }],
+};
+
+// ---- app-space/lab.js (inlined) ----
+// Aura-Space lab wiring: particle world + catalog laws declared in config.json.
+// Copy this folder to start a new lab; only config + this wiring change.
+
+const labManifest = { measures: [] };
+
+function byId(arr) {
+  const o = {};
+  arr.forEach((x) => {
+    o[x.id] = x;
+  });
+  return o;
+}
+
+function buildLab(api, config) {
+  const laws = config.laws.map((entry, i) => {
+    const mod = api.catalog.laws[entry.law];
+    return {
+      id: `${entry.law}#${i}`,
+      mod,
+      targetIds: entry.targets || null,
+      params: { ...mod.defaults, ...(entry.params || {}) },
+    };
+  });
+  const world = createWorld({
+    substances: config.substances,
+    material: config.material,
+    laws,
+    bounds: config.bounds,
+  });
+  return {
+    state: {
+      substances: byId(config.substances),
+      material: byId(config.material),
+      laws: laws.map((l) => l.params),
+      bench: config.bench,
+    },
+    step: (dt, isActive) => world.step(dt, isActive),
+    draw: (ctx, W, H, isActive, hexToRgb) => world.draw(ctx, W, H, isActive, hexToRgb),
+    reset: () => world.reset(),
+    resync: () => world.syncCounts(),
+    setSize: (w, h) => world.setSize(w, h),
+    measures: () => world.measures(),
+  };
+}
+
+boot({
+  "lab": {
+    "id": "space",
+    "title": "Aura-Space",
+    "subtitle": "Gravity well, planets and an asteroid belt — rendered by the shared AuraLab core.",
+    "accent": "#ffb454",
+    "note": "Same kit as Aura-Eco. Only this lab differs: substances, material, laws and instruments."
+  },
+  "bench": {
+    "background": "#07090c",
+    "trail": 0.22,
+    "speckles": 180
+  },
+  "bounds": "wrap",
+  "substances": [
+    {
+      "id": "planets",
+      "label": "Planets",
+      "count": 4,
+      "color": "#7fc4ff",
+      "radius": 4,
+      "mass": 2,
+      "speed": 60,
+      "ring": [0.14, 0.38]
+    },
+    {
+      "id": "belt",
+      "label": "Belt rocks",
+      "count": 220,
+      "color": "#8a94a0",
+      "radius": 1.4,
+      "mass": 1,
+      "speed": 60,
+      "ring": [0.43, 0.47]
+    },
+    {
+      "id": "comets",
+      "label": "Comets",
+      "count": 2,
+      "color": "#9ff0d0",
+      "radius": 2.6,
+      "mass": 1,
+      "speed": 60,
+      "ring": [0.28, 0.4]
+    }
+  ],
+  "material": [
+    {
+      "id": "star",
+      "kind": "attractor",
+      "label": "Star",
+      "x": 0.5,
+      "y": 0.5,
+      "strength": 160,
+      "radius": 22,
+      "color": "#ffd9a0"
+    }
+  ],
+  "laws": [
+    {
+      "law": "placement-circulaire",
+      "targets": ["planets", "belt", "comets"]
+    },
+    {
+      "law": "gravitation"
+    }
+  ],
+  "metrics": [
+    { "id": "planets", "label": "Planets", "unit": "", "source": "counts.planets", "color": "#7fc4ff" },
+    { "id": "belt", "label": "Belt rocks", "unit": "", "source": "counts.belt", "color": "#8a94a0" },
+    { "id": "comets", "label": "Comets", "unit": "", "source": "counts.comets", "color": "#9ff0d0" }
+  ],
+  "instruments": [
+    { "type": "chips", "metrics": ["planets", "belt", "comets"] }
+  ],
+  "controls": [
+    { "path": "material.star.strength", "label": "Star gravity", "min": 0, "max": 600, "step": 5 },
+    { "path": "substances.belt.count", "label": "Belt density", "min": 0, "max": 600, "step": 10 },
+    { "path": "bench.trail", "label": "Orbit trails", "min": 0.05, "max": 1, "step": 0.05 }
+  ],
+  "notebook": {
+    "enabled": true,
+    "prompts": [
+      "What happens at zero gravity?",
+      "Double the belt: do orbits stay stable?"
+    ]
+  }
+}
+, buildLab, labManifest, [particlePack]);
+</script>
+</body>
+</html>

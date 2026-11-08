@@ -1,0 +1,75 @@
+{
+  "lab": {
+    "id": "eco",
+    "title": "Aura-Eco",
+    "subtitle": "Rabbits, foxes and a living population chart — rendered by the shared AuraLab core.",
+    "accent": "#7fd069",
+    "note": "Same kit as Aura-Space. Only this lab differs: substances, laws and instruments."
+  },
+  "bench": {
+    "background": "#080b09",
+    "trail": 0.35,
+    "speckles": 0
+  },
+  "bounds": "bounce",
+  "substances": [
+    {
+      "id": "rabbits",
+      "label": "Rabbits",
+      "count": 120,
+      "color": "#a8e05f",
+      "radius": 2.6,
+      "mass": 1,
+      "speed": 55,
+      "links": { "distance": 46 }
+    },
+    {
+      "id": "foxes",
+      "label": "Foxes",
+      "count": 14,
+      "color": "#e0784a",
+      "radius": 3.6,
+      "mass": 2,
+      "speed": 70
+    },
+    {
+      "id": "bushes",
+      "label": "Bushes",
+      "count": 36,
+      "color": "#2f6b3a",
+      "radius": 4.5,
+      "mass": 1,
+      "speed": 4
+    }
+  ],
+  "material": [],
+  "laws": [
+    { "law": "fuite", "params": { "pairs": [["rabbits", "foxes"]] } },
+    { "law": "poursuite", "params": { "pairs": [["foxes", "rabbits"]] } },
+    { "law": "predation", "params": { "pairs": [["foxes", "rabbits"]] } },
+    { "law": "reproduction", "targets": ["rabbits"] },
+    { "law": "derive", "targets": ["bushes"] }
+  ],
+  "metrics": [
+    { "id": "rabbits", "label": "Rabbits", "unit": "", "source": "counts.rabbits", "color": "#a8e05f" },
+    { "id": "foxes", "label": "Foxes", "unit": "", "source": "counts.foxes", "color": "#e0784a" },
+    { "id": "bushes", "label": "Bushes", "unit": "", "source": "counts.bushes", "color": "#2f6b3a" },
+    { "id": "captures", "label": "Captures", "unit": "", "source": "consumed", "color": "#e8e6e1" }
+  ],
+  "instruments": [
+    { "type": "chips", "metrics": ["rabbits", "foxes", "bushes", "captures"] },
+    { "type": "curve", "title": "Populations", "metrics": ["rabbits", "foxes"], "samples": 160 }
+  ],
+  "controls": [
+    { "path": "substances.rabbits.count", "label": "Rabbit population", "min": 0, "max": 400, "step": 5 },
+    { "path": "substances.foxes.count", "label": "Fox population", "min": 0, "max": 60, "step": 1 },
+    { "path": "substances.foxes.speed", "label": "Fox speed", "min": 0, "max": 200, "step": 5 }
+  ],
+  "notebook": {
+    "enabled": true,
+    "prompts": [
+      "Remove all foxes, wait, then bring them back: what happens?",
+      "How fast must foxes be to collapse the rabbits?"
+    ]
+  }
+}

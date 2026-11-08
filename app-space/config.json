@@ -1,0 +1,88 @@
+{
+  "lab": {
+    "id": "space",
+    "title": "Aura-Space",
+    "subtitle": "Gravity well, planets and an asteroid belt — rendered by the shared AuraLab core.",
+    "accent": "#ffb454",
+    "note": "Same kit as Aura-Eco. Only this lab differs: substances, material, laws and instruments."
+  },
+  "bench": {
+    "background": "#07090c",
+    "trail": 0.22,
+    "speckles": 180
+  },
+  "bounds": "wrap",
+  "substances": [
+    {
+      "id": "planets",
+      "label": "Planets",
+      "count": 4,
+      "color": "#7fc4ff",
+      "radius": 4,
+      "mass": 2,
+      "speed": 60,
+      "ring": [0.14, 0.38]
+    },
+    {
+      "id": "belt",
+      "label": "Belt rocks",
+      "count": 220,
+      "color": "#8a94a0",
+      "radius": 1.4,
+      "mass": 1,
+      "speed": 60,
+      "ring": [0.43, 0.47]
+    },
+    {
+      "id": "comets",
+      "label": "Comets",
+      "count": 2,
+      "color": "#9ff0d0",
+      "radius": 2.6,
+      "mass": 1,
+      "speed": 60,
+      "ring": [0.28, 0.4]
+    }
+  ],
+  "material": [
+    {
+      "id": "star",
+      "kind": "attractor",
+      "label": "Star",
+      "x": 0.5,
+      "y": 0.5,
+      "strength": 160,
+      "radius": 22,
+      "color": "#ffd9a0"
+    }
+  ],
+  "laws": [
+    {
+      "law": "placement-circulaire",
+      "targets": ["planets", "belt", "comets"]
+    },
+    {
+      "law": "gravitation"
+    }
+  ],
+  "metrics": [
+    { "id": "planets", "label": "Planets", "unit": "", "source": "counts.planets", "color": "#7fc4ff" },
+    { "id": "belt", "label": "Belt rocks", "unit": "", "source": "counts.belt", "color": "#8a94a0" },
+    { "id": "comets", "label": "Comets", "unit": "", "source": "counts.comets", "color": "#9ff0d0" }
+  ],
+  "instruments": [
+    { "type": "chips", "metrics": ["planets", "belt", "comets"] }
+  ],
+  "controls": [
+    { "path": "material.star.strength", "label": "Star gravity", "min": 0, "max": 600, "step": 5 },
+    { "path": "substances.belt.count", "label": "Belt density", "min": 0, "max": 600, "step": 10 },
+    { "path": "bench.trail", "label": "Orbit trails", "min": 0.05, "max": 1, "step": 0.05 }
+  ],
+  "notebook": {
+    "enabled": true,
+    "prompts": [
+      "What happens at zero gravity?",
+      "Double the belt: do orbits stay stable?"
+    ]
+  }
+}
