@@ -1,12 +1,13 @@
-# INTENT — Vision du projet AuraLab
+# INTENT — Vision du projet LabKit
 
 > Document d'intention : ce que le projet veut devenir.
 > Cible : hackathon Kiroween 2026, track Skeleton Crew (template épuré + deux applis distinctes).
-> État actuel : socle + 2 labos à particules fonctionnels (voir Journal) ; découpage coquille/moteurs en attente de décision.
+> État actuel : socle + 4 labos fonctionnels (2 en 2D sur le shell, 2 en 3D sur interface propre) ;
+> toutes les technologies Kiro intégrées et vérifiées en CI (voir Journal).
 
 ## Vision produit
 
-AuraLab est un **kit pour créer des labos éducatifs virtuels** : des espaces interactifs où l'on manipule des
+LabKit est un **kit pour créer des labos éducatifs virtuels** : des espaces interactifs où l'on manipule des
 variables et observe des résultats, selon la boucle hypothèse → action → observation → compréhension.
 
 Un labo fournit **outils + représentations**, l'utilisateur y fait ce qu'il veut (terrain libre).
@@ -47,17 +48,43 @@ ne coûte qu'un config + quelques dizaines de lignes.
 
 ## Intention Kiro.dev (technologies kiro.dev)
 
-Volonté explicite : le projet utilise les technologies de kiro.dev comme méthode et infrastructure de
-conception, de façon visible et vérifiable par les juges :
-- Spec-Driven Development : specs EARS (`requirements.md`), `design.md`, `tasks.md` dans `.kiro/specs/`.
-- Steering : règles d'architecture et de design système dans `.kiro/steering/`, que tout agent doit suivre.
-- Agent Hooks + validation : hook post-sauvegarde branché sur le validateur de configs (garde-fou anti-crash).
-- MCP : IMPLÉMENTÉ comme couche dev à usage réel — serveur local `mcp-server/` (zéro dépendance,
-  déclaré dans `.kiro/settings/mcp.json`) offrant `list_catalog`, `validate_lab` (auto-approuvés, lecture
-  seule) et `scaffold_law` (confirmation à chaque appel, écrit des fichiers). Testé hors Kiro en stdio.
-Contrainte assumée (crédits incertains) : Kiro intervient au **build-time, jamais au runtime**. Les labos
-tournent sans crédits, sans clés API, sans backend. D'éventuels crédits serviraient à concevoir plus vite,
-pas à faire tourner le produit.
+Volonté explicite : le projet utilise l'ensemble des technologies de kiro.dev
+comme méthode et infrastructure de conception, de façon visible et vérifiable
+par les juges :
+
+- **Spec-Driven Development** : specs EARS (`requirements.md`), `design.md`,
+  `tasks.md` dans `.kiro/specs/` pour le kit et pour l'intégration.
+- **Steering** : les 3 fichiers foundation (`product.md`, `tech.md`,
+  `structure.md`) avec `inclusion: always` + architecture, design system
+  (`fileMatch`), procédure (`manual`) et notices (`auto`).
+- **Agent Hooks** : 6 triggers (`PostFileSave`, `FileCreate`, `PreToolUse`,
+  `SessionStart`, `PostTaskExecution`, `Stop`), tous câblés à des commandes
+  déterministes gratuites. Le hook `guard-ship` bloque réellement les commits
+  et pushs sales (exit 2).
+- **MCP** : serveur local `mcp-server/` (`labkit`, zéro dépendance) exposant
+  5 outils : `list_catalog`, `list_labs`, `validate_lab`, `headless_check`,
+  `scaffold_law`. Piloté en CI via `smoke-test.mjs`.
+- **Custom agents** : 4 rôles dans `.kiro/agents/` (`lab-architect`,
+  `law-smith`, `config-doctor`, `lab-reviewer`) avec outils étroits,
+  permissions par capability et ressources explicites.
+- **Agent Skills** : 3 compétences dans `.kiro/skills/` (`create-lab`,
+  `add-law`, `package-standalone`) au standard Agent Skills.
+- **Workflows** : 3 recettes dans `.kiro/workflows/` (`new-lab`,
+  `fix-until-green`, `audit-labs`), testées par un validateur local en CI.
+- **Power** : package `power-labkit/` au format Agent Plugins (`plugin.json` +
+  MCP + skills), installable depuis GitHub.
+- **Correctness (PBT)** : harnais de tests à base de propriétés (RNG semé,
+  réduction gloutonne, zéro dépendance), 21 propriétés extraites directement
+  des exigences EARS.
+- **Permissions** : modèle de règles pour le fichier workspace par utilisateur
+  + script d'installation.
+- **.kiroignore et AGENTS.md** : protègent le contexte et fixent le contrat
+  pour tout agent.
+
+Contrainte assumée (crédits incertains) : Kiro intervient au **build-time,
+jamais au runtime**. Les labos tournent sans crédits, sans clés API, sans
+backend. D'éventuels crédits serviraient à concevoir plus vite, pas à faire
+tourner le produit.
 
 ## Catégories officielles (décidé 2026-11-07)
 
@@ -74,19 +101,23 @@ sa notice (formule, sources, limites) ; extension non-dev via prompt à variable
 Tranchées et implémentées : catégories officielles (7 : instruments, métriques, paillasse, carnet,
 substances, matériel, lois) ; catalogue unique ; lois = modules composables interchangeables à cases
 à cocher ; notices obligatoires ; prompt d'extension non-dev (`add-element.bat`) ; carnet v1
-(notes + instantanés + restauration) ; portail 3 boutons ; contrainte prof actée (guide FR
-`CREER-UN-LABO.md`) ; serveur MCP dev + config `.kiro/settings/mcp.json`.
+(notes + instantanés + restauration) ; portail ; contrainte prof actée (guide FR
+`CREER-UN-LABO.md`) ; serveur MCP dev + config `.kiro/settings/mcp.json` ;
+**toutes les technologies Kiro intégrées et vérifiées en CI** (specs, steering,
+hooks, MCP, agents, skills, workflows, power, permissions, .kiroignore,
+AGENTS.md, PBT) ; **tests à base de propriétés** sur les exigences EARS.
 Encore ouvertes :
 1. **A ou B** : phase 1 réalisée = A (restructuration, démos conservées). B (+ éco en équations
    Lotka-Volterra) reste possible en phase 2 ?
 2. **Bloc `guide` pédagogique** : maintenant ou plus tard ? (vision terrain+tableau validée)
 3. **JSON avec commentaires** (JSONC) : oui ou JSON strict ?
 4. **Boutons de scénarios** : dans le scope ?
-5. **Portail : DÉCIDÉ et FAIT** — page d'accueil `index.html`, 3 boutons (Kit → GitHub, SpaceLab et EcoLab →
-   versions autonomes `dist/`), nom AuraLab. Prévu : GitHub Pages comme lien démo vivant.
+5. **Portail : DÉCIDÉ et FAIT** — page d'accueil `index.html` avec les 4 labos.
+   Prévu : GitHub Pages comme lien démo vivant.
 6. **Contrainte prof : ACTÉE** — toute création/adaptation de labo doit être faisable par un prof non-dev :
-   config simple + guide FR + exemples commentés + erreurs en clair. Le guide arrive avec le schéma phase 1
-   (pas de doc avant le schéma final).
+   config simple + guide FR + exemples commentés + erreurs en clair.
+7. **Vidéo de démo** : reste à tourner (task 13 de la spec `kiro-integration`,
+   task 10 de la spec `visual-lab`).
 
 ## Journal — session 2026-11-07 (résumé complet)
 
@@ -108,3 +139,47 @@ Encore ouvertes :
    modèle essaim). Mécanismes génériques mais vocabulaire fuyant (`wells`/`orbit`/`starfield`, `predates`/`eaten`),
    pas de répulsion, `mass` inutilisée. D'où la proposition coquille/moteurs + options A/B.
 9. **Vision alignée** : terrain + tableau noir (voir ci-dessus).
+
+## Journal — session 2026-11-11 (intégration Kiro complète)
+
+Objectif : que **toutes** les technologies kiro.dev soient intégrées et
+vérifiables, pas seulement mentionnées.
+
+1. **Audit** : specs présentes mais figées sur 2 labos (il y en a 4) ;
+   steering sans fichiers foundation ni modes d'inclusion ; 1 seul hook ;
+   MCP à 3 outils ; **aucun** agent custom, skill, workflow, power,
+   `.kiroignore`, `AGENTS.md` ; aucun test malgré la task 2 qui promettait
+   « 600 steps headless, no NaN ».
+2. **Correctness / PBT** : harnais maison (`tests/harness.mjs`, RNG semé +
+   réduction gloutonne, zéro dépendance) et 21 propriétés nommées d'après
+   leur `REQ`. Les propriétés sont écrites comme des **implications** : sans
+   cela, la réduction détruit la prémisse et produit un faux contre-exemple
+   (constaté sur REQ-04 et REQ-10).
+3. **Bug produit trouvé par les tests** : l'erreur `params.pairs` ne nommait
+   pas la substance inconnue, contrairement à REQ-04. Corrigé dans
+   `core/validate.js` — la propriété a guidé le fix, pas l'inverse.
+4. **`app-ponts/lab.js` créé** : le labo 3D n'avait que `game.js` (DOM). Sans
+   câblage DOM-free, il était invisible au validateur, au serveur MCP et aux
+   tests. Les 4 labos se simulent désormais headlessly.
+5. **Hooks** : 6 triggers, tous en commandes déterministes (jamais d'action
+   `agent` : gratuit, rapide, reproductible). Le hook qui compte est
+   `guard-ship` (PreToolUse) : il **bloque** `git commit/push/merge/rebase`
+   tant qu'un config est invalide, qu'une propriété échoue ou que `dist/`
+   dérive. Exit 2 = appel d'outil refusé.
+6. **MCP** : serveur renommé `labkit`, scindé (`catalog.mjs` / `tools.mjs` /
+   `index.js`), 5 outils dont `list_labs` et `headless_check` ; probe stdio
+   `smoke-test.mjs` joué en CI.
+7. **Agents / Skills / Workflows / Power** : 4 agents à périmètre étroit
+   (`lab-reviewer` n'a aucune capability d'écriture), 3 skills, 3 recettes de
+   workflow (séquence, revue en parallèle, boucle bornée avec `fileCheck`),
+   et un power au format Agent Plugins.
+8. **Garde-fous locaux** : `scripts/check-kiro.mjs` valide chaque artefact
+   Kiro (front matter, triggers, schéma d'agent, manifeste de power) et
+   `scripts/validate-workflows.mjs` rejoue les contraintes du `validate_workflow`
+   de Kiro — les deux tournent en CI, donc un artefact cassé ne peut plus
+   disparaître silencieusement.
+9. **Permissions** : Kiro les stocke par utilisateur, hors du dépôt. Le dépôt
+   livre donc un modèle + un installeur, et les règles par capability vivent
+   dans les profils d'agents (le seul scope qui voyage avec le repo).
+10. **CI** : 5 jobs (fmt, lint, build, test, pbt) + le garde-fou budget ;
+    déclenchement étendu aux push sur `main`.

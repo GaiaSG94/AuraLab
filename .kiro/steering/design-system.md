@@ -1,6 +1,16 @@
+---
+inclusion: fileMatch
+fileMatchPattern:
+  - "core/*.css"
+  - "core/*.js"
+  - "app-*/*.html"
+  - "app-*/*.js"
+  - "engines/**/*.js"
+---
+
 # Steering — Design system
 
-Visual rules for every AuraLab page. They live in `core/styles.css`,
+Visual rules for every LabKit page. They live in `core/styles.css`,
 `core/shell.js` and `core/ghost.js`, so any lab built on `core/` looks the
 same without writing CSS.
 

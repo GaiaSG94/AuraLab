@@ -7,33 +7,66 @@ app-space/  index.html + lab.js ──┐
                                   ├──> core/shell.js ──> engines/particles/
 app-eco/    index.html + lab.js ──┘         │   (world + composable laws)
         config.json ──> core/validate.js ───┘
+
+app-chimie/  index.html + game.js ──┐
+                                    ├──> core/headless.js ──> engines/chimie/
+app-ponts/  index.html + game.js ───┘         │   (3D worlds + laws)
+              lab.js (validator/MCP) ──────────┘
 ```
 
-- `core/` — generic lab shell. `shell.js` boots configs, builds the dashboard
-  (bench, category sections, controls, instruments, notebook, time buttons) and
-  runs the loop. `catalog.js` merges built-ins + pack manifests into one list.
-  `validate.js` checks configs against the catalog. No science, no DOM in laws.
-- `engines/particles/` — one reusable phenomenon library (NOT mandatory):
-  `world.js` (state, scheduling, measures, rendering) plus one file per law in
-  `laws/` (gravitation, placement, wander, drift, pursuit, flight, predation,
-  regrowth). Each law carries its notice (rule, sources, limits).
-- `app-*/` — thin labs: `index.html` (explicit wiring), `lab.js` (~40 lines:
-  world creation + interface), `config.json` (all choices as data).
-- `scripts/` — `validate-config.mjs` (CI + Kiro hook), `build-standalone.mjs`
-  (self-contained `dist/` files), `add-element.mjs` (+ `.bat`: guided prompt
-  that scaffolds a new catalog law for non-devs).
+Two lab kinds, one core:
+
+- **Shell labs** (`app-space`, `app-eco`): `core/shell.js` renders the whole
+  page (steps | bench | panel) and drives the loop.
+- **Custom-UI labs** (`app-chimie`, `app-ponts`): they boot through
+  `core/headless.js` and mount a full-screen 3D interface of their own. They
+  still use the same validator, catalog and measurement contract, and each
+  keeps a DOM-free `lab.js` for the validator, the MCP server and the tests.
+
+## Modules
+
+- `core/` — generic shell. `shell.js` boots configs, builds the dashboard,
+  runs the loop. `headless.js` boots without a DOM. `catalog.js` merges
+  built-ins + pack manifests into one list. `validate.js` checks configs
+  against the catalog and is the single source of schema truth. No science.
+- `engines/<pack>/` — one phenomenon library per pack: `index.js` (manifest:
+  laws, apparatus kinds, measures), `world.js` (state, scheduling, measures,
+  rendering), `laws/<law>.js` (one composable law per file, with its notice).
+  Three packs ship: `particles`, `chimie`, `ponts`.
+- `app-*/` — thin labs: `config.json` (all choices as data), `lab.js`
+  (wiring), `index.html` (explicit page), `game.js` for the custom 3D UIs.
+- `tests/` — property-based tests (zero dependency). `harness.mjs` is the
+  engine (seeded RNG + shrinking); one property file per area; `labs.mjs`
+  boots every lab headlessly.
+- `scripts/` — `validate-config.mjs`, `build-standalone.mjs`,
+  `add-element.mjs` (+ `.bat`), `kiro-hook.mjs` (hook actions),
+  `validate-workflows.mjs`, `install-kiro-permissions.mjs`.
+- `mcp-server/` — stdio MCP server (`catalog.mjs` + `tools.mjs` +
+  `index.js`) exposing the catalog, the labs and the headless check.
 
 ## Data flow
 
-1. `boot(source, buildLab, manifest, packs)` takes a config URL (fetch) or
-   object (standalone), merges the catalog, validates.
-2. The shell builds category sections (checkbox rows + notices), controls bound
-   to live state paths, instruments bound to metrics, notebook, time controls.
+1. `boot(source, buildLab, manifest, packs)` (shell) or `bootHeadless(...)`
+   (custom UIs) takes a config URL (fetch) or object (standalone), merges the
+   catalog, validates.
+2. The shell builds category sections (checkbox rows + notices), controls
+   bound to live state paths, instruments bound to metrics, notebook, time
+   controls. Custom-UI labs build their own interface and drive the loop.
 3. `buildLab(api, config)` creates the world from config substances/material
-   and resolves law ids to modules; returns state/step/draw/reset/resync/measures.
+   and resolves law ids to modules; returns
+   state/step/draw/reset/resync/measures.
 4. Each frame (if the lab uses time): active laws apply, world integrates,
    bench draws background + lab content, instruments update from measures.
-5. Toggles, sliders, notebook restore and reset mutate live state without reboot.
+5. Toggles, sliders, notebook restore and reset mutate live state without
+   reboot.
+
+## Correctness strategy
+
+Every invariant in `requirements.md` has a property in `tests/`, named after
+its REQ. The properties are implications ("IF the premise holds, THEN ...")
+so that shrinking never reports a false counter-example. The harness is
+dependency-free: a seeded RNG, greedy shrinking, and a suite that reports
+each counter-example with the property that failed.
 
 ## Key decisions
 
@@ -43,9 +76,11 @@ app-eco/    index.html + lab.js ──┘         │   (world + composable laws
   instruments under different laws = different experiments.
 - Metrics are flat `id -> number` maps; instruments only render declared ids.
 - Notebook snapshots clone tunable params; restore re-applies + resyncs.
-- Kiro is used at build time only (specs, steering, hooks); labs run offline.
+- Kiro is used at build time only (specs, steering, hooks, agents, skills,
+  workflows, MCP, power); labs run offline.
+- `dist/` is committed; CI fails when it drifts from the sources.
 
 ## Out of scope
 
 No scripted scenarios with scoring, no accounts, no backend, no runtime AI.
-Guide block, JSONC comments and scenario buttons are explicitly undecided.
+JSONC comments and scenario buttons stay undecided (see INTENT.md).

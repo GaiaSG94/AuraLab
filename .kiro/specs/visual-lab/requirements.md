@@ -3,6 +3,12 @@
 Lean, reusable template for visual education labs (Kiroween Skeleton Crew track).
 One generic shell renders every lab; each lab is a config + small wiring code.
 
+Four labs ship today, built on **one** core and **one** catalog: `app-space`
+(2D space), `app-eco` (2D ecosystem), `app-chimie` (3D glassware), `app-ponts`
+(3D bridge). The first two use the shared shell; the last two mount their own
+interface but share the validator, the catalog, the notebook model and the
+measurement contract.
+
 ## Catalog and config
 
 - REQ-01: WHEN the app boots THEN the system SHALL load exactly one lab config
@@ -11,12 +17,14 @@ One generic shell renders every lab; each lab is a config + small wiring code.
   the system SHALL render a readable error panel instead of a blank page.
 - REQ-03: WHEN a numeric config value is non-finite or out of range THEN the
   system SHALL clamp or reset it to a safe default and record a warning.
-- REQ-04: WHEN the config references an unknown law, apparatus, instrument or
-  metric source THEN the system SHALL refuse it and name the unknown reference.
+- REQ-04: WHEN the config references an unknown law, apparatus, instrument,
+  metric source or substance THEN the system SHALL refuse it and name the
+  unknown reference.
 - REQ-05: WHEN the total particle count exceeds 1500 THEN the system SHALL
   refuse the config.
 - REQ-06: The catalog SHALL be the single list of orderable elements, organized
-  by category (laws, apparatus, instruments, metrics, bench, notebook options).
+  by category (laws, apparatus, instruments, metrics, bench, notebook options),
+  and every entry SHALL carry a notice (rule, sources, limits).
 
 ## Laws and simulation
 
@@ -36,7 +44,8 @@ One generic shell renders every lab; each lab is a config + small wiring code.
 ## Presentation and instruments
 
 - REQ-20: WHEN the lab defines a page color THEN the system SHALL use it as the
-  flat page background, with the shared layout (steps | bench | panel) for every lab.
+  flat page background, with the shared layout (steps | bench | panel) for every
+  shell lab.
 - REQ-21: WHEN elements exist THEN the system SHALL render one selectable row
   per substance, material and law, grouped by category, each with a checkbox
   and an expandable notice (rule, sources, limits).
@@ -57,9 +66,18 @@ One generic shell renders every lab; each lab is a config + small wiring code.
 
 - REQ-30: The core (`core/`) SHALL contain zero lab-specific science; all
   differences between labs SHALL live in their configs, wiring and laws used.
-- REQ-31: The repo SHALL ship two runnable labs (`app-space/`, `app-eco/`)
-  built from the unchanged core.
+- REQ-31: The repo SHALL ship at least two runnable labs built from the
+  unchanged core, in two distinct rendering modes (2D shell and 3D custom UI).
 - REQ-32: A new lab SHALL require only a new folder (`index.html`, `lab.js`,
   `config.json`); no core edit SHALL be needed.
 - REQ-33: A new law SHALL require only a new module file plus one registration
   line; the `add-element` prompt SHALL scaffold it.
+
+## Distribution and correctness
+
+- REQ-40: WHEN the sources change THEN `dist/` SHALL be rebuildable by
+  concatenation alone (no bundler), and CI SHALL fail if `dist/` drifts.
+- REQ-41: WHEN a lab is simulated headlessly THEN every measure SHALL stay
+  finite, whatever the slider values.
+- REQ-42: WHEN a requirement above states an invariant THEN the repository
+  SHALL ship a property test named after its REQ number, and CI SHALL run it.

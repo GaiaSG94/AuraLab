@@ -1,0 +1,38 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "session-context",
+      "description": "Give the agent the repo facts it needs before the first prompt.",
+      "trigger": "SessionStart",
+      "action": {
+        "type": "command",
+        "command": "node scripts/kiro-hook.mjs session-context"
+      },
+      "timeout": 30,
+      "enabled": true
+    },
+    {
+      "name": "task-check",
+      "description": "Re-run every gate after a spec task completes.",
+      "trigger": "PostTaskExecution",
+      "action": {
+        "type": "command",
+        "command": "node scripts/kiro-hook.mjs task-check"
+      },
+      "timeout": 120,
+      "enabled": true
+    },
+    {
+      "name": "final-check",
+      "description": "Ask the agent to finish the job before the turn ends.",
+      "trigger": "Stop",
+      "action": {
+        "type": "command",
+        "command": "node scripts/kiro-hook.mjs stop-check"
+      },
+      "timeout": 120,
+      "enabled": true
+    }
+  ]
+}

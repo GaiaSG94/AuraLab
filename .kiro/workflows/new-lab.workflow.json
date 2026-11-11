@@ -1,0 +1,50 @@
+{
+  "name": "new-lab",
+  "description": "Design, implement, review and verify a new LabKit lab from one brief.",
+  "inputs": {
+    "brief": "prompt",
+    "lab_name": "string"
+  },
+  "steps": [
+    {
+      "type": "step",
+      "id": "design",
+      "agent": "lab-architect",
+      "prompt": "Design the lab described here:\n\n{{brief}}\n\nWrite the spec into .kiro/specs/{{lab_name}}/ (requirements.md, design.md, tasks.md). Use the labkit MCP tools (list_labs, list_catalog) before designing. Do not write any implementation code.",
+      "artifacts": {
+        "spec": ".kiro/specs/{{lab_name}}/requirements.md"
+      }
+    },
+    {
+      "type": "step",
+      "id": "implement",
+      "agent": "wf-coder",
+      "prompt": "Implement the lab specified here:\n\n{{design.output}}\n\nCreate app-{{lab_name}}/ (config.json, lab.js, index.html), add it to scripts/build-standalone.mjs and to the portal index.html, and add the matching property to tests/properties-labs.mjs named after its requirement. Never edit core/ unless the spec asks for a schema extension. Then run: node scripts/validate-config.mjs, node tests/run-tests.mjs, node scripts/build-standalone.mjs."
+    },
+    {
+      "type": "parallel",
+      "id": "reviews",
+      "joinPolicy": "allSettled",
+      "branches": [
+        {
+          "type": "step",
+          "id": "review-spec",
+          "agent": "lab-reviewer",
+          "prompt": "Review the new lab against .kiro/specs/{{lab_name}}/requirements.md and the steering rules. Report blocking items with the REQ number they break. Do not modify any file."
+        },
+        {
+          "type": "step",
+          "id": "review-code",
+          "agent": "semantic_reviewer",
+          "prompt": "Review the code just written for app-{{lab_name}}/: look for real bugs, missing guards, unstable behaviour and violations of the 'no DOM in laws' rule. Report findings with file and line. Do not modify any file."
+        }
+      ]
+    },
+    {
+      "type": "step",
+      "id": "fix",
+      "agent": "wf-coder",
+      "prompt": "Apply the fixes requested by the reviewers (joined review output below).\n\n{{previous.output}}\n\nFix only what the reviews flag. Then run node scripts/validate-config.mjs, node tests/run-tests.mjs and node scripts/build-standalone.mjs. If a review point is wrong, say why and skip it."
+    }
+  ]
+}

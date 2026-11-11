@@ -671,8 +671,13 @@ function validateConfig(raw, known) {
         errors.push(`laws.${i}.params.pairs: must be an array of [a, b] substance pairs`);
       } else {
         pairs.forEach((p) => {
-          if (!Array.isArray(p) || p.length !== 2 || !subIds.has(p[0]) || !subIds.has(p[1])) {
+          if (!Array.isArray(p) || p.length !== 2) {
             errors.push(`laws.${i}.params.pairs: each pair must be two existing substance ids`);
+            return;
+          }
+          const unknown = p.find((id) => !subIds.has(id));
+          if (unknown !== undefined) {
+            errors.push(`laws.${i}.params.pairs: unknown substance "${unknown}"`);
           }
         });
       }

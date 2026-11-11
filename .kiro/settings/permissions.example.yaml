@@ -1,0 +1,34 @@
+# Exemple de permissions Kiro pour ce dépôt.
+#
+# Les permissions de workspace sont stockées PAR UTILISATEUR, hors du dépôt :
+#   ~/.kiro/workspace-roots/<hash>/permissions.yaml
+# (le hash dépend du chemin du workspace). Un dépôt cloné ne peut donc pas
+# injecter ses propres permissions : c'est une règle de sécurité de Kiro.
+#
+# Ce fichier est donc le modèle à copier. Pour l'installer :
+#   1. ouvrir le fichier de permissions du workspace dans Kiro (panneau
+#      Permissions, ou le fichier ci-dessus) ;
+#   2. remplacer son contenu par celui-ci.
+#
+# Effet : le serveur MCP `labkit` peut être appelé sans confirmation pour
+# les outils en lecture seule. `scaffold_law` écrit des fichiers : il reste
+# soumis à confirmation, par design.
+rules:
+  - capability: mcp
+    match:
+      - labkit/list_catalog
+      - labkit/list_labs
+      - labkit/validate_lab
+      - labkit/headless_check
+    effect: allow
+
+  - capability: shell
+    match:
+      - node scripts/validate-config.mjs
+      - node scripts/build-standalone.mjs
+      - node scripts/validate-workflows.mjs
+      - node scripts/workflow-status.mjs
+      - node scripts/kiro-hook.mjs*
+      - node tests/run-tests.mjs
+      - node mcp-server/smoke-test.mjs
+    effect: allow

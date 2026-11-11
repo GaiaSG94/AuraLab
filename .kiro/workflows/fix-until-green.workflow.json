@@ -1,0 +1,42 @@
+{
+  "name": "fix-until-green",
+  "description": "Fix the failing checks in a loop until every gate is green, then report.",
+  "inputs": {
+    "scope": "string"
+  },
+  "steps": [
+    {
+      "type": "step",
+      "id": "diagnose",
+      "agent": "wf-planner",
+      "prompt": "Read the failing checks of scope {{scope}} and produce a short, ordered list of causes. Do not edit any file. Each cause must name the file and the check it fails."
+    },
+    {
+      "type": "repeat",
+      "id": "fix-loop",
+      "maxIterations": 5,
+      "onMaxIterations": "pause",
+      "stopCondition": {
+        "fileCheck": {
+          "path": ".kiro/workflow-output/status.json",
+          "jsonPath": "$.complete",
+          "value": true
+        }
+      },
+      "steps": [
+        {
+          "type": "step",
+          "id": "fix-one",
+          "agent": "wf-coder",
+          "prompt": "Fix the first cause from this list:\n\n{{diagnose.output}}\n\nFix only that one cause, then run 'node scripts/workflow-status.mjs' to refresh .kiro/workflow-output/status.json."
+        }
+      ]
+    },
+    {
+      "type": "step",
+      "id": "report",
+      "agent": "wf-planner",
+      "prompt": "Summarise what was fixed and what remains, for scope {{scope}}. If the loop paused at its cap, say which checks still fail and why. Do not edit any file."
+    }
+  ]
+}

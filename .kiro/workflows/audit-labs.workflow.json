@@ -1,0 +1,49 @@
+{
+  "name": "audit-labs",
+  "description": "Audit every lab of the kit in parallel, then merge the findings into one prioritized report.",
+  "steps": [
+    {
+      "type": "parallel",
+      "id": "per-lab-audit",
+      "joinPolicy": "allSettled",
+      "branches": [
+        {
+          "type": "step",
+          "id": "audit-space",
+          "agent": "lab-reviewer",
+          "prompt": "Audit app-space/ (the 2D space lab): its config against .kiro/specs/visual-lab/requirements.md, its laws, its measures, and the property that covers it. Report blocking items with the REQ number they break. Do not modify any file."
+        },
+        {
+          "type": "step",
+          "id": "audit-eco",
+          "agent": "lab-reviewer",
+          "prompt": "Audit app-eco/ (the 2D ecosystem lab): its config against .kiro/specs/visual-lab/requirements.md, its laws, its measures, and the property that covers it. Report blocking items with the REQ number they break. Do not modify any file."
+        },
+        {
+          "type": "step",
+          "id": "audit-chimie",
+          "agent": "lab-reviewer",
+          "prompt": "Audit app-chimie/ (the 3D chemistry lab): its config, its custom UI, its laws and the property that covers it. Report blocking items with the REQ number they break. Do not modify any file."
+        },
+        {
+          "type": "step",
+          "id": "audit-ponts",
+          "agent": "lab-reviewer",
+          "prompt": "Audit app-ponts/ (the 3D bridge lab): its config, its custom UI, its laws and the property that covers it. Report blocking items with the REQ number they break. Do not modify any file."
+        }
+      ]
+    },
+    {
+      "type": "step",
+      "id": "merge-findings",
+      "agent": "wf-review-aggregator",
+      "prompt": "Merge the four lab audits below into one prioritized report: blocking items first (each with its REQ number), then warnings, then nits. Drop the duplicates and say how many labs share each problem.\n\n{{previous.output}}"
+    },
+    {
+      "type": "step",
+      "id": "write-report",
+      "agent": "wf-planner",
+      "prompt": "Write the merged report to .kiro/workflow-output/lab-audit.md. Then state the verdict: shippable or not shippable, and the exact remaining work."
+    }
+  ]
+}

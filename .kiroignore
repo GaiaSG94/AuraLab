@@ -1,0 +1,25 @@
+# Fichiers que Kiro ne doit pas lire dans ce dépôt.
+# Même syntaxe que .gitignore.
+
+# Fichiers générés : le contenu est déjà dans les sources, et dist/
+# contient le bundle three.js complet (plusieurs centaines de Ko par labo).
+dist/
+app-ponts/vendor/three.min.js
+
+# Dépendances et caches
+node_modules/
+.cache/
+
+# Secrets (aucun ne doit exister ici, la règle est une ceinture de sécurité)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+credentials/
+
+# Exports et données volumineuses
+*.sql
+*.dump
+data/exports/

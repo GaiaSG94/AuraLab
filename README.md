@@ -1,82 +1,155 @@
-# AuraLab — Visual Lab Template
+# LabKit — one kit, many labs
 
-A lean, zero-dependency template for visual education labs.
-Built for the Kiroween **Skeleton Crew** track: one shared core, two
-distinct labs proving its versatility.
+A lean, zero-dependency template for **virtual education labs**. One shared
+core, one catalog of composable laws, and labs that differ only by their data.
+
+Built for the Kiroween **Skeleton Crew** track: a template lean enough to be
+read, flexible enough to carry very different subjects — proven here by four
+labs, two rendering modes and three engines.
 
 ```text
-.kiro/          specs (EARS), steering docs, hook wiring
-core/           shared engine: validate.js, sim.js, app.js, styles.css
-app-space/      lab 1: gravity well, planets, asteroid belt, comets
-app-eco/        lab 2: rabbits vs foxes, bushes, population chart
-scripts/        validate-config.mjs (also used by the Kiro save hook)
+core/                  the shell: layout, theme, sliders, instruments, notebook,
+                       validation — knows zero science
+engines/particles/     2D engine: world + 8 composable laws
+engines/chimie/        3D engine: glassware, mixing, heating
+engines/ponts/         3D engine: nodes, sticks, load, breakage
+app-space/             Space Lab  — gravity well, planets, asteroid belt (2D)
+app-eco/               Eco Lab    — rabbits, foxes, bushes, population chart (2D)
+app-chimie/            Chemistry Lab — pour, mix, heat in 3D glassware
+app-ponts/             Bridge Lab — build a 3D bridge, send the ghost across
+scripts/               validator, standalone builder, scaffolder, CI guards
+tests/                 property-based tests (zero dependency)
+mcp-server/            local MCP server for Kiro agents (stdio)
+power-labkit/          installable Kiro power (manifest + MCP + skills)
+.kiro/                 specs, steering, hooks, agents, skills, workflows, settings
+dist/                  standalone labs: one double-clickable file per lab
 ```
 
 ## Run it
 
-Easiest: double-click **`dist/aura-space.html`** or **`dist/aura-eco.html`** —
-fully standalone, no server needed. (Regenerate with
-`node scripts/build-standalone.mjs` after editing `core/` or configs.)
+Easiest: double-click a file in **`dist/`** — fully standalone, no server,
+no network:
 
-Alternative: serve the modular sources with any static server (ES modules +
-`fetch` need HTTP, not `file://`) — double-click **`start-lab.bat`** and
-leave its window open, or:
+- `dist/labkit-chimie.html` — Chemistry Lab (3D)
+- `dist/labkit-ponts.html` — Bridge Lab (3D)
+- `dist/labkit-space.html` — Space Lab (2D)
+- `dist/labkit-eco.html` — Eco Lab (2D)
+
+Regenerate them after editing `core/`, `engines/` or a config:
 
 ```powershell
-cd AuraLab
+node scripts/build-standalone.mjs
+```
+
+Or serve the modular sources with any static server (ES modules + `fetch`
+need HTTP, not `file://`) — double-click **`start-lab.bat`**, or:
+
+```powershell
 python -m http.server 8080
 ```
 
-Then open in a browser:
-
-- <http://localhost:8080/app-space/> — astronomy lab
-- <http://localhost:8080/app-eco/> — ecosystem lab
-
-## Validate configs
-
-```powershell
-node scripts/validate-config.mjs
-```
-
-Bad numbers are auto-tuned with a warning; structural errors fail loudly.
-Wire it as a Kiro post-save Agent Hook — see `.kiro/hooks/README.md`.
+Then open `index.html` for the portal, or `app-space/`, `app-eco/`,
+`app-chimie/`, `app-ponts/` directly.
 
 ## Create a new lab
 
-1. Copy `app-space/` to `app-<name>/`.
+1. Copy an existing lab folder: `app-eco/` for 2D, `app-chimie/` for 3D.
 2. Edit `config.json` (schema below) and the `<title>` in `index.html`.
-3. Run the validator, reload the page. No core change needed.
+3. Validate, then reload. No core change, ever.
+
+```powershell
+node scripts/validate-config.mjs
+node scripts/build-standalone.mjs
+```
+
+Non-developers: read **`CREER-UN-LABO.md`** (French, step by step, no code).
 
 ## Config schema
 
 | Key | Meaning |
 |---|---|
-| `lab.title`, `lab.subtitle`, `lab.note` | header text |
-| `lab.page` | flat page color of the lab (ink text on it, keep it mid-light) |
+| `lab.id`, `lab.title`, `lab.subtitle`, `lab.note` | identity and header text |
+| `lab.page` | flat page color (ink text sits on it, keep it mid-light) |
 | `lab.accent` | legacy accent color (still required) |
-| `lab.home` | optional link of "← all labs" (default `../index.html`) |
-| `canvas.background`, `canvas.trail` | backdrop + motion-trail strength (0.05–1) |
-| `canvas.starfield` | static background dots (0–600) |
-| `bounds` | `wrap` or `bounce` at edges |
-| `wells[]` | gravity points: `x`,`y` (0–1), `strength` (0–5000), `radius`, `color` |
-| `emitters[]` | particle groups (max 6, 1500 particles total) |
-| `hud.history`, `hud.historyLabel`, `hud.samples` | population chart |
-| `controls[]` | sliders: `path` (e.g. `wells.0.strength`), `label`, `min`, `max`, `step` |
+| `lab.lang` | `en` or `fr` (UI strings) |
+| `lab.home` | target of "← all labs" (default `../index.html`) |
+| `bench.background`, `bench.trail`, `bench.speckles` | scene backdrop |
+| `bounds` | `wrap` or `bounce` at the edges |
+| `substances[]` | populations: `id`, `label`, `count`, `color`, `radius`, `mass`, `speed`, `ring?`, `links?` |
+| `material[]` | apparatus: `id`, `kind` (from the catalog), `label`, `x`, `y`, plus the kind's settings |
+| `laws[]` | active rules, in order: `{ law, targets?, params? }` |
+| `metrics[]` | measured quantities: `id`, `label`, `unit`, `source`, `color` |
+| `instruments[]` | `chips` (live readouts) and/or `curve` (history) |
+| `controls[]` | sliders: `path`, `label`, `min`, `max`, `step` |
+| `notebook` | `enabled`, `prompts[]` (suggested questions) |
 
-Emitter fields: `id`, `label`, `count`, `color`, `radius`, `mass`, `speed`,
-`behavior` (`orbit` | `drift` | `wander` | `seek` | `flee`), plus:
+Valid slider paths: `substances.<id>.count`, `material.<id>.strength`,
+`laws.<n>.<param>`, `bench.trail`. Bad numbers are auto-tuned with a warning;
+structural errors fail loudly and **name the offending value**.
 
-- `orbit`: `orbitBand` ([min, max] fraction of canvas size around well 0).
-- `seek` / `flee`: `target` (another emitter id).
-- predation: `predates` (prey emitter id, eaten on contact).
-- regrowth: `respawn: true` (refill up to `count`, max 3/step).
-- network: `links: { distance }` (lines between same-emitter particles).
+## Kiro integration
 
-## Kiro usage
+The kit is built with Kiro at **build time only**. Every lab runs offline,
+without credits, keys or a backend. Each surface below is verifiable from
+the repository:
 
-- `.kiro/specs/visual-lab/` — requirements (EARS), design, tasks.
-- `.kiro/steering/` — architecture and design-system rules for agents.
-- `.kiro/hooks/` — save-hook wiring for config validation.
+| Surface | Where | Proof it works |
+|---|---|---|
+| **Specs** (EARS) | `.kiro/specs/visual-lab/`, `.kiro/specs/kiro-integration/` | requirements, design and tasks, kept in sync with the code |
+| **Steering** | `.kiro/steering/` | `product`, `tech`, `structure` (foundation) + architecture, design system, law authoring; each file declares its inclusion mode |
+| **Hooks** | `.kiro/hooks/` | 6 triggers, all deterministic commands; the PreToolUse guard blocks a dirty `git push` |
+| **MCP** | `.kiro/settings/mcp.json` + `mcp-server/` | server `labkit`, 5 tools; `node mcp-server/smoke-test.mjs` |
+| **Custom agents** | `.kiro/agents/` | `lab-architect`, `law-smith`, `config-doctor`, `lab-reviewer` |
+| **Skills** | `.kiro/skills/` | `create-lab`, `add-law`, `package-standalone` |
+| **Workflows** | `.kiro/workflows/` | `new-lab`, `fix-until-green`, `audit-labs`; `node scripts/validate-workflows.mjs` |
+| **Power** | `power-labkit/` | Agent Plugins manifest + MCP + 2 skills, installable from GitHub |
+| **Correctness** | `tests/` | property-based tests, one per REQ; `node tests/run-tests.mjs` |
+| **Permissions** | `.kiro/settings/permissions.example.yaml` | workspace permissions are per-user; the installer script writes them |
+| **.kiroignore** | `.kiroignore` | keeps `dist/` and the vendored three.js out of the agent context |
+| **AGENTS.md** | `AGENTS.md` | the contract every agent surface reads |
 
-Kiro is used at build time only. Labs run offline from any static server —
-no runtime API keys, no credits, no backend.
+### The hook that actually bites
+
+`guard-ship.json` is a **PreToolUse** hook. Before any `git commit`, `push`,
+`merge` or `rebase`, it runs the validator, the property tests and the
+standalone build; if any of them fails, or if `dist/` drifted, it exits 2 and
+the tool call is blocked. The same gate runs in CI, so nothing can be shipped
+that would not pass.
+
+### Permissions
+
+Kiro stores workspace permissions **per user, outside the repository** — a
+cloned repo cannot inject its own rules. The repo therefore ships a model and
+an installer:
+
+```powershell
+node scripts/install-kiro-permissions.mjs
+```
+
+It finds the Kiro workspace entry for this folder and writes the rules from
+`.kiro/settings/permissions.example.yaml`. Open the folder in Kiro once first
+(so it records the workspace and asks about trust).
+
+## Commands
+
+```powershell
+node scripts/validate-config.mjs     # validate every app-*/config.json
+node scripts/build-standalone.mjs    # rebuild dist/*.html
+node tests/run-tests.mjs             # property-based tests
+node scripts/validate-workflows.mjs  # validate the workflow recipes
+node scripts/check-kiro.mjs          # validate every Kiro artifact
+node mcp-server/smoke-test.mjs       # drive the MCP server end to end
+python3 .github/hermes/ci_fmt.py     # formatting gate
+```
+
+## Design
+
+Flat page, one color per lab, ink text, Archivo condensed for titles and
+JetBrains Mono for numbers. The flask ghost is the logo and the notebook
+guide. The two 3D labs are documented exceptions: full-screen scenes with a
+frosted-glass HUD, because the 3D content shows through. See
+`.kiro/steering/design-system.md`.
+
+## License
+
+MIT.

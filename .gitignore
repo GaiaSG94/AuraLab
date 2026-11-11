@@ -1,3 +1,6 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# Artefacts des workflows Kiro (générés à chaque run)
+.kiro/workflow-output/

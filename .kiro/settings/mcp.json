@@ -1,10 +1,10 @@
 {
   "mcpServers": {
-    "auralab": {
+    "labkit": {
       "command": "node",
       "args": ["mcp-server/index.js"],
       "disabled": false,
-      "autoApprove": ["list_catalog", "validate_lab"],
+      "autoApprove": ["list_catalog", "list_labs", "validate_lab", "headless_check"],
       "disabledTools": []
     }
   }

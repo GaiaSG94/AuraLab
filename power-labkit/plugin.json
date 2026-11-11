@@ -1,0 +1,25 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "labkit",
+  "version": "1.0.0",
+  "description": "Build virtual education labs on the LabKit kit: one shared core, one catalog, labs that differ only by their data. Ships the catalog, the config schema and the review rules.",
+  "author": {
+    "name": "GaiaSG94",
+    "url": "https://github.com/GaiaSG94/LabKit"
+  },
+  "keywords": [
+    "labkit",
+    "education",
+    "lab",
+    "simulation",
+    "particles",
+    "science",
+    "teaching",
+    "classroom",
+    "curriculum",
+    "stem"
+  ],
+  "homepage": "https://github.com/GaiaSG94/LabKit",
+  "repository": "https://github.com/GaiaSG94/LabKit",
+  "license": "MIT"
+}

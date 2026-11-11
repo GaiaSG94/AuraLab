@@ -1,12 +1,14 @@
 name: CI (labos statiques)
 
 # CI réelle LabKit : dépôt 100 % statique (HTML/CSS/JS, zéro dépendance).
-# 4 jobs, chacun ≤ 5 min (règle user 2026-10-24, gardée par ci-budget).
+# 5 jobs, chacun ≤ 5 min (règle user 2026-10-24, gardée par ci-budget).
 # Runners : ubuntu-latest — le dépôt n'a aucun runner self-hosted
 # (adaptation 2026-11-08 : passer à [self-hosted, labkit-worker] si des
 # runners dédiés sont installés un jour).
 
 on:
+  push:
+    branches: [main]
   pull_request:
   workflow_dispatch: {}
 
@@ -87,3 +89,26 @@ jobs:
           node-version: "24"
       - name: Intégrité (syntaxe JS, JSON valides, labos complets)
         run: python3 .github/hermes/ci_integrity.py
+      - name: Artefacts Kiro (steering, hooks, agents, skills, MCP, power)
+        run: node scripts/check-kiro.mjs
+      - name: Recettes de workflows Kiro
+        run: node scripts/validate-workflows.mjs
+
+  pbt:
+    name: Propriétés (PBT)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout (superficiel)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Propriétés extraites des exigences EARS
+        run: node tests/run-tests.mjs
+      - name: Serveur MCP (probe stdio, 5 outils)
+        run: node mcp-server/smoke-test.mjs

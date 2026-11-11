@@ -3,6 +3,7 @@
   "hooks": [
     {
       "name": "validate-lab-config",
+      "description": "Every lab config must validate before it reaches the demo.",
       "trigger": "PostFileSave",
       "matcher": "app-[^\\\\/]+[\\\\/]config\\.json$",
       "action": {
@@ -10,6 +11,18 @@
         "command": "node scripts/validate-config.mjs"
       },
       "timeout": 60,
+      "enabled": true
+    },
+    {
+      "name": "check-saved-js",
+      "description": "Syntax-check any JS file the agent saves.",
+      "trigger": "PostFileSave",
+      "matcher": "\\.js$",
+      "action": {
+        "type": "command",
+        "command": "node scripts/kiro-hook.mjs check-js"
+      },
+      "timeout": 30,
       "enabled": true
     }
   ]
