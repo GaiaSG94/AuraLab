@@ -92,6 +92,8 @@ const PACKS = {
     "engines/chimie/glassware.js",
     "engines/chimie/bench-ghost.js",
     "engines/chimie/hud-css.js",
+    "engines/chimie/hud-shared.js",
+    "engines/chimie/hud-left.js",
     "engines/chimie/benchview.js",
     "engines/chimie/hud.js",
   ],

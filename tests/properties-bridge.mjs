@@ -16,8 +16,10 @@ function buildDeck(world, mat) {
   return placed;
 }
 
-async function activeWorld(siteId) {
-  const booted = await bootLab("app-ponts");
+// One boot shared by every bridge test; each case resets the world it uses.
+const booted = await bootLab("app-ponts");
+
+function activeWorld(siteId) {
   const world = booted.lab.worlds[siteId];
   if (!world) throw new Error(`no world for site ${siteId}`);
   world.resetPhysics();
@@ -86,7 +88,6 @@ suite.test("the budget blocks a placement that would overspend", async () => {
 });
 
 suite.test("each site only offers its own material palette", async () => {
-  const booted = await bootLab("app-ponts");
   for (const site of booted.config.sites) {
     const world = booted.lab.worlds[site.id];
     const allowed = site.materials;
@@ -101,6 +102,54 @@ suite.test("each site only offers its own material palette", async () => {
       if (!/not on this site/i.test(r.why)) throw new Error(`refusal does not explain the site rule: ${r.why}`);
     }
   }
+});
+
+suite.test("every new material really adds something the others do not", () => {
+  const wood = MATERIALS.bois;
+  const bamboo = MATERIALS.bambou;
+  const glulam = MATERIALS.lamelle;
+  const steel = MATERIALS.acier;
+  const truss = MATERIALS.treillis;
+  const cable = MATERIALS.cable;
+  const chain = MATERIALS.chaine;
+  if (!(bamboo.cost < wood.cost && bamboo.weight < wood.weight)) {
+    throw new Error("bamboo should be cheaper and lighter than wood");
+  }
+  if (!(glulam.maxLen > wood.maxLen && glulam.weight < steel.weight)) {
+    throw new Error("glulam should span further than wood and weigh less than steel");
+  }
+  if (!(truss.maxLen > steel.maxLen && truss.strength > steel.strength)) {
+    throw new Error("the truss should span and hold more than a solid steel beam");
+  }
+  if (!(chain.strength > cable.strength && chain.weight > cable.weight)) {
+    throw new Error("a chain should out-pull a cable, and weigh more for it");
+  }
+});
+
+suite.test("cables go slack in compression, arches buckle in tension", async () => {
+  const world = booted.lab.worlds.fleuve;
+  const always = () => true;
+
+  // White-box but deterministic: place the member, force the test state, then
+  // deform the two nodes and read the load the solver attributed to it.
+  async function loadOf(mat, squeeze) {
+    world.resetPhysics();
+    world.sticks = [];
+    const r = world.place(0, 1, mat);
+    if (!r.ok) throw new Error(`could not place ${mat}: ${r.why}`);
+    world.testing = true;
+    const mid = (world.nodes[0].rx + world.nodes[1].rx) / 2;
+    const gap = squeeze ? 2 : 6; // rest length is 4 m
+    world.nodes[0].x = mid - gap / 2;
+    world.nodes[1].x = mid + gap / 2;
+    world.step(1 / 60, always);
+    return world.sticks[0].load || 0;
+  }
+
+  if ((await loadOf("cable", true)) > 0) throw new Error("a compressed cable carried load");
+  if ((await loadOf("arche", false)) > 0) throw new Error("a stretched arch carried load");
+  if ((await loadOf("bois", true)) <= 0) throw new Error("a beam carried nothing while compressed");
+  if ((await loadOf("bois", false)) <= 0) throw new Error("a beam carried nothing while stretched");
 });
 
 suite.property(
@@ -120,8 +169,7 @@ suite.property(
 // the comparison would measure which bridge broke first, not the dead load.
 const SAG_FRAMES = 20;
 
-async function sagWith(mat, selfWeight) {
-  const booted = await bootLab("app-ponts");
+function sagWith(mat, selfWeight) {
   const world = booted.lab.worlds.fleuve;
   world.resetPhysics();
   world.sticks = [];

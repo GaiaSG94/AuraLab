@@ -151,15 +151,23 @@ export function buildMapView(host, ctx) {
   const hitGeo = new THREE.SphereGeometry(1.9, 8, 6);
   const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
   hitMat.colorWrite = false;
+  // One cross-section per material: thickness and shape read as the family.
+  const bambooGeo = new THREE.BoxGeometry(1, 0.34, 0.34);
   const beamGeo = new THREE.BoxGeometry(1, 0.45, 0.45);
+  const steelGeo = new THREE.BoxGeometry(1, 0.5, 0.5);
+  const glulamGeo = new THREE.BoxGeometry(1, 0.55, 0.4);
+  const trussGeo = new THREE.BoxGeometry(1, 0.7, 0.42);
   const archGeo = new THREE.BoxGeometry(1, 0.62, 0.62);
   const pierGeo = new THREE.BoxGeometry(1, 0.75, 0.75);
   const cableGeo = new THREE.CylinderGeometry(0.1, 0.1, 1, 8);
+  const chainGeo = new THREE.CylinderGeometry(0.13, 0.13, 1, 6);
   const ropeGeo = new THREE.CylinderGeometry(0.07, 0.07, 1, 6);
-  cableGeo.rotateZ(Math.PI / 2); // along X, like the beams, so placeBeam can stretch it
-  ropeGeo.rotateZ(Math.PI / 2);
-  // Geometry per material: a box reads as a beam, a thin cylinder as a cable.
-  const GEO = { bois: beamGeo, acier: beamGeo, arche: archGeo, pilier: pierGeo, cable: cableGeo, corde: ropeGeo };
+  for (const g of [cableGeo, chainGeo, ropeGeo]) g.rotateZ(Math.PI / 2); // along X, so placeBeam can stretch it
+  const GEO = {
+    bambou: bambooGeo, bois: beamGeo, lamelle: glulamGeo, acier: steelGeo,
+    treillis: trussGeo, arche: archGeo, pilier: pierGeo,
+    cable: cableGeo, chaine: chainGeo, corde: ropeGeo,
+  };
   function geoFor(id) {
     return GEO[id] || beamGeo;
   }
