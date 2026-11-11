@@ -191,6 +191,7 @@ export async function startGame(source) {
   const hud = buildHud(host, ctx);
   if (active().world.sticks.length > 0) ctx.message = "Road restored — TEST it or keep building.";
   const lastStatut = {};
+  const lastRung = {};
   let acc = 0; // fixed-step accumulator: holds/breaks must not depend on frame rate
   let last = performance.now();
   function frame(now) {
@@ -211,6 +212,15 @@ export async function startGame(source) {
       }
       if (n === 4) acc = 0;
       if (w.testing) ctx.message = ctx.ladderStatus(w);
+      // Journal each rung the moment the ladder advances past it.
+      const rung = w.ghostIndex;
+      if (w.testing && rung !== (lastRung[activeId] ?? 0)) {
+        for (let k = lastRung[activeId] ?? 0; k < rung; k++) {
+          const t = w.ghosts[k] ? w.ghosts[k].weight : 0;
+          ctx.journal(`Ghost ${k + 1}/${w.ghosts.length} (${t} t) crossed.`, w.measures());
+        }
+        lastRung[activeId] = rung;
+      }
       if (w.statut !== (lastStatut[activeId] ?? -1)) {
         lastStatut[activeId] = w.statut;
         if (w.statut === 1) {
@@ -222,6 +232,8 @@ export async function startGame(source) {
           const site = active().site;
           const at = config.sites.findIndex((s) => s.id === activeId);
           const level = `Level ${at + 1}/${config.sites.length} — ${site.label}`;
+          const n = w.ghosts.length || 1;
+          ctx.journal(`Ghost ${n}/${n} (${w.passed} t) crossed.`, w.measures());
           ctx.journal(`${level}: Holding! Score ${m.score}.`, m);
           ctx.announce(`${level}: Holding! Score: ${m.score}.`);
         } else if (w.statut === 0) {
