@@ -56,14 +56,15 @@ export function buildTestGhost(THREE, deps) {
 
   const look = { x: 0, y: 0 };
   let ptr = { x: 0, y: 0, at: -1e9 };
-  window.addEventListener("pointermove", (e) => {
+  function onPointerMove(e) {
     const r = host.getBoundingClientRect();
     ptr = {
       x: ((e.clientX - r.left) / r.width) * 2 - 1,
       y: -((e.clientY - r.top) / r.height) * 2 + 1,
       at: performance.now(),
     };
-  });
+  }
+  window.addEventListener("pointermove", onPointerMove);
   let blinkAt = 2.5;
   const headV = new THREE.Vector3();
   const aheadV = new THREE.Vector3();
@@ -133,5 +134,14 @@ export function buildTestGhost(THREE, deps) {
     return (law && law.params.poids) || 20;
   }
 
-  return { group, tilt, waveHem, moveEyes, chargePoids };
+  // Tear down: drop the listener and free the lathe geometry.
+  function dispose() {
+    window.removeEventListener("pointermove", onPointerMove);
+    scene.remove(group);
+    hemGeo.dispose();
+    ink.dispose();
+    cheek.dispose();
+  }
+
+  return { group, tilt, waveHem, moveEyes, chargePoids, dispose };
 }

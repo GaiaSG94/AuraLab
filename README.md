@@ -16,7 +16,7 @@ engines/ponts/         3D engine: nodes, sticks, load, breakage
 app-space/             Space Lab  — gravity well, planets, asteroid belt (2D)
 app-eco/               Eco Lab    — rabbits, foxes, bushes, population chart (2D)
 app-chimie/            Chemistry Lab — real aqueous chemistry: titration, pH, precipitates, CO2
-app-ponts/             Bridge Lab — six structural materials, tension/compression families, load test
+app-ponts/             Bridge Lab — ten structural materials, generated levels, load ladder, purse
 scripts/               validator, standalone builder, scaffolder, CI guards
 tests/                 property-based tests (zero dependency)
 mcp-server/            local MCP server for Kiro agents (stdio)
@@ -31,7 +31,7 @@ Easiest: double-click a file in **`dist/`** — fully standalone, no server,
 no network:
 
 - `dist/labkit-chimie.html` — Chemistry Lab (3D): 8 reagents, burette titration, pH / precipitate / pressure
-- `dist/labkit-ponts.html` — Bridge Lab (3D): wood, steel, cable, rope, arch, concrete pier
+- `dist/labkit-ponts.html` — Bridge Lab (3D): levels that widen the gap and the load ladder, a purse that carries over
 - `dist/labkit-space.html` — Space Lab (2D)
 - `dist/labkit-eco.html` — Eco Lab (2D)
 
@@ -86,6 +86,29 @@ Non-developers: read **`CREER-UN-LABO.md`** (French, step by step, no code).
 Valid slider paths: `substances.<id>.count`, `material.<id>.strength`,
 `laws.<n>.<param>`, `bench.trail`. Bad numbers are auto-tuned with a warning;
 structural errors fail loudly and **name the offending value**.
+
+### Bridge Lab levels
+
+`app-ponts/config.json` has no `sites` list. The level generator
+(`engines/ponts/levels.js`) derives every level from a `levels` block, and a
+level is a complete site: gap width, load ladder, material palette, purse and
+reward. The valley, river and bridge are rebuilt around it.
+
+```json
+"levels": {
+  "width":   { "start": 12, "step": 4, "max": 44 },
+  "rungs":   { "start": 2, "step": 1, "max": 6, "every": 2 },
+  "weight":  { "start": 8, "step": 5, "max": 45 },
+  "purse":   { "start": 90, "step": 45, "max": 900 },
+  "reward":  { "perTon": 12, "min": 40 },
+  "unlocks": { "start": 3, "every": 1 }
+}
+```
+
+Clearing the ladder banks `purse - spent + reward`, unlocks the next level and
+keeps the finished bridge on screen until **Next level** (or `N`) is pressed.
+The level, the purse and every saved design live in `localStorage`
+(`labkit.ponts.save.v2`), so a reload resumes the run.
 
 ## Kiro integration
 

@@ -80,6 +80,16 @@ measurement contract.
 - REQ-52: The bridge engine SHALL draw members from a structural catalogue of at least six materials, each with its own cost, maximum span, stiffness, strength and self-weight, and each belonging to a mechanical family (tension only, compression only, or both).
 - REQ-53: A bridge site SHALL gate its material palette, so progression is visible in the dock.
 - REQ-54: The bridge dock SHALL show every allowed material with its cost and span, and the placement preview SHALL turn red when the span exceeds the material limit.
+- REQ-55: The bridge lab SHALL derive each level from the `levels` block of
+  its config (gap width, load ladder, heaviest ghost, material palette and
+  reward) and SHALL build it as a complete site: valley, river and bridge.
+- REQ-56: Difficulty SHALL never decrease from one level to the next, and
+  width, rungs and weight SHALL stay inside their declared caps.
+- REQ-57: WHEN a ladder is cleared THEN the purse SHALL become
+  `purse - spent + reward` (never negative), the reward SHALL be banked once,
+  and the next level SHALL be built from the saved level and purse.
+- REQ-58: The material palette SHALL only grow with the level number, and
+  SHALL eventually unlock the whole catalogue.
 
 ## Distribution and correctness
 

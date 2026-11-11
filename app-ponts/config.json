@@ -2,10 +2,10 @@
   "lab": {
     "id": "ponts",
     "title": "Bridge Lab",
-    "subtitle": "Build a 3D bridge from ten materials, then face a ladder of heavier and heavier ghosts.",
+    "subtitle": "Clear a level, earn the budget, face a wider gap and a heavier ladder.",
     "accent": "#f59e0b",
     "page": "#8fb7ff",
-    "note": "The test sends several ghosts across, each heavier than the last. The bridge must carry the whole ladder.",
+    "note": "Ten materials, one ladder of ghosts per level. Every ghost that crosses pays for the next bridge.",
     "lang": "en"
   },
   "bench": {
@@ -14,183 +14,50 @@
     "speckles": 0
   },
   "bounds": "wrap",
-  "sites": [
-    {
-      "id": "ruisseau",
-      "label": "Brook",
-      "width": 12,
-      "budget": 90,
-      "materials": [
-        "corde",
-        "cable",
-        "bambou",
-        "bois"
-      ]
-    },
-    {
-      "id": "riviere",
-      "label": "River",
-      "width": 28,
-      "budget": 150,
-      "materials": [
-        "corde",
-        "cable",
-        "chaine",
-        "bambou",
-        "bois",
-        "lamelle",
-        "acier"
-      ]
-    },
-    {
-      "id": "fleuve",
-      "label": "Great River",
-      "width": 44,
-      "budget": 220,
-      "materials": [
-        "corde",
-        "cable",
-        "chaine",
-        "bambou",
-        "bois",
-        "lamelle",
-        "acier",
-        "treillis",
-        "pilier",
-        "arche"
-      ]
-    }
-  ],
+  "levels": {
+    "width": { "start": 12, "step": 4, "max": 44 },
+    "rungs": { "start": 2, "step": 1, "max": 6, "every": 2 },
+    "weight": { "start": 8, "step": 5, "max": 45 },
+    "purse": { "start": 90, "step": 45, "max": 900 },
+    "reward": { "perTon": 12, "min": 40 },
+    "unlocks": { "start": 3, "every": 1 }
+  },
   "substances": [],
   "material": [
-    {
-      "id": "fantome",
-      "kind": "fantome",
-      "label": "Test ghost"
-    },
-    {
-      "id": "pylone-gauche",
-      "kind": "pylone",
-      "label": "Left-bank pylon",
-      "x": 0.3,
-      "y": 0.2
-    },
-    {
-      "id": "pylone-droit",
-      "kind": "pylone",
-      "label": "Right-bank pylon",
-      "x": 0.7,
-      "y": 0.2
-    }
+    { "id": "fantome", "kind": "fantome", "label": "Test ghost" },
+    { "id": "pylone-gauche", "kind": "pylone", "label": "Left-bank pylon", "x": 0.3, "y": 0.2 },
+    { "id": "pylone-droit", "kind": "pylone", "label": "Right-bank pylon", "x": 0.7, "y": 0.2 }
   ],
   "laws": [
-    {
-      "law": "chantier",
-      "params": {
-        "budget": 120
-      }
-    },
-    {
-      "law": "gravite"
-    },
-    {
-      "law": "poids-propre",
-      "params": {
-        "g": 9.81
-      }
-    },
-    {
-      "law": "rupture"
-    },
-    {
-      "law": "charge-flottante",
-      "params": {
-        "poids": 20,
-        "vitesse": 6,
-        "echelons": 4
-      }
-    }
+    { "law": "chantier", "params": { "budget": 90 } },
+    { "law": "gravite" },
+    { "law": "poids-propre", "params": { "g": 9.81 } },
+    { "law": "rupture" },
+    { "law": "charge-flottante", "params": { "poids": 8, "vitesse": 6, "echelons": 2 } }
   ],
   "metrics": [
-    {
-      "id": "fleche",
-      "label": "Sag",
-      "unit": "mm",
-      "source": "fleche",
-      "color": "#7dd3fc"
-    },
-    {
-      "id": "contrainte",
-      "label": "Max stress",
-      "unit": "%",
-      "source": "contrainte",
-      "color": "#f87171"
-    },
-    {
-      "id": "cout",
-      "label": "Cost",
-      "unit": "",
-      "source": "cout",
-      "color": "#fbbf24"
-    },
-    {
-      "id": "score",
-      "label": "Score",
-      "unit": "",
-      "source": "score",
-      "color": "#6ee7a0"
-    }
+    { "id": "fleche", "label": "Sag", "unit": "mm", "source": "fleche", "color": "#7dd3fc" },
+    { "id": "contrainte", "label": "Max stress", "unit": "%", "source": "contrainte", "color": "#f87171" },
+    { "id": "cout", "label": "Spent", "unit": "", "source": "cout", "color": "#fbbf24" },
+    { "id": "score", "label": "Score", "unit": "", "source": "score", "color": "#6ee7a0" }
   ],
   "instruments": [
-    {
-      "type": "chips",
-      "metrics": [
-        "fleche",
-        "contrainte",
-        "cout",
-        "score"
-      ]
-    },
-    {
-      "type": "curve",
-      "metrics": [
-        "contrainte"
-      ]
-    }
+    { "type": "chips", "metrics": ["fleche", "contrainte", "cout", "score"] },
+    { "type": "curve", "metrics": ["contrainte"] }
   ],
   "controls": [
-    {
-      "path": "laws.4.poids",
-      "label": "Heaviest ghost (t)",
-      "min": 8,
-      "max": 40,
-      "step": 1
-    },
-    {
-      "path": "laws.4.echelons",
-      "label": "Ghosts in the ladder",
-      "min": 1,
-      "max": 6,
-      "step": 1
-    },
-    {
-      "path": "laws.4.vitesse",
-      "label": "Ghost speed",
-      "min": 2,
-      "max": 12,
-      "step": 1
-    }
+    { "path": "laws.4.vitesse", "label": "Ghost speed", "min": 2, "max": 12, "step": 1 }
   ],
   "notebook": {
     "enabled": true,
     "prompts": [
-      "The ladder sends four ghosts, each heavier than the last. Which one breaks your bridge?",
-      "Why does a bridge that carries 5 t fail at 15 t, and where does it fail first?",
-      "Rope is the cheapest: how far up the ladder can a rope deck get?",
-      "Cables only pull. What happens if you try to hold the deck up with cables alone?",
+      "Each level pays for the next one. Which material buys the most load per coin?",
+      "The gap widens every level: when does wood stop being enough?",
+      "Cables only pull. What happens if you hold the deck up with cables alone?",
       "Arches and piers only push. Where on the bridge does that actually help?",
-      "Steel truss vs solid steel: which one climbs the ladder for less money?",
-      "Which deck carries the heaviest ghost at the lowest cost?"
+      "The ladder sends heavier ghosts one after another. Which rung breaks your bridge?",
+      "Steel truss vs solid steel: which one climbs further for less money?",
+      "Spend everything on level 1, or keep a purse for the wide gaps later?"
     ]
   }
 }
