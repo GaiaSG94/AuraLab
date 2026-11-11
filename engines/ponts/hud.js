@@ -38,11 +38,6 @@ const PH_CSS = `
 .ph-brand{position:absolute;left:22px;top:18px;height:50px;padding:0;pointer-events:none;display:flex;align-items:center;gap:8px;border-radius:999px}
 .ph-logo{width:36px;display:block;flex:none}
 .ph-brand b{font-weight:900;font-stretch:70%;font-size:26px;line-height:1;letter-spacing:-.01em;white-space:nowrap}
-.ph-sites{position:absolute;left:50%;top:18px;transform:translateX(-50%);height:50px;padding:6px;display:flex;gap:2px;border-radius:999px}
-.ph-sites button{height:38px;padding:0 17px;border-radius:999px;font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:5px;white-space:nowrap}
-.ph-sites button:hover{background:rgba(255,255,255,.45)}
-.ph-sites button.on{background:#fff;box-shadow:0 4px 12px -6px rgba(30,20,70,.5)}
-.ph-sites .ph-i{width:13px;height:13px;color:#f59e0b}
 .ph-tr{position:absolute;right:20px;top:18px;display:flex;gap:8px}
 .ph-score{height:50px;padding:0 16px;border-radius:999px;display:flex;align-items:center;gap:7px;font-weight:600;white-space:nowrap}
 .ph-score b{font:700 15px "JetBrains Mono",ui-monospace,Consolas,monospace}
@@ -92,6 +87,7 @@ const PH_CSS = `
 .ph-slider label{display:flex;justify-content:space-between;font-weight:600;font-size:12.5px;margin-bottom:6px}
 .ph-slider output{font:700 12px "JetBrains Mono",ui-monospace,monospace}
 .ph-slider input{width:100%;margin:0;accent-color:#1b1530}
+.ph-ladder{font:600 11.5px "JetBrains Mono",ui-monospace,monospace;color:rgba(27,21,48,.72);background:rgba(255,255,255,.55);border-radius:10px;padding:7px 9px;line-height:1.4}
 .ph-prompts,.ph-entries{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:12px}
 .ph-prompts li{background:rgba(255,181,71,.25);border-radius:10px;padding:7px 9px;font-weight:600}
 .ph-entries{max-height:160px;overflow:auto}
@@ -120,7 +116,6 @@ const PH_CSS = `
 @media (max-width:900px){.ph-card,.ph-score{display:none}}
 @media (max-width:640px){
   .ph-brand b{display:none}
-  .ph-sites{top:76px}
   .ph-dock{top:auto;bottom:96px;left:50%;transform:translateX(-50%);width:auto;flex-direction:row}
   .ph-dock button,.ph-dock button.act{width:54px;height:54px}
   .ph-mats{flex-direction:row;flex-wrap:wrap}
@@ -131,6 +126,16 @@ const PH_CSS = `
   .ph-go .ph-sep,.ph-hint{display:none}
 }
 @media (prefers-reduced-motion: reduce){.ph-root *{transition:none!important}}
+.ph-level{position:absolute;left:50%;top:18px;transform:translateX(-50%);height:56px;padding:0 20px;display:flex;align-items:center;gap:10px;border-radius:999px;line-height:1.2}
+.ph-level.has-next{padding-right:8px}
+.ph-lv{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;min-width:0}
+.ph-lv small{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.ph-next{height:38px;padding:0 12px 0 14px;border-radius:999px;background:#12b45a;color:#fff;display:none;align-items:center;gap:2px;font-weight:800;font-size:12.5px;white-space:nowrap}
+.ph-next.show{display:flex}
+.ph-next .ph-i{width:14px;height:14px}
+.ph-level b{font-weight:900;font-stretch:72%;font-size:19px;letter-spacing:-.01em}
+.ph-level small{font:600 10.5px "JetBrains Mono",ui-monospace,monospace;color:rgba(27,21,48,.62);white-space:nowrap}
+@media (max-width:900px){.ph-level{top:74px;max-width:calc(100% - 32px)}.ph-level small{font-size:9.5px}}
 `;
 
 export function buildHud(host, ctx) {
@@ -145,8 +150,9 @@ export function buildHud(host, ctx) {
   const home = ctx.config.lab.home || "../index.html";
   root.innerHTML =
     '<div class="ph-brand"><span class="ph-logo"></span><b></b></div>' +
-    '<nav class="ph-gx ph-sites" aria-label="Sites"></nav>' +
-    '<div class="ph-tr"><span class="ph-gx ph-score" title="Total score">Score <b>0</b></span>' +
+    '<div class="ph-gx ph-level"><div class="ph-lv" role="status" aria-label="Current level"><b>Level 1</b><small></small></div>' +
+    `<button type="button" class="ph-next" title="Open the next level (N)"><span class="ph-nl">Next level</span>${phIcon("chev")}</button>` +
+    '<div class="ph-tr"><span class="ph-gx ph-score" title="Purse: what you may spend on this level">Purse <b>0</b></span>' +
     `<a class="ph-gx ph-home">${phIcon("back")}all labs</a></div>` +
     '<nav class="ph-gx ph-dock" aria-label="Materials and tools">' +
     '<div class="ph-mats"></div>' +
@@ -183,7 +189,10 @@ export function buildHud(host, ctx) {
   $(".ph-brand b").textContent = String(ctx.config.lab.title || "lab").toLowerCase();
   $(".ph-home").setAttribute("href", home);
   if (window.AuraGhost) window.AuraGhost.mount($(".ph-logo"), "ink");
-  const sitesEl = $(".ph-sites");
+  const levelEl = $(".ph-level b");
+  const levelSub = $(".ph-level small");
+  const levelBar = $(".ph-level");
+  const nextBtn = $(".ph-next");
   const scoreEl = $(".ph-score b");
   const hintEl = $(".ph-hint");
   const hintText = $(".ph-hint span");
@@ -194,17 +203,7 @@ export function buildHud(host, ctx) {
   const ghostEl = $(".ph-ghost");
   const journalEl = $(".ph-journal");
 
-  // Site tabs.
-  const siteBtns = {};
-  for (const s of ctx.config.sites) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.dataset.site = s.id;
-    b.addEventListener("click", () => ctx.setSite(s.id));
-    sitesEl.appendChild(b);
-    siteBtns[s.id] = b;
-  }
-  // Material dock: one button per material the active site allows.
+  // Material dock: one button per material the active level allows.
   const MAT_ICON = {
     bambou: "bamboo", bois: "beam", lamelle: "glulam", acier: "steel", treillis: "truss",
     cable: "cable", chaine: "chain", corde: "rope", arche: "arch", pilier: "pier",
@@ -249,6 +248,12 @@ export function buildHud(host, ctx) {
   });
   testBtn.addEventListener("click", () => {
     ctx.test();
+    refresh(true);
+  });
+
+  // Next: only offered once the ladder is cleared (the reward is already banked).
+  nextBtn.addEventListener("click", () => {
+    ctx.nextLevel();
     refresh(true);
   });
 
@@ -338,13 +343,11 @@ export function buildHud(host, ctx) {
     };
   }
   const hasCharge = chargeParams().length > 0;
-  const poidsSlider = hasCharge ? slider("Heaviest ghost (t)", 8, 40, 1,
-    () => chargeParams()[0].poids,
-    (v) => chargeParams().forEach((p) => { p.poids = v; })) : null;
-  const echelonsSlider = hasCharge ? slider("Ghosts in the ladder", 1, 6, 1,
-    () => chargeParams()[0].echelons,
-    (v) => chargeParams().forEach((p) => { p.echelons = v; })) : null;
-  const vitesseSlider = hasCharge ? slider("Speed", 2, 12, 1,
+  // The ladder is the level's contract, not a knob: show it, do not edit it.
+  const ladderInfo = document.createElement("p");
+  ladderInfo.className = "ph-ladder";
+  ghostEl.appendChild(ladderInfo);
+  const vitesseSlider = hasCharge ? slider("Crossing speed", 2, 12, 1,
     () => chargeParams()[0].vitesse,
     (v) => chargeParams().forEach((p) => { p.vitesse = v; })) : null;
 
@@ -374,6 +377,11 @@ export function buildHud(host, ctx) {
       if (id) ctx.setTool(id);
     } else if (e.key.toLowerCase() === "e" || e.key === "3") {
       ctx.setTool("gomme");
+    } else if (e.key === "n" || e.key === "N") {
+      if (ctx.pendingLevel && ctx.pendingLevel()) {
+        ctx.nextLevel();
+        refresh(true);
+      }
     } else if (e.key === "Escape") {
       ctx.selected = -1;
       root.querySelectorAll(".ph-sec[open]").forEach((d) => { d.open = false; });
@@ -403,19 +411,20 @@ export function buildHud(host, ctx) {
     const w = ctx.worlds[ctx.activeId()].world;
     const spent = w.spent();
     const budget = w.budget();
-    const top = `${ctx.activeId()}|${ctx.totalScore()}|${spent}|${budget}|${ctx.tool}|${JSON.stringify(ctx.save.cleared)}|${w.testing}|${w.statut}`;
+    const spec = ctx.spec();
+    const pending = ctx.pendingLevel ? ctx.pendingLevel() : 0;
+    const top = `${spec.level}|${ctx.purse()}|${spent}|${budget}|${ctx.tool}|${spec.width}|${spec.ladder.rungs}|${spec.ladder.heaviest}|${w.testing}|${w.statut}|${pending}`;
     if (force || top !== lastTop) {
       lastTop = top;
-      for (const s of ctx.config.sites) {
-        const b = siteBtns[s.id];
-        b.innerHTML = "";
-        b.appendChild(document.createTextNode(s.label));
-        if (ctx.save.cleared[s.id]) b.insertAdjacentHTML("beforeend", phIcon("star"));
-        b.classList.toggle("on", s.id === ctx.activeId());
-        b.setAttribute("aria-pressed", String(s.id === ctx.activeId()));
-      }
+      levelEl.textContent = pending ? `Level ${spec.level} cleared` : `Level ${spec.level}`;
+      levelBar.classList.toggle("has-next", pending > 0);
+      nextBtn.classList.toggle("show", pending > 0);
+      $(".ph-nl").textContent = `Next: level ${pending || spec.level + 1}`;
+      levelSub.textContent = pending
+        ? `+${spec.reward} banked · ${ctx.purse()} purse for a wider gap`
+        : `${spec.width} m gap · ${spec.ladder.rungs} ghosts up to ${spec.ladder.heaviest} t · pays ${spec.reward}`;
       renderMaterials();
-      scoreEl.textContent = String(ctx.totalScore());
+      scoreEl.textContent = String(ctx.purse());
       V("spent").textContent = `${spent} / ${budget}`;
       const frac = budget > 0 ? Math.min(1, spent / budget) : 0;
       arcEl.setAttribute("stroke-dasharray", `${(frac * 113.1).toFixed(1)} 113.1`);
@@ -431,9 +440,8 @@ export function buildHud(host, ctx) {
         if (box.checked) active++;
       }
       V("laws").textContent = `${active} active`;
-      if (poidsSlider) poidsSlider.sync();
-      if (echelonsSlider) echelonsSlider.sync();
       if (vitesseSlider) vitesseSlider.sync();
+      ladderInfo.textContent = `Ladder: ${ctx.spec().ladder.weights.join(" t → ")} t`;
       V("ghost").textContent = hasCharge ? ghostSummary() : "";
       testBtn.setAttribute("aria-busy", String(!!w.testing));
       testBtn.querySelector("span").textContent = w.testing ? "Testing…" : "Test";

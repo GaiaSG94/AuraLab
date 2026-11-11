@@ -2495,6 +2495,88 @@ function createWorld({ laws, site }) {
   return world;
 }
 
+// ---- engines/ponts/levels.js (inlined) ----
+// Bridge Lab level progression.
+//
+// A level is a contract: how wide the gap is, how many ghosts cross, how heavy
+// the last one is, which materials the yard delivers, and what clearing it pays.
+// Difficulty only ever grows with the level number, so a saved game can be
+// resumed and a score compared across runs.
+//
+// DOM-free: the same generator drives the browser, the tests and the MCP server.
+
+// Unlock order: cheap and forgiving first, specialised and dear last.
+const UNLOCK_ORDER = ["bois", "corde", "cable", "bambou", "lamelle", "acier", "chaine", "treillis", "arche", "pilier"];
+
+const LEVEL_RULES = {
+  width: { start: 12, step: 4, max: 44 },
+  rungs: { start: 2, step: 1, max: 6, every: 2 },
+  weight: { start: 8, step: 5, max: 45 },
+  purse: { start: 90, step: 45, max: 900 },
+  reward: { perTon: 12, min: 40 },
+  unlocks: { start: 3, every: 1 },
+};
+
+function grow(rule, level) {
+  const v = rule.start + rule.step * (level - 1);
+  return Math.min(rule.max, Math.round(v * 10) / 10);
+}
+
+// The load ladder of a level: `rungs` ghosts from heaviest/rungs up to heaviest.
+function ladderFor(level, rules = LEVEL_RULES) {
+  const heaviest = grow(rules.weight, level);
+  const rungs = Math.max(1, Math.round(rules.rungs.start + Math.floor((level - 1) / rules.rungs.every)));
+  const n = Math.min(rules.rungs.max, rungs);
+  return {
+    heaviest,
+    rungs: n,
+    weights: Array.from({ length: n }, (_, i) => Math.round(((heaviest * (i + 1)) / n) * 10) / 10),
+  };
+}
+
+// Materials the yard delivers at this level.
+function paletteFor(level, rules = LEVEL_RULES) {
+  const count = Math.min(
+    MATERIAL_IDS.length,
+    rules.unlocks.start + Math.floor((level - rules.unlocks.start) / rules.unlocks.every) + 1,
+  );
+  const n = Math.max(1, Math.min(MATERIAL_IDS.length, count));
+  return UNLOCK_ORDER.slice(0, n).filter((id) => MATERIAL_IDS.includes(id));
+}
+
+// What clearing the level pays: the whole ladder carried, paid per tonne.
+function rewardFor(level, rules = LEVEL_RULES) {
+  const ladder = ladderFor(level, rules);
+  const carried = ladder.weights.reduce((t, w) => t + w, 0);
+  return Math.max(rules.reward.min, Math.round(carried * rules.reward.perTon));
+}
+
+// One level, fully described. `budget` is what the player may spend on it.
+function levelSpec(level, purse, rules = LEVEL_RULES) {
+  const n = Math.max(1, Math.round(level));
+  const ladder = ladderFor(n, rules);
+  return {
+    id: `level-${n}`,
+    level: n,
+    label: `Level ${n}`,
+    width: grow(rules.width, n),
+    budget: Math.max(0, Math.round(purse)),
+    materials: paletteFor(n, rules),
+    ladder,
+    reward: rewardFor(n, rules),
+  };
+}
+
+// Difficulty must never decrease: wider gap, more ghosts, heavier last ghost.
+function isHarder(a, b) {
+  return b.width >= a.width && b.ladder.rungs >= a.ladder.rungs && b.ladder.heaviest >= a.ladder.heaviest;
+}
+
+// A level is cleared when every ghost of its ladder crossed and nothing broke.
+function cleared(world) {
+  return world.statut === 1 && world.ghosts.length > 0 && world.ghostIndex >= world.ghosts.length - 1;
+}
+
 // ---- engines/ponts/sky.js (inlined) ----
 // Golden-hour sky (Three.js via the global THREE): a vertex-coloured gradient
 // dome, a cool hemisphere fill and the low warm sun with its shadow rig.
@@ -2831,14 +2913,15 @@ function buildTestGhost(THREE, deps) {
 
   const look = { x: 0, y: 0 };
   let ptr = { x: 0, y: 0, at: -1e9 };
-  window.addEventListener("pointermove", (e) => {
+  function onPointerMove(e) {
     const r = host.getBoundingClientRect();
     ptr = {
       x: ((e.clientX - r.left) / r.width) * 2 - 1,
       y: -((e.clientY - r.top) / r.height) * 2 + 1,
       at: performance.now(),
     };
-  });
+  }
+  window.addEventListener("pointermove", onPointerMove);
   let blinkAt = 2.5;
   const headV = new THREE.Vector3();
   const aheadV = new THREE.Vector3();
@@ -2908,7 +2991,16 @@ function buildTestGhost(THREE, deps) {
     return (law && law.params.poids) || 20;
   }
 
-  return { group, tilt, waveHem, moveEyes, chargePoids };
+  // Tear down: drop the listener and free the lathe geometry.
+  function dispose() {
+    window.removeEventListener("pointermove", onPointerMove);
+    scene.remove(group);
+    hemGeo.dispose();
+    ink.dispose();
+    cheek.dispose();
+  }
+
+  return { group, tilt, waveHem, moveEyes, chargePoids, dispose };
 }
 
 // ---- engines/ponts/member-preview.js (inlined) ----
@@ -2997,12 +3089,150 @@ function buildLog({ journalEl, ctx, refresh }) {
   return { entries };
 }
 
+// ---- engines/ponts/camera-rig.js (inlined) ----
+// Camera + picking rig (Three.js via the global THREE).
+// Owns the camera, the warm low sun, the orbit animation and every canvas
+// pointer listener — so the map view can be rebuilt without leaking one.
+
+function buildCameraRig(THREE, deps) {
+  const { scene, canvas, ctx, dyn, siteX, radiusFor, START, onHover, sun } = deps;
+
+  const camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 1500);
+
+  const orbit = { theta: START.theta, phi: START.phi, radius: 47, tx: siteX[ctx.activeId()], ty: 0.5 };
+  let camAnim = null;
+
+  function updateCamera() {
+    const { theta, phi, radius, tx, ty } = orbit;
+    camera.position.set(
+      tx + radius * Math.sin(phi) * Math.sin(theta),
+      ty + radius * Math.cos(phi),
+      radius * Math.sin(phi) * Math.cos(theta),
+    );
+    camera.lookAt(tx, ty, 0);
+    sun.position.set(tx - 34, 26, 22);
+    sun.target.position.set(tx, 0, 0);
+    sun.target.updateMatrixWorld();
+  }
+  orbit.radius = radiusFor(ctx.activeId());
+  updateCamera();
+
+  const ray = new THREE.Raycaster();
+  const ptr = new THREE.Vector2();
+  function pickNode(e) {
+    const r = canvas.getBoundingClientRect();
+    ptr.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+    ptr.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+    ray.setFromCamera(ptr, camera);
+    const d = dyn[ctx.activeId()];
+    if (!d) return -1;
+    const hits = ray.intersectObjects(d.hits, false);
+    return hits.length > 0 ? hits[0].object.userData.index : -1;
+  }
+
+  let downAt = null;
+  let dragged = false;
+  const listeners = [];
+  function on(type, fn, opts) {
+    canvas.addEventListener(type, fn, opts);
+    listeners.push([type, fn, opts]);
+  }
+
+  on("pointerdown", (e) => {
+    downAt = { x: e.clientX, y: e.clientY };
+    dragged = false;
+    canvas.setPointerCapture(e.pointerId);
+  });
+  on("pointermove", (e) => {
+    if (downAt) {
+      const dx = e.clientX - downAt.x;
+      const dy = e.clientY - downAt.y;
+      if (Math.abs(dx) + Math.abs(dy) > 6) dragged = true;
+      if (dragged) {
+        orbit.theta -= (e.movementX || 0) * 0.005;
+        orbit.phi = Math.min(1.4, Math.max(0.2, orbit.phi - (e.movementY || 0) * 0.005));
+        updateCamera();
+        return;
+      }
+    }
+    const hovered = pickNode(e);
+    canvas.style.cursor = hovered >= 0 ? "pointer" : "grab";
+    if (onHover) onHover(hovered);
+  });
+  on("pointerup", (e) => {
+    const wasDrag = dragged;
+    downAt = null;
+    dragged = false;
+    if (wasDrag) return;
+    const i = pickNode(e);
+    if (i < 0) {
+      ctx.selected = -1;
+      return;
+    }
+    if (ctx.tool === "gomme") {
+      ctx.eraseNode(i);
+      return;
+    }
+    if (ctx.selected < 0) {
+      ctx.selected = i;
+      ctx.announce("First node picked… click the second.");
+      return;
+    }
+    ctx.place(ctx.selected, i);
+    ctx.selected = -1;
+  });
+  on("wheel", (e) => {
+    e.preventDefault();
+    orbit.radius = Math.min(110, Math.max(20, orbit.radius * (1 + e.deltaY * 0.001)));
+    updateCamera();
+  }, { passive: false });
+
+  // Animated move to another level: the gap width changes, so the framing does too.
+  function focus(id) {
+    camAnim = { t: 0, from: { tx: orbit.tx, r: orbit.radius }, to: { tx: siteX[id], r: radiusFor(id) } };
+  }
+
+  function tick(dt) {
+    if (!camAnim) return;
+    camAnim.t += dt / 0.9;
+    const k = camAnim.t >= 1 ? 1 : camAnim.t * camAnim.t * (3 - 2 * camAnim.t);
+    orbit.tx = camAnim.from.tx + (camAnim.to.tx - camAnim.from.tx) * k;
+    orbit.radius = camAnim.from.r + (camAnim.to.r - camAnim.from.r) * k;
+    updateCamera();
+    if (camAnim.t >= 1) camAnim = null;
+  }
+
+  function dispose() {
+    for (const [type, fn, opts] of listeners) canvas.removeEventListener(type, fn, opts);
+    listeners.length = 0;
+  }
+
+  return { camera, sun, orbit, updateCamera, focus, tick, dispose };
+}
+
 // ---- engines/ponts/mapview.js (inlined) ----
 // Bridge map view (Three.js via global THREE): full-screen golden-hour valley, one river
 // site per config entry, per-site bridge dynamics, orbit camera. No imports:
 // vendor/three.min.js (modular) or the inlined bundle (standalone) provides window.THREE.
 
+// Public entry point: a thin shell so the valley can be torn down and rebuilt
+// when the level changes (new gap width, new river, new abutments).
 function buildMapView(host, ctx) {
+  let inner = constructMapView(host, ctx);
+  return {
+    render: (dt) => inner.render(dt),
+    setSite: (id) => inner.setSite(id),
+    rebuild() {
+      inner.dispose();
+      inner = constructMapView(host, ctx);
+    },
+    dispose() {
+      inner.dispose();
+    },
+  };
+}
+
+function constructMapView(host, ctx) {
   const THREE = window.THREE;
   if (!THREE) throw new Error("THREE missing: load vendor/three.min.js first");
   // Hex colours are sRGB, lighting runs in linear space (same pipeline as the design boards).
@@ -3030,7 +3260,6 @@ function buildMapView(host, ctx) {
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(HORIZON, 80, 260);
-  const camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 1500);
 
   // Sky: gradient dome (no fog), warm low sun, cool sky fill.
   const sun = buildSky(THREE, scene, HORIZON);
@@ -3308,6 +3537,15 @@ function buildMapView(host, ctx) {
     scene, ctx, beamGeo, placeBeam, getHovered: () => hovered,
   });
 
+  // Camera, sun and node picking live in their own module.
+  const rig = buildCameraRig(THREE, {
+    scene, canvas, ctx, dyn, siteX, radiusFor, START, sun,
+    onHover: (i) => { hovered = i; },
+  });
+  const camera = rig.camera;
+  const orbit = rig.orbit;
+  const updateCamera = rig.updateCamera;
+
   // Load ladder: up to 6 test ghosts, each heavier — and bigger — than the last.
   const MAX_GHOSTS = 6;
   const ghostPool = [];
@@ -3315,91 +3553,6 @@ function buildMapView(host, ctx) {
     ghostPool.push(buildTestGhost(THREE, { scene, host, ctx, camera }));
   }
   const chargePoids = ghostPool[0].chargePoids;
-
-  // Camera: orbit around the active site, animated transitions.
-  const orbit = { theta: START.theta, phi: START.phi, radius: 47, tx: siteX[ctx.activeId()], ty: 0.5 };
-  let camAnim = null;
-  function updateCamera() {
-    const { theta, phi, radius, tx, ty } = orbit;
-    camera.position.set(
-      tx + radius * Math.sin(phi) * Math.sin(theta),
-      ty + radius * Math.cos(phi),
-      radius * Math.sin(phi) * Math.cos(theta)
-    );
-    camera.lookAt(tx, ty, 0);
-    // Low warm sun from the left: long shadows across the valley.
-    sun.position.set(tx - 34, 26, 22);
-    sun.target.position.set(tx, 0, 0);
-    sun.target.updateMatrixWorld();
-  }
-  orbit.radius = radiusFor(ctx.activeId());
-  updateCamera();
-
-  // Picking + orbit.
-  const ray = new THREE.Raycaster();
-  const ptr = new THREE.Vector2();
-  let downAt = null;
-  let dragged = false;
-  function setPtr(e) {
-    const r = canvas.getBoundingClientRect();
-    ptr.x = ((e.clientX - r.left) / r.width) * 2 - 1;
-    ptr.y = -((e.clientY - r.top) / r.height) * 2 + 1;
-  }
-  function pickNode(e) {
-    setPtr(e);
-    ray.setFromCamera(ptr, camera);
-    const d = dyn[ctx.activeId()];
-    if (!d) return -1;
-    const hits = ray.intersectObjects(d.hits, false);
-    return hits.length > 0 ? hits[0].object.userData.index : -1;
-  }
-  canvas.addEventListener("pointerdown", (e) => {
-    downAt = { x: e.clientX, y: e.clientY };
-    dragged = false;
-    canvas.setPointerCapture(e.pointerId);
-  });
-  canvas.addEventListener("pointermove", (e) => {
-    if (downAt) {
-      const dx = e.clientX - downAt.x;
-      const dy = e.clientY - downAt.y;
-      if (Math.abs(dx) + Math.abs(dy) > 6) dragged = true;
-      if (dragged) {
-        orbit.theta -= (e.movementX || 0) * 0.005;
-        orbit.phi = Math.min(1.4, Math.max(0.2, orbit.phi - (e.movementY || 0) * 0.005));
-        updateCamera();
-        return;
-      }
-    }
-    hovered = pickNode(e);
-    canvas.style.cursor = hovered >= 0 ? "pointer" : "grab";
-  });
-  canvas.addEventListener("pointerup", (e) => {
-    const wasDrag = dragged;
-    downAt = null;
-    dragged = false;
-    if (wasDrag) return;
-    const i = pickNode(e);
-    if (i < 0) {
-      ctx.selected = -1;
-      return;
-    }
-    if (ctx.tool === "gomme") {
-      ctx.eraseNode(i);
-      return;
-    }
-    if (ctx.selected < 0) {
-      ctx.selected = i;
-      ctx.announce("First node picked… click the second.");
-      return;
-    }
-    ctx.place(ctx.selected, i);
-    ctx.selected = -1;
-  });
-  canvas.addEventListener("wheel", (e) => {
-    e.preventDefault();
-    orbit.radius = Math.min(110, Math.max(20, orbit.radius * (1 + e.deltaY * 0.001)));
-    updateCamera();
-  }, { passive: false });
 
   // Resize follows the host box. On wide screens the picture is nudged left so the
   // bridge stays clear of the sensors card on the right.
@@ -3414,7 +3567,8 @@ function buildMapView(host, ctx) {
     camera.updateProjectionMatrix();
     renderer.setSize(r.width, r.height, false);
   }
-  if ("ResizeObserver" in window) new ResizeObserver(resize).observe(host);
+  const ro = "ResizeObserver" in window ? new ResizeObserver(resize) : null;
+  if (ro) ro.observe(host);
   else window.addEventListener("resize", resize);
   resize();
 
@@ -3482,27 +3636,32 @@ function buildMapView(host, ctx) {
         if (c.g.position.x > 190) c.g.position.x = -190;
       }
     }
-    // Camera transition.
-    if (camAnim) {
-      camAnim.t += dt / 0.9;
-      const k = camAnim.t >= 1 ? 1 : camAnim.t * camAnim.t * (3 - 2 * camAnim.t);
-      orbit.tx = camAnim.from.tx + (camAnim.to.tx - camAnim.from.tx) * k;
-      orbit.radius = camAnim.from.r + (camAnim.to.r - camAnim.from.r) * k;
-      updateCamera();
-      if (camAnim.t >= 1) camAnim = null;
-    }
+    rig.tick(dt);
     renderer.render(scene, camera);
   }
 
   function setSite(id) {
-    camAnim = {
-      t: 0,
-      from: { tx: orbit.tx, r: orbit.radius },
-      to: { tx: siteX[id], r: radiusFor(id) },
-    };
+    rig.focus(id);
   }
 
-  return { render, setSite };
+  function dispose() {
+    if (ro) ro.disconnect();
+    else window.removeEventListener("resize", resize);
+    rig.dispose();
+    for (const api of ghostPool) api.dispose();
+    scene.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+      for (const m of mats) {
+        if (m.map) m.map.dispose();
+        m.dispose();
+      }
+    });
+    renderer.dispose();
+    if (canvas.parentElement) canvas.parentElement.removeChild(canvas);
+  }
+
+  return { render, setSite, dispose };
 }
 
 // ---- engines/ponts/hud.js (inlined) ----
@@ -3543,11 +3702,6 @@ const PH_CSS = `
 .ph-brand{position:absolute;left:22px;top:18px;height:50px;padding:0;pointer-events:none;display:flex;align-items:center;gap:8px;border-radius:999px}
 .ph-logo{width:36px;display:block;flex:none}
 .ph-brand b{font-weight:900;font-stretch:70%;font-size:26px;line-height:1;letter-spacing:-.01em;white-space:nowrap}
-.ph-sites{position:absolute;left:50%;top:18px;transform:translateX(-50%);height:50px;padding:6px;display:flex;gap:2px;border-radius:999px}
-.ph-sites button{height:38px;padding:0 17px;border-radius:999px;font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:5px;white-space:nowrap}
-.ph-sites button:hover{background:rgba(255,255,255,.45)}
-.ph-sites button.on{background:#fff;box-shadow:0 4px 12px -6px rgba(30,20,70,.5)}
-.ph-sites .ph-i{width:13px;height:13px;color:#f59e0b}
 .ph-tr{position:absolute;right:20px;top:18px;display:flex;gap:8px}
 .ph-score{height:50px;padding:0 16px;border-radius:999px;display:flex;align-items:center;gap:7px;font-weight:600;white-space:nowrap}
 .ph-score b{font:700 15px "JetBrains Mono",ui-monospace,Consolas,monospace}
@@ -3597,6 +3751,7 @@ const PH_CSS = `
 .ph-slider label{display:flex;justify-content:space-between;font-weight:600;font-size:12.5px;margin-bottom:6px}
 .ph-slider output{font:700 12px "JetBrains Mono",ui-monospace,monospace}
 .ph-slider input{width:100%;margin:0;accent-color:#1b1530}
+.ph-ladder{font:600 11.5px "JetBrains Mono",ui-monospace,monospace;color:rgba(27,21,48,.72);background:rgba(255,255,255,.55);border-radius:10px;padding:7px 9px;line-height:1.4}
 .ph-prompts,.ph-entries{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:12px}
 .ph-prompts li{background:rgba(255,181,71,.25);border-radius:10px;padding:7px 9px;font-weight:600}
 .ph-entries{max-height:160px;overflow:auto}
@@ -3625,7 +3780,6 @@ const PH_CSS = `
 @media (max-width:900px){.ph-card,.ph-score{display:none}}
 @media (max-width:640px){
   .ph-brand b{display:none}
-  .ph-sites{top:76px}
   .ph-dock{top:auto;bottom:96px;left:50%;transform:translateX(-50%);width:auto;flex-direction:row}
   .ph-dock button,.ph-dock button.act{width:54px;height:54px}
   .ph-mats{flex-direction:row;flex-wrap:wrap}
@@ -3636,6 +3790,16 @@ const PH_CSS = `
   .ph-go .ph-sep,.ph-hint{display:none}
 }
 @media (prefers-reduced-motion: reduce){.ph-root *{transition:none!important}}
+.ph-level{position:absolute;left:50%;top:18px;transform:translateX(-50%);height:56px;padding:0 20px;display:flex;align-items:center;gap:10px;border-radius:999px;line-height:1.2}
+.ph-level.has-next{padding-right:8px}
+.ph-lv{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;min-width:0}
+.ph-lv small{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.ph-next{height:38px;padding:0 12px 0 14px;border-radius:999px;background:#12b45a;color:#fff;display:none;align-items:center;gap:2px;font-weight:800;font-size:12.5px;white-space:nowrap}
+.ph-next.show{display:flex}
+.ph-next .ph-i{width:14px;height:14px}
+.ph-level b{font-weight:900;font-stretch:72%;font-size:19px;letter-spacing:-.01em}
+.ph-level small{font:600 10.5px "JetBrains Mono",ui-monospace,monospace;color:rgba(27,21,48,.62);white-space:nowrap}
+@media (max-width:900px){.ph-level{top:74px;max-width:calc(100% - 32px)}.ph-level small{font-size:9.5px}}
 `;
 
 function buildHud(host, ctx) {
@@ -3650,8 +3814,9 @@ function buildHud(host, ctx) {
   const home = ctx.config.lab.home || "../index.html";
   root.innerHTML =
     '<div class="ph-brand"><span class="ph-logo"></span><b></b></div>' +
-    '<nav class="ph-gx ph-sites" aria-label="Sites"></nav>' +
-    '<div class="ph-tr"><span class="ph-gx ph-score" title="Total score">Score <b>0</b></span>' +
+    '<div class="ph-gx ph-level"><div class="ph-lv" role="status" aria-label="Current level"><b>Level 1</b><small></small></div>' +
+    `<button type="button" class="ph-next" title="Open the next level (N)"><span class="ph-nl">Next level</span>${phIcon("chev")}</button>` +
+    '<div class="ph-tr"><span class="ph-gx ph-score" title="Purse: what you may spend on this level">Purse <b>0</b></span>' +
     `<a class="ph-gx ph-home">${phIcon("back")}all labs</a></div>` +
     '<nav class="ph-gx ph-dock" aria-label="Materials and tools">' +
     '<div class="ph-mats"></div>' +
@@ -3688,7 +3853,10 @@ function buildHud(host, ctx) {
   $(".ph-brand b").textContent = String(ctx.config.lab.title || "lab").toLowerCase();
   $(".ph-home").setAttribute("href", home);
   if (window.AuraGhost) window.AuraGhost.mount($(".ph-logo"), "ink");
-  const sitesEl = $(".ph-sites");
+  const levelEl = $(".ph-level b");
+  const levelSub = $(".ph-level small");
+  const levelBar = $(".ph-level");
+  const nextBtn = $(".ph-next");
   const scoreEl = $(".ph-score b");
   const hintEl = $(".ph-hint");
   const hintText = $(".ph-hint span");
@@ -3699,17 +3867,7 @@ function buildHud(host, ctx) {
   const ghostEl = $(".ph-ghost");
   const journalEl = $(".ph-journal");
 
-  // Site tabs.
-  const siteBtns = {};
-  for (const s of ctx.config.sites) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.dataset.site = s.id;
-    b.addEventListener("click", () => ctx.setSite(s.id));
-    sitesEl.appendChild(b);
-    siteBtns[s.id] = b;
-  }
-  // Material dock: one button per material the active site allows.
+  // Material dock: one button per material the active level allows.
   const MAT_ICON = {
     bambou: "bamboo", bois: "beam", lamelle: "glulam", acier: "steel", treillis: "truss",
     cable: "cable", chaine: "chain", corde: "rope", arche: "arch", pilier: "pier",
@@ -3754,6 +3912,12 @@ function buildHud(host, ctx) {
   });
   testBtn.addEventListener("click", () => {
     ctx.test();
+    refresh(true);
+  });
+
+  // Next: only offered once the ladder is cleared (the reward is already banked).
+  nextBtn.addEventListener("click", () => {
+    ctx.nextLevel();
     refresh(true);
   });
 
@@ -3843,13 +4007,11 @@ function buildHud(host, ctx) {
     };
   }
   const hasCharge = chargeParams().length > 0;
-  const poidsSlider = hasCharge ? slider("Heaviest ghost (t)", 8, 40, 1,
-    () => chargeParams()[0].poids,
-    (v) => chargeParams().forEach((p) => { p.poids = v; })) : null;
-  const echelonsSlider = hasCharge ? slider("Ghosts in the ladder", 1, 6, 1,
-    () => chargeParams()[0].echelons,
-    (v) => chargeParams().forEach((p) => { p.echelons = v; })) : null;
-  const vitesseSlider = hasCharge ? slider("Speed", 2, 12, 1,
+  // The ladder is the level's contract, not a knob: show it, do not edit it.
+  const ladderInfo = document.createElement("p");
+  ladderInfo.className = "ph-ladder";
+  ghostEl.appendChild(ladderInfo);
+  const vitesseSlider = hasCharge ? slider("Crossing speed", 2, 12, 1,
     () => chargeParams()[0].vitesse,
     (v) => chargeParams().forEach((p) => { p.vitesse = v; })) : null;
 
@@ -3879,6 +4041,11 @@ function buildHud(host, ctx) {
       if (id) ctx.setTool(id);
     } else if (e.key.toLowerCase() === "e" || e.key === "3") {
       ctx.setTool("gomme");
+    } else if (e.key === "n" || e.key === "N") {
+      if (ctx.pendingLevel && ctx.pendingLevel()) {
+        ctx.nextLevel();
+        refresh(true);
+      }
     } else if (e.key === "Escape") {
       ctx.selected = -1;
       root.querySelectorAll(".ph-sec[open]").forEach((d) => { d.open = false; });
@@ -3908,19 +4075,20 @@ function buildHud(host, ctx) {
     const w = ctx.worlds[ctx.activeId()].world;
     const spent = w.spent();
     const budget = w.budget();
-    const top = `${ctx.activeId()}|${ctx.totalScore()}|${spent}|${budget}|${ctx.tool}|${JSON.stringify(ctx.save.cleared)}|${w.testing}|${w.statut}`;
+    const spec = ctx.spec();
+    const pending = ctx.pendingLevel ? ctx.pendingLevel() : 0;
+    const top = `${spec.level}|${ctx.purse()}|${spent}|${budget}|${ctx.tool}|${spec.width}|${spec.ladder.rungs}|${spec.ladder.heaviest}|${w.testing}|${w.statut}|${pending}`;
     if (force || top !== lastTop) {
       lastTop = top;
-      for (const s of ctx.config.sites) {
-        const b = siteBtns[s.id];
-        b.innerHTML = "";
-        b.appendChild(document.createTextNode(s.label));
-        if (ctx.save.cleared[s.id]) b.insertAdjacentHTML("beforeend", phIcon("star"));
-        b.classList.toggle("on", s.id === ctx.activeId());
-        b.setAttribute("aria-pressed", String(s.id === ctx.activeId()));
-      }
+      levelEl.textContent = pending ? `Level ${spec.level} cleared` : `Level ${spec.level}`;
+      levelBar.classList.toggle("has-next", pending > 0);
+      nextBtn.classList.toggle("show", pending > 0);
+      $(".ph-nl").textContent = `Next: level ${pending || spec.level + 1}`;
+      levelSub.textContent = pending
+        ? `+${spec.reward} banked · ${ctx.purse()} purse for a wider gap`
+        : `${spec.width} m gap · ${spec.ladder.rungs} ghosts up to ${spec.ladder.heaviest} t · pays ${spec.reward}`;
       renderMaterials();
-      scoreEl.textContent = String(ctx.totalScore());
+      scoreEl.textContent = String(ctx.purse());
       V("spent").textContent = `${spent} / ${budget}`;
       const frac = budget > 0 ? Math.min(1, spent / budget) : 0;
       arcEl.setAttribute("stroke-dasharray", `${(frac * 113.1).toFixed(1)} 113.1`);
@@ -3936,9 +4104,8 @@ function buildHud(host, ctx) {
         if (box.checked) active++;
       }
       V("laws").textContent = `${active} active`;
-      if (poidsSlider) poidsSlider.sync();
-      if (echelonsSlider) echelonsSlider.sync();
       if (vitesseSlider) vitesseSlider.sync();
+      ladderInfo.textContent = `Ladder: ${ctx.spec().ladder.weights.join(" t → ")} t`;
       V("ghost").textContent = hasCharge ? ghostSummary() : "";
       testBtn.setAttribute("aria-busy", String(!!w.testing));
       testBtn.querySelector("span").textContent = w.testing ? "Testing…" : "Test";
@@ -4047,24 +4214,26 @@ const pontsPack = {
 
 
 // ---- app-ponts/game.js (inlined) ----
-// Bridge Lab fullscreen game: valley map, 3 river sites, HUD. Boots headless (no shell DOM).
+// Bridge Lab fullscreen game: one valley, one level at a time, a purse that
+// grows with every ladder cleared. Boots headless (no shell DOM).
 // gameManifest mirrors labManifest for the validator/MCP fallback.
 
 const gameManifest = {
   measures: [{ id: "fleche" }, { id: "contrainte" }, { id: "cout" }, { id: "score" }],
 };
 
-const SAVE_KEY = "labkit.ponts.save.v1";
+const SAVE_KEY = "labkit.ponts.save.v2";
 
-function loadSave() {
+function loadSave(startPurse) {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw);
     if (!s || typeof s !== "object") return null;
     return {
+      level: Math.max(1, Math.round(s.level) || 1),
+      purse: Number.isFinite(s.purse) ? Math.max(0, s.purse) : startPurse,
       designs: s.designs || {},
-      cleared: s.cleared || {},
       journal: Array.isArray(s.journal) ? s.journal : [],
     };
   } catch {
@@ -4072,15 +4241,49 @@ function loadSave() {
   }
 }
 
+function resolveLaws(catalog, config) {
+  return config.laws.map((entry, i) => {
+    const mod = catalog.laws[entry.law];
+    return {
+      id: `${entry.law}#${i}`,
+      mod,
+      targetIds: entry.targets || null,
+      params: { ...mod.defaults, ...(entry.params || {}) },
+    };
+  });
+}
+
+// Build the world of one level and restore its saved design, if any.
+function buildLevelWorld(laws, spec, save) {
+  const world = createWorld({ laws: laws.map((l) => ({ ...l, params: { ...l.params } })), site: spec });
+  const charge = world.params()["charge-flottante"];
+  if (charge) {
+    charge.poids = spec.ladder.heaviest;
+    charge.echelons = spec.ladder.rungs;
+  }
+  const design = save.designs[spec.id];
+  if (Array.isArray(design)) {
+    for (const st of design) {
+      if (!st || !MATERIALS[st.mat]) continue;
+      if (!Number.isInteger(st.a) || !Number.isInteger(st.b)) continue;
+      if (st.a < 0 || st.b < 0 || st.a >= world.nodes.length || st.b >= world.nodes.length) continue;
+      world.place(st.a, st.b, st.mat);
+    }
+  }
+  return world;
+}
+
 async function startGame(source) {
   const boot = await bootHeadless(source, [pontsPack], gameManifest);
   const { config, catalog, clock, isActive, setActive } = boot;
   const host = document.getElementById("game");
   host.innerHTML = "";
-  // Full-screen host in both builds (the standalone page has no #game rule of its own).
   host.style.cssText = "position:fixed;inset:0;overflow:hidden;";
   document.documentElement.style.setProperty("--page", "#ffd6ad");
-  const save = loadSave() || { designs: {}, cleared: {}, journal: [] };
+
+  const rules = config.levels;
+  const startPurse = (rules && rules.purse && rules.purse.start) || 90;
+  const save = loadSave(startPurse) || { level: 1, purse: startPurse, designs: {}, journal: [] };
   const persist = () => {
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify(save));
@@ -4088,57 +4291,45 @@ async function startGame(source) {
       /* private mode: session only */
     }
   };
-  // One world per site, laws wired from config (same shape as shell labs).
+
+  const laws = resolveLaws(catalog, config);
+  // The level IS the site: the valley is rebuilt around it on every level change.
+  let spec = levelSpec(save.level, save.purse, rules);
+  config.sites = [spec];
   const worlds = {};
-  for (const site of config.sites) {
-    const laws = config.laws.map((entry, i) => {
-      const mod = catalog.laws[entry.law];
-      return {
-        id: `${entry.law}#${i}`,
-        mod,
-        targetIds: entry.targets || null,
-        params: { ...mod.defaults, ...(entry.params || {}) },
-      };
-    });
-    const world = createWorld({ laws, site });
-    const design = save.designs[site.id];
-    if (Array.isArray(design)) {
-      for (const st of design) {
-        if (!st || !MATERIALS[st.mat]) continue;
-        if (!Number.isInteger(st.a) || !Number.isInteger(st.b)) continue;
-        if (st.a < 0 || st.b < 0 || st.a >= world.nodes.length || st.b >= world.nodes.length) continue;
-        world.place(st.a, st.b, st.type);
-      }
-    }
-    worlds[site.id] = { site, world, laws };
-  }
-  let activeId = config.sites[0].id;
+  worlds[spec.id] = { site: spec, world: buildLevelWorld(laws, spec, save), laws };
+  let activeId = spec.id;
   const active = () => worlds[activeId];
-  // Shared game context for the 3D view and the HUD.
+  // Set when the ladder is cleared: the finished bridge stays on screen and the
+  // Next button opens the next level. Edits stay locked until then, so the
+  // purse can be banked exactly once.
+  let pending = 0;
+  const NEXT_HINT = "Level cleared — click Next level to open a wider gap.";
+
   const ctx = {
-    config, catalog, clock, isActive, setActive, save, persist,
+    config, catalog, clock, isActive, setActive, save, persist, rules,
     worlds,
     tool: "bois",
     selected: -1,
     message: "Build the ROAD on the pale row, then TEST.",
     activeId: () => activeId,
-    setSite(id) {
-      if (!worlds[id] || id === activeId) return;
-      activeId = id;
-      ctx.selected = -1;
-      view.setSite(id);
-      hud.refresh(true);
-    },
+    spec: () => spec,
+    purse: () => save.purse,
+    level: () => save.level,
+    pendingLevel: () => pending,
     setTool(t) {
       ctx.tool = t;
       ctx.selected = -1;
-      ctx.announce(t === "gomme"
-        ? "Eraser: click a node to remove its bars."
-        : "Click one node, then another, to place.");
+      ctx.announce(
+        t === "gomme"
+          ? "Eraser: click a node to remove its bars."
+          : `Selected: ${MATERIALS[t] ? MATERIALS[t].label : t} — click one node, then another.`,
+      );
       hud.refresh(true);
     },
     announce(m) { ctx.message = m; },
     place(a, b) {
+      if (pending) return ctx.announce(NEXT_HINT);
       const w = active().world;
       const r = w.place(a, b, ctx.tool);
       if (r.ok) {
@@ -4149,6 +4340,7 @@ async function startGame(source) {
       }
     },
     eraseNode(i) {
+      if (pending) return ctx.announce(NEXT_HINT);
       const w = active().world;
       let n = 0;
       for (let k = w.sticks.length - 1; k >= 0; k--) {
@@ -4167,6 +4359,7 @@ async function startGame(source) {
       }
     },
     undo() {
+      if (pending) return ctx.announce(NEXT_HINT);
       const w = active().world;
       if (w.testing) {
         ctx.announce("Test running…");
@@ -4187,6 +4380,7 @@ async function startGame(source) {
       persist();
     },
     test() {
+      if (pending) return ctx.announce(NEXT_HINT);
       const w = active().world;
       const r = w.startTest();
       ctx.announce(r.ok ? `Test: ${r.rungs} ghosts, up to ${r.heaviest} t` : r.why);
@@ -4196,6 +4390,7 @@ async function startGame(source) {
       ctx.announce("Bridge repaired (the drawing is kept).");
     },
     clearAll() {
+      if (pending) return ctx.announce(NEXT_HINT);
       const w = active().world;
       if (w.testing) {
         ctx.announce("Test running…");
@@ -4212,12 +4407,41 @@ async function startGame(source) {
       const n = w.ghosts.length || 1;
       const i = Math.min(n, w.ghostIndex + 1);
       const g = w.ghosts[w.ghostIndex];
-      const weight = g ? g.weight : 0;
-      const stress = Math.round((w.maxStrain || 0) * 100);
-      return `Ghost ${i}/${n} · ${weight} t · stress ${stress}%`;
+      return `Ghost ${i}/${n} · ${g ? g.weight : 0} t · stress ${Math.round((w.maxStrain || 0) * 100)}%`;
     },
+    // The whole ladder crossed: bank the reward. The next level is built when
+    // the player asks for it, so the cleared bridge stays on screen.
+    levelCleared(reward) {
+      if (pending) return;
+      save.purse = Math.max(0, save.purse - active().world.spent()) + reward;
+      save.level += 1;
+      delete save.designs[activeId];
+      persist();
+      pending = save.level;
+    },
+    // Next: tear the valley down and rebuild it around the new level.
+    nextLevel() {
+      if (!pending) return;
+      const n = pending;
+      pending = 0;
+      ctx.goToLevel(n);
+    },
+    goToLevel(n) {
+      pending = 0;
+      spec = levelSpec(n, save.purse, rules);
+      config.sites = [spec];
+      worlds[spec.id] = { site: spec, world: buildLevelWorld(laws, spec, save), laws };
+      activeId = spec.id;
+      ctx.selected = -1;
+      ctx.tool = spec.materials.includes(ctx.tool) ? ctx.tool : spec.materials[0];
+      view.rebuild();
+      hud.setLevel(spec);
+      hud.refresh(true);
+      ctx.announce(levelBlurb(spec, save.purse));
+    },
+    // Levels cleared so far (the purse is the real score).
     totalScore() {
-      return Object.values(save.cleared).reduce((t, s) => t + s, 0);
+      return save.level - 1;
     },
     journal(text, metrics) {
       save.journal.unshift({
@@ -4230,9 +4454,12 @@ async function startGame(source) {
       persist();
     },
   };
-  const view = buildMapView(host, ctx);
+
+  let view = buildMapView(host, ctx);
   const hud = buildHud(host, ctx);
   if (active().world.sticks.length > 0) ctx.message = "Road restored — TEST it or keep building.";
+  else ctx.announce(levelBlurb(spec, save.purse));
+
   const lastStatut = {};
   const lastRung = {};
   let acc = 0; // fixed-step accumulator: holds/breaks must not depend on frame rate
@@ -4245,7 +4472,7 @@ async function startGame(source) {
     dt = Math.min(dt, 0.05);
     if (clock.running) {
       const w = active().world;
-            acc = Math.min(acc + dt, 0.25);
+      acc = Math.min(acc + dt, 0.25);
       let n = 0;
       while (acc >= 1 / 60 && n < 4) {
         w.step(1 / 60, isActive);
@@ -4255,31 +4482,11 @@ async function startGame(source) {
       }
       if (n === 4) acc = 0;
       if (w.testing) ctx.message = ctx.ladderStatus(w);
-      // Journal each rung the moment the ladder advances past it.
-      const rung = w.ghostIndex;
-      if (w.testing && rung !== (lastRung[activeId] ?? 0)) {
-        for (let k = lastRung[activeId] ?? 0; k < rung; k++) {
-          const t = w.ghosts[k] ? w.ghosts[k].weight : 0;
-          ctx.journal(`Ghost ${k + 1}/${w.ghosts.length} (${t} t) crossed.`, w.measures());
-        }
-        lastRung[activeId] = rung;
-      }
+      trackRungs(w, activeId, lastRung, ctx);
       if (w.statut !== (lastStatut[activeId] ?? -1)) {
         lastStatut[activeId] = w.statut;
-        if (w.statut === 1) {
-          const m = w.measures();
-          if (m.score > (save.cleared[activeId] || 0)) {
-            save.cleared[activeId] = m.score;
-            persist();
-          }
-          const site = active().site;
-          const at = config.sites.findIndex((s) => s.id === activeId);
-          const level = `Level ${at + 1}/${config.sites.length} — ${site.label}`;
-          const n = w.ghosts.length || 1;
-          ctx.journal(`Ghost ${n}/${n} (${w.passed} t) crossed.`, w.measures());
-          ctx.journal(`${level}: Holding! Score ${m.score}.`, m);
-          ctx.announce(`${level}: Holding! Score: ${m.score}.`);
-        } else if (w.statut === 0) {
+        if (w.statut === 1) onCleared(w, ctx, spec, lastRung, activeId);
+        else if (w.statut === 0) {
           ctx.journal("Collapsed!", w.measures());
           ctx.announce("COLLAPSED! Repair, reinforce, retest.");
         }
@@ -4292,14 +4499,41 @@ async function startGame(source) {
   return { ctx, view, hud };
 }
 
+function levelBlurb(spec, purse) {
+  return `Level ${spec.level}: ${spec.width} m gap, ${spec.ladder.rungs} ghosts up to ` +
+    `${spec.ladder.heaviest} t. Purse ${purse} — build the ROAD, then TEST.`;
+}
+
+// Journal each rung the moment the ladder advances past it.
+function trackRungs(w, id, lastRung, ctx) {
+  const rung = w.ghostIndex;
+  if (!w.testing || rung === (lastRung[id] ?? 0)) return;
+  for (let k = lastRung[id] ?? 0; k < rung; k++) {
+    const t = w.ghosts[k] ? w.ghosts[k].weight : 0;
+    ctx.journal(`Ghost ${k + 1}/${w.ghosts.length} (${t} t) crossed.`, w.measures());
+  }
+  lastRung[id] = rung;
+}
+
+// The whole ladder crossed: bank the reward and open the next level.
+function onCleared(w, ctx, spec, lastRung, id) {
+  const m = w.measures();
+  const n = w.ghosts.length || 1;
+  ctx.journal(`Ghost ${n}/${n} (${w.passed} t) crossed.`, m);
+  ctx.journal(`Level ${spec.level} cleared! Reward +${spec.reward}.`, m);
+  lastRung[id] = 0;
+  ctx.announce(`Level ${spec.level} cleared! +${spec.reward} — the next gap is wider.`);
+  ctx.levelCleared(spec.reward);
+}
+
 startGame({
   "lab": {
     "id": "ponts",
     "title": "Bridge Lab",
-    "subtitle": "Build a 3D bridge from ten materials, then face a ladder of heavier and heavier ghosts.",
+    "subtitle": "Clear a level, earn the budget, face a wider gap and a heavier ladder.",
     "accent": "#f59e0b",
     "page": "#8fb7ff",
-    "note": "The test sends several ghosts across, each heavier than the last. The bridge must carry the whole ladder.",
+    "note": "Ten materials, one ladder of ghosts per level. Every ghost that crosses pays for the next bridge.",
     "lang": "en"
   },
   "bench": {
@@ -4308,183 +4542,50 @@ startGame({
     "speckles": 0
   },
   "bounds": "wrap",
-  "sites": [
-    {
-      "id": "ruisseau",
-      "label": "Brook",
-      "width": 12,
-      "budget": 90,
-      "materials": [
-        "corde",
-        "cable",
-        "bambou",
-        "bois"
-      ]
-    },
-    {
-      "id": "riviere",
-      "label": "River",
-      "width": 28,
-      "budget": 150,
-      "materials": [
-        "corde",
-        "cable",
-        "chaine",
-        "bambou",
-        "bois",
-        "lamelle",
-        "acier"
-      ]
-    },
-    {
-      "id": "fleuve",
-      "label": "Great River",
-      "width": 44,
-      "budget": 220,
-      "materials": [
-        "corde",
-        "cable",
-        "chaine",
-        "bambou",
-        "bois",
-        "lamelle",
-        "acier",
-        "treillis",
-        "pilier",
-        "arche"
-      ]
-    }
-  ],
+  "levels": {
+    "width": { "start": 12, "step": 4, "max": 44 },
+    "rungs": { "start": 2, "step": 1, "max": 6, "every": 2 },
+    "weight": { "start": 8, "step": 5, "max": 45 },
+    "purse": { "start": 90, "step": 45, "max": 900 },
+    "reward": { "perTon": 12, "min": 40 },
+    "unlocks": { "start": 3, "every": 1 }
+  },
   "substances": [],
   "material": [
-    {
-      "id": "fantome",
-      "kind": "fantome",
-      "label": "Test ghost"
-    },
-    {
-      "id": "pylone-gauche",
-      "kind": "pylone",
-      "label": "Left-bank pylon",
-      "x": 0.3,
-      "y": 0.2
-    },
-    {
-      "id": "pylone-droit",
-      "kind": "pylone",
-      "label": "Right-bank pylon",
-      "x": 0.7,
-      "y": 0.2
-    }
+    { "id": "fantome", "kind": "fantome", "label": "Test ghost" },
+    { "id": "pylone-gauche", "kind": "pylone", "label": "Left-bank pylon", "x": 0.3, "y": 0.2 },
+    { "id": "pylone-droit", "kind": "pylone", "label": "Right-bank pylon", "x": 0.7, "y": 0.2 }
   ],
   "laws": [
-    {
-      "law": "chantier",
-      "params": {
-        "budget": 120
-      }
-    },
-    {
-      "law": "gravite"
-    },
-    {
-      "law": "poids-propre",
-      "params": {
-        "g": 9.81
-      }
-    },
-    {
-      "law": "rupture"
-    },
-    {
-      "law": "charge-flottante",
-      "params": {
-        "poids": 20,
-        "vitesse": 6,
-        "echelons": 4
-      }
-    }
+    { "law": "chantier", "params": { "budget": 90 } },
+    { "law": "gravite" },
+    { "law": "poids-propre", "params": { "g": 9.81 } },
+    { "law": "rupture" },
+    { "law": "charge-flottante", "params": { "poids": 8, "vitesse": 6, "echelons": 2 } }
   ],
   "metrics": [
-    {
-      "id": "fleche",
-      "label": "Sag",
-      "unit": "mm",
-      "source": "fleche",
-      "color": "#7dd3fc"
-    },
-    {
-      "id": "contrainte",
-      "label": "Max stress",
-      "unit": "%",
-      "source": "contrainte",
-      "color": "#f87171"
-    },
-    {
-      "id": "cout",
-      "label": "Cost",
-      "unit": "",
-      "source": "cout",
-      "color": "#fbbf24"
-    },
-    {
-      "id": "score",
-      "label": "Score",
-      "unit": "",
-      "source": "score",
-      "color": "#6ee7a0"
-    }
+    { "id": "fleche", "label": "Sag", "unit": "mm", "source": "fleche", "color": "#7dd3fc" },
+    { "id": "contrainte", "label": "Max stress", "unit": "%", "source": "contrainte", "color": "#f87171" },
+    { "id": "cout", "label": "Spent", "unit": "", "source": "cout", "color": "#fbbf24" },
+    { "id": "score", "label": "Score", "unit": "", "source": "score", "color": "#6ee7a0" }
   ],
   "instruments": [
-    {
-      "type": "chips",
-      "metrics": [
-        "fleche",
-        "contrainte",
-        "cout",
-        "score"
-      ]
-    },
-    {
-      "type": "curve",
-      "metrics": [
-        "contrainte"
-      ]
-    }
+    { "type": "chips", "metrics": ["fleche", "contrainte", "cout", "score"] },
+    { "type": "curve", "metrics": ["contrainte"] }
   ],
   "controls": [
-    {
-      "path": "laws.4.poids",
-      "label": "Heaviest ghost (t)",
-      "min": 8,
-      "max": 40,
-      "step": 1
-    },
-    {
-      "path": "laws.4.echelons",
-      "label": "Ghosts in the ladder",
-      "min": 1,
-      "max": 6,
-      "step": 1
-    },
-    {
-      "path": "laws.4.vitesse",
-      "label": "Ghost speed",
-      "min": 2,
-      "max": 12,
-      "step": 1
-    }
+    { "path": "laws.4.vitesse", "label": "Ghost speed", "min": 2, "max": 12, "step": 1 }
   ],
   "notebook": {
     "enabled": true,
     "prompts": [
-      "The ladder sends four ghosts, each heavier than the last. Which one breaks your bridge?",
-      "Why does a bridge that carries 5 t fail at 15 t, and where does it fail first?",
-      "Rope is the cheapest: how far up the ladder can a rope deck get?",
-      "Cables only pull. What happens if you try to hold the deck up with cables alone?",
+      "Each level pays for the next one. Which material buys the most load per coin?",
+      "The gap widens every level: when does wood stop being enough?",
+      "Cables only pull. What happens if you hold the deck up with cables alone?",
       "Arches and piers only push. Where on the bridge does that actually help?",
-      "Steel truss vs solid steel: which one climbs the ladder for less money?",
-      "Which deck carries the heaviest ghost at the lowest cost?"
+      "The ladder sends heavier ghosts one after another. Which rung breaks your bridge?",
+      "Steel truss vs solid steel: which one climbs further for less money?",
+      "Spend everything on level 1, or keep a purse for the wide gaps later?"
     ]
   }
 }

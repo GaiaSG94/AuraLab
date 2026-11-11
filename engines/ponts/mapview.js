@@ -7,8 +7,26 @@ import { buildSiteStatics } from "./site-statics.js";
 import { buildTestGhost } from "./test-ghost.js";
 import { buildSky } from "./sky.js";
 import { buildMemberPreview } from "./member-preview.js";
+import { buildCameraRig } from "./camera-rig.js";
 
+// Public entry point: a thin shell so the valley can be torn down and rebuilt
+// when the level changes (new gap width, new river, new abutments).
 export function buildMapView(host, ctx) {
+  let inner = constructMapView(host, ctx);
+  return {
+    render: (dt) => inner.render(dt),
+    setSite: (id) => inner.setSite(id),
+    rebuild() {
+      inner.dispose();
+      inner = constructMapView(host, ctx);
+    },
+    dispose() {
+      inner.dispose();
+    },
+  };
+}
+
+function constructMapView(host, ctx) {
   const THREE = window.THREE;
   if (!THREE) throw new Error("THREE missing: load vendor/three.min.js first");
   // Hex colours are sRGB, lighting runs in linear space (same pipeline as the design boards).
@@ -36,7 +54,6 @@ export function buildMapView(host, ctx) {
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(HORIZON, 80, 260);
-  const camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 1500);
 
   // Sky: gradient dome (no fog), warm low sun, cool sky fill.
   const sun = buildSky(THREE, scene, HORIZON);
@@ -314,6 +331,15 @@ export function buildMapView(host, ctx) {
     scene, ctx, beamGeo, placeBeam, getHovered: () => hovered,
   });
 
+  // Camera, sun and node picking live in their own module.
+  const rig = buildCameraRig(THREE, {
+    scene, canvas, ctx, dyn, siteX, radiusFor, START, sun,
+    onHover: (i) => { hovered = i; },
+  });
+  const camera = rig.camera;
+  const orbit = rig.orbit;
+  const updateCamera = rig.updateCamera;
+
   // Load ladder: up to 6 test ghosts, each heavier — and bigger — than the last.
   const MAX_GHOSTS = 6;
   const ghostPool = [];
@@ -321,91 +347,6 @@ export function buildMapView(host, ctx) {
     ghostPool.push(buildTestGhost(THREE, { scene, host, ctx, camera }));
   }
   const chargePoids = ghostPool[0].chargePoids;
-
-  // Camera: orbit around the active site, animated transitions.
-  const orbit = { theta: START.theta, phi: START.phi, radius: 47, tx: siteX[ctx.activeId()], ty: 0.5 };
-  let camAnim = null;
-  function updateCamera() {
-    const { theta, phi, radius, tx, ty } = orbit;
-    camera.position.set(
-      tx + radius * Math.sin(phi) * Math.sin(theta),
-      ty + radius * Math.cos(phi),
-      radius * Math.sin(phi) * Math.cos(theta)
-    );
-    camera.lookAt(tx, ty, 0);
-    // Low warm sun from the left: long shadows across the valley.
-    sun.position.set(tx - 34, 26, 22);
-    sun.target.position.set(tx, 0, 0);
-    sun.target.updateMatrixWorld();
-  }
-  orbit.radius = radiusFor(ctx.activeId());
-  updateCamera();
-
-  // Picking + orbit.
-  const ray = new THREE.Raycaster();
-  const ptr = new THREE.Vector2();
-  let downAt = null;
-  let dragged = false;
-  function setPtr(e) {
-    const r = canvas.getBoundingClientRect();
-    ptr.x = ((e.clientX - r.left) / r.width) * 2 - 1;
-    ptr.y = -((e.clientY - r.top) / r.height) * 2 + 1;
-  }
-  function pickNode(e) {
-    setPtr(e);
-    ray.setFromCamera(ptr, camera);
-    const d = dyn[ctx.activeId()];
-    if (!d) return -1;
-    const hits = ray.intersectObjects(d.hits, false);
-    return hits.length > 0 ? hits[0].object.userData.index : -1;
-  }
-  canvas.addEventListener("pointerdown", (e) => {
-    downAt = { x: e.clientX, y: e.clientY };
-    dragged = false;
-    canvas.setPointerCapture(e.pointerId);
-  });
-  canvas.addEventListener("pointermove", (e) => {
-    if (downAt) {
-      const dx = e.clientX - downAt.x;
-      const dy = e.clientY - downAt.y;
-      if (Math.abs(dx) + Math.abs(dy) > 6) dragged = true;
-      if (dragged) {
-        orbit.theta -= (e.movementX || 0) * 0.005;
-        orbit.phi = Math.min(1.4, Math.max(0.2, orbit.phi - (e.movementY || 0) * 0.005));
-        updateCamera();
-        return;
-      }
-    }
-    hovered = pickNode(e);
-    canvas.style.cursor = hovered >= 0 ? "pointer" : "grab";
-  });
-  canvas.addEventListener("pointerup", (e) => {
-    const wasDrag = dragged;
-    downAt = null;
-    dragged = false;
-    if (wasDrag) return;
-    const i = pickNode(e);
-    if (i < 0) {
-      ctx.selected = -1;
-      return;
-    }
-    if (ctx.tool === "gomme") {
-      ctx.eraseNode(i);
-      return;
-    }
-    if (ctx.selected < 0) {
-      ctx.selected = i;
-      ctx.announce("First node picked… click the second.");
-      return;
-    }
-    ctx.place(ctx.selected, i);
-    ctx.selected = -1;
-  });
-  canvas.addEventListener("wheel", (e) => {
-    e.preventDefault();
-    orbit.radius = Math.min(110, Math.max(20, orbit.radius * (1 + e.deltaY * 0.001)));
-    updateCamera();
-  }, { passive: false });
 
   // Resize follows the host box. On wide screens the picture is nudged left so the
   // bridge stays clear of the sensors card on the right.
@@ -420,7 +361,8 @@ export function buildMapView(host, ctx) {
     camera.updateProjectionMatrix();
     renderer.setSize(r.width, r.height, false);
   }
-  if ("ResizeObserver" in window) new ResizeObserver(resize).observe(host);
+  const ro = "ResizeObserver" in window ? new ResizeObserver(resize) : null;
+  if (ro) ro.observe(host);
   else window.addEventListener("resize", resize);
   resize();
 
@@ -488,25 +430,30 @@ export function buildMapView(host, ctx) {
         if (c.g.position.x > 190) c.g.position.x = -190;
       }
     }
-    // Camera transition.
-    if (camAnim) {
-      camAnim.t += dt / 0.9;
-      const k = camAnim.t >= 1 ? 1 : camAnim.t * camAnim.t * (3 - 2 * camAnim.t);
-      orbit.tx = camAnim.from.tx + (camAnim.to.tx - camAnim.from.tx) * k;
-      orbit.radius = camAnim.from.r + (camAnim.to.r - camAnim.from.r) * k;
-      updateCamera();
-      if (camAnim.t >= 1) camAnim = null;
-    }
+    rig.tick(dt);
     renderer.render(scene, camera);
   }
 
   function setSite(id) {
-    camAnim = {
-      t: 0,
-      from: { tx: orbit.tx, r: orbit.radius },
-      to: { tx: siteX[id], r: radiusFor(id) },
-    };
+    rig.focus(id);
   }
 
-  return { render, setSite };
+  function dispose() {
+    if (ro) ro.disconnect();
+    else window.removeEventListener("resize", resize);
+    rig.dispose();
+    for (const api of ghostPool) api.dispose();
+    scene.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+      for (const m of mats) {
+        if (m.map) m.map.dispose();
+        m.dispose();
+      }
+    });
+    renderer.dispose();
+    if (canvas.parentElement) canvas.parentElement.removeChild(canvas);
+  }
+
+  return { render, setSite, dispose };
 }

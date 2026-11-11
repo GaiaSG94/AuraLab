@@ -1,0 +1,7 @@
+[36184:16596:1111/220411.320:ERROR:chrome\browser\extensions\external_registry_loader_win.cc:147] Missing value path for key Software\Google\Chrome\Extensions\dngcpimnedloihjnnfngkgjoidhnaolf.
+[36184:16596:1111/220411.321:ERROR:chrome\browser\extensions\external_registry_loader_win.cc:147] Missing value path for key Software\Google\Chrome\Extensions\fcoeoabgfenejglbffodgkkbkcdhcgfn.
+[36184:36900:1111/220431.377:ERROR:chrome\browser\web_applications\externally_managed_app_manager.cc:680] https://docs.google.com/document/installwebapp?usp=chrome_default from install source 1 failed to install with reason 21
+[18760:19920:1111/220436.683:ERROR:chrome\browser\extensions\external_registry_loader_win.cc:147] Missing value path for key Software\Google\Chrome\Extensions\dngcpimnedloihjnnfngkgjoidhnaolf.
+[18760:19920:1111/220436.683:ERROR:chrome\browser\extensions\external_registry_loader_win.cc:147] Missing value path for key Software\Google\Chrome\Extensions\fcoeoabgfenejglbffodgkkbkcdhcgfn.
+49939 bytes written to file C:/Users/gaiam/Downloads/HACKATONS/2026-12-04-kiroween/labkit/.tmp-ponts.png
+[18760:20824:1111/220536.681:ERROR:chrome\browser\web_applications\externally_managed_app_manager.cc:680] https://docs.google.com/spreadsheets/installwebapp?usp=chrome_default from install source 1 failed to install with reason 21

@@ -33,6 +33,10 @@ Agent-executable build plan. Each task ends with an observable check.
   - Check: no file above 500 lines; every bundle still parses (check-dist).
 - [ ] 14. Open decisions: guide block, JSONC, scenario buttons (see INTENT.md)
   - Check: user signs off each one, in writing, before any of them lands.
+- [x] 15. Bridge Lab levels: generated levels (REQ-55/58), purse economy with a
+  single Next step (REQ-56/57), valley and world rebuilt per level, saved run
+  - Check: levels suite in `node tests/run-tests.mjs`; `dist/labkit-ponts.html`
+    boots in headless Chrome on level 1 with the starting purse.
 
-> Tasks 10 and 12 are the only open work. Everything else is implemented,
+> Tasks 10 and 14 are the only open work. Everything else is implemented,
 > tested and gated by CI.
