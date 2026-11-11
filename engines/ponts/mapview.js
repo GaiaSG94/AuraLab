@@ -6,6 +6,7 @@ import { dressValley } from "./valley-dressing.js";
 import { buildSiteStatics } from "./site-statics.js";
 import { buildTestGhost } from "./test-ghost.js";
 import { buildSky } from "./sky.js";
+import { buildMemberPreview } from "./member-preview.js";
 
 export function buildMapView(host, ctx) {
   const THREE = window.THREE;
@@ -309,38 +310,17 @@ export function buildMapView(host, ctx) {
   let hovered = -1;
   for (const s of sites) buildSite(s.id);
 
-  const previewMat = new THREE.MeshBasicMaterial({
-    color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false,
+  const preview = buildMemberPreview(THREE, {
+    scene, ctx, beamGeo, placeBeam, getHovered: () => hovered,
   });
-  const preview = new THREE.Mesh(beamGeo, previewMat);
-  preview.visible = false;
-  preview.renderOrder = 5;
-  scene.add(preview);
-  function updatePreview() {
-    const id = ctx.activeId();
-    const world = ctx.worlds[id] && ctx.worlds[id].world;
-    const from = ctx.selected;
-    if (!world || from < 0 || hovered < 0 || hovered === from || ctx.tool === "gomme") {
-      preview.visible = false;
-      return;
-    }
-    const def = MATERIALS[ctx.tool];
-    if (!def) { preview.visible = false; return; }
-    const A = world.nodes[from];
-    const B = world.nodes[hovered];
-    if (!A || !B) { preview.visible = false; return; }
-    const len = Math.hypot(B.x - A.x, B.y - A.y);
-    preview.visible = true;
-    placeBeam(preview, A, B);
-    previewMat.color.set(len > def.maxLen ? 0xef4444 : def.color);
-    previewMat.opacity = len > def.maxLen ? 0.35 : 0.55;
-  }
 
-  // Test ghost: the mascot that walks the deck during a load test.
-  const ghostApi = buildTestGhost(THREE, { scene, host, ctx, camera });
-  const ghost = ghostApi.group;
-  const ghostTilt = ghostApi.tilt;
-  const chargePoids = ghostApi.chargePoids;
+  // Load ladder: up to 6 test ghosts, each heavier — and bigger — than the last.
+  const MAX_GHOSTS = 6;
+  const ghostPool = [];
+  for (let i = 0; i < MAX_GHOSTS; i++) {
+    ghostPool.push(buildTestGhost(THREE, { scene, host, ctx, camera }));
+  }
+  const chargePoids = ghostPool[0].chargePoids;
 
   // Camera: orbit around the active site, animated transitions.
   const orbit = { theta: START.theta, phi: START.phi, radius: 47, tx: siteX[ctx.activeId()], ty: 0.5 };
@@ -445,7 +425,7 @@ export function buildMapView(host, ctx) {
   resize();
 
   function render(dt) {
-    updatePreview();
+    preview.update();
     if (!REDUCED) t += dt;
     const id = ctx.activeId();
     const w = ctx.worlds[id].world;
@@ -455,22 +435,42 @@ export function buildMapView(host, ctx) {
     }
     for (const s of sites) siteTags[s.id].visible = s.id === id && !roadDone[s.id];
     updateSite(id);
-    // Ghost.
-    const gs = 0.7 + (chargePoids() / 40) * 0.9;
-    ghost.scale.set(gs, gs, gs);
-    const gh = w.ghost;
+    // The load ladder: each ghost waits its turn and grows with its weight.
+    const ladder = w.ghosts.length ? w.ghosts : null;
+    const heaviest = ladder ? ladder[ladder.length - 1].weight : chargePoids();
     const bob = REDUCED ? 0 : Math.sin(t * (w.testing ? 3 : 2)) * (w.testing ? 0.15 : 0.25);
-    if (!w.testing && w.statut === -1) {
-      ghost.position.set(siteX[id] - w.half - 2, 1.8 + bob, 0);
-      ghostTilt.rotation.z = 0;
-    } else {
-      ghost.position.set(siteX[id] + gh.x, gh.y + bob, 0);
-      ghostTilt.rotation.z = -gh.tilt;
-    }
-    ghost.rotation.y = Math.atan2(camera.position.x - ghost.position.x, camera.position.z - ghost.position.z);
-    if (!REDUCED) ghostApi.waveHem(t * (w.testing ? 4 : 2.4));
-    ghost.updateMatrixWorld(true);
-    ghostApi.moveEyes(REDUCED ? 1 : dt, t, w.testing);
+    ghostPool.forEach((api, i) => {
+      const g = api.group;
+      const st = ladder ? ladder[i] : null;
+      if (!st) {
+        // No test running: park a single idle ghost on the left bank.
+        if (i !== 0) { g.visible = false; return; }
+        g.visible = true;
+        const idle = 0.7 + (chargePoids() / 40) * 0.9;
+        g.scale.set(idle, idle, idle);
+        g.position.set(siteX[id] - w.half - 2, 1.8 + bob, 0);
+        api.tilt.rotation.z = 0;
+      } else {
+        g.visible = true;
+        // Weight drives the size: the heaviest ghost is unmistakably the biggest.
+        const gs = 0.55 + (st.weight / (heaviest || 1)) * 0.75;
+        g.scale.set(gs, gs, gs);
+        if (st.state === "done") {
+          g.position.set(siteX[id] + w.half + 2.2 + i * 2.2, 1.8 + bob, 0);
+          api.tilt.rotation.z = 0;
+        } else if (st.state === "crossing" || st.state === "fallen") {
+          g.position.set(siteX[id] + st.x, st.y + bob, 0);
+          api.tilt.rotation.z = -st.tilt;
+        } else {
+          g.position.set(siteX[id] + st.x, 1.8 + bob, 0);
+          api.tilt.rotation.z = 0;
+        }
+      }
+      g.rotation.y = Math.atan2(camera.position.x - g.position.x, camera.position.z - g.position.z);
+      if (!REDUCED) api.waveHem(t * (w.testing ? 4 : 2.4) + i * 1.7);
+      g.updateMatrixWorld(true);
+      api.moveEyes(REDUCED ? 1 : dt, t, w.testing && (!ladder || ladder[i].state === "crossing"));
+    });
     // Water + clouds drift.
     if (!REDUCED) {
       for (const wtr of waters) {

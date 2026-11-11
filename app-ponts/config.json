@@ -2,10 +2,10 @@
   "lab": {
     "id": "ponts",
     "title": "Bridge Lab",
-    "subtitle": "Build a 3D bridge from six real materials, send the ghost across.",
+    "subtitle": "Build a 3D bridge from ten materials, then face a ladder of heavier and heavier ghosts.",
     "accent": "#f59e0b",
     "page": "#8fb7ff",
-    "note": "Wood bends, steel holds, cables only pull, arches only push. Same kit as Chemistry Lab.",
+    "note": "The test sends several ghosts across, each heavier than the last. The bridge must carry the whole ladder.",
     "lang": "en"
   },
   "bench": {
@@ -106,7 +106,8 @@
       "law": "charge-flottante",
       "params": {
         "poids": 20,
-        "vitesse": 6
+        "vitesse": 6,
+        "echelons": 4
       }
     }
   ],
@@ -160,9 +161,16 @@
   "controls": [
     {
       "path": "laws.4.poids",
-      "label": "Ghost weight (t)",
+      "label": "Heaviest ghost (t)",
       "min": 8,
       "max": 40,
+      "step": 1
+    },
+    {
+      "path": "laws.4.echelons",
+      "label": "Ghosts in the ladder",
+      "min": 1,
+      "max": 6,
       "step": 1
     },
     {
@@ -176,13 +184,13 @@
   "notebook": {
     "enabled": true,
     "prompts": [
-      "Rope is the cheapest: how far can a rope deck span before it snaps under its own weight?",
-      "Cables only pull. What happens if you try to hold the deck UP with cables alone?",
+      "The ladder sends four ghosts, each heavier than the last. Which one breaks your bridge?",
+      "Why does a bridge that carries 5 t fail at 15 t, and where does it fail first?",
+      "Rope is the cheapest: how far up the ladder can a rope deck get?",
+      "Cables only pull. What happens if you try to hold the deck up with cables alone?",
       "Arches and piers only push. Where on the bridge does that actually help?",
-      "Bamboo vs wood vs glulam on the same span: which one is the best value?",
-      "Why does the steel truss sag less than a solid steel beam of the same length?",
-      "Chain vs cable: which one holds more, and what do you pay for it?",
-      "Which deck holds 20 t at the lowest cost?"
+      "Steel truss vs solid steel: which one climbs the ladder for less money?",
+      "Which deck carries the heaviest ghost at the lowest cost?"
     ]
   }
 }

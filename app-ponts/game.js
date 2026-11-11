@@ -146,7 +146,7 @@ export async function startGame(source) {
     test() {
       const w = active().world;
       const r = w.startTest();
-      ctx.announce(r.ok ? "Testing… the ghost is crossing!" : r.why);
+      ctx.announce(r.ok ? `Test: ${r.rungs} ghosts, up to ${r.heaviest} t` : r.why);
     },
     repair() {
       active().world.resetPhysics();
@@ -163,6 +163,15 @@ export async function startGame(source) {
       save.designs[activeId] = [];
       persist();
       ctx.announce("Site cleared, budget refunded.");
+    },
+    // "Ghost 2/4 · 10 t" while the ladder is running.
+    ladderStatus(w) {
+      const n = w.ghosts.length || 1;
+      const i = Math.min(n, w.ghostIndex + 1);
+      const g = w.ghosts[w.ghostIndex];
+      const weight = g ? g.weight : 0;
+      const stress = Math.round((w.maxStrain || 0) * 100);
+      return `Ghost ${i}/${n} · ${weight} t · stress ${stress}%`;
     },
     totalScore() {
       return Object.values(save.cleared).reduce((t, s) => t + s, 0);
@@ -201,7 +210,7 @@ export async function startGame(source) {
         n++;
       }
       if (n === 4) acc = 0;
-      if (w.testing) ctx.message = `Testing… the ghost is crossing! · stress ${Math.round((w.maxStrain || 0) * 100)}%`;
+      if (w.testing) ctx.message = ctx.ladderStatus(w);
       if (w.statut !== (lastStatut[activeId] ?? -1)) {
         lastStatut[activeId] = w.statut;
         if (w.statut === 1) {

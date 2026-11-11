@@ -109,6 +109,8 @@ const PACKS = {
     "engines/ponts/valley-dressing.js",
     "engines/ponts/site-statics.js",
     "engines/ponts/test-ghost.js",
+    "engines/ponts/member-preview.js",
+    "engines/ponts/hud-log.js",
     "engines/ponts/mapview.js",
   "engines/ponts/hud.js",
     "engines/ponts/index.js",
