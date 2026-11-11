@@ -4,3 +4,6 @@ __pycache__/
 
 # Artefacts des workflows Kiro (générés à chaque run)
 .kiro/workflow-output/
+
+# Artefacts de vérification locaux
+.tmp-*

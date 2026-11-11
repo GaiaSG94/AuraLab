@@ -5,7 +5,7 @@ import { bootHeadless } from "../core/headless.js";
 import { pontsPack } from "../engines/ponts/index.js";
 import { createWorld } from "../engines/ponts/world.js";
 import { MATERIALS } from "../engines/ponts/materials.js";
-import { levelSpec } from "../engines/ponts/levels.js";
+import { levelSpec, bankPurse } from "../engines/ponts/levels.js";
 import { buildMapView } from "../engines/ponts/mapview.js";
 import { buildHud } from "../engines/ponts/hud.js";
 
@@ -204,7 +204,7 @@ export async function startGame(source) {
     // the player asks for it, so the cleared bridge stays on screen.
     levelCleared(reward) {
       if (pending) return;
-      save.purse = Math.max(0, save.purse - active().world.spent()) + reward;
+      save.purse = bankPurse(save.purse, active().world.spent(), reward);
       save.level += 1;
       delete save.designs[activeId];
       persist();

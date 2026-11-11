@@ -152,6 +152,7 @@ export function buildHud(host, ctx) {
     '<div class="ph-brand"><span class="ph-logo"></span><b></b></div>' +
     '<div class="ph-gx ph-level"><div class="ph-lv" role="status" aria-label="Current level"><b>Level 1</b><small></small></div>' +
     `<button type="button" class="ph-next" title="Open the next level (N)"><span class="ph-nl">Next level</span>${phIcon("chev")}</button>` +
+    "</div>" +
     '<div class="ph-tr"><span class="ph-gx ph-score" title="Purse: what you may spend on this level">Purse <b>0</b></span>' +
     `<a class="ph-gx ph-home">${phIcon("back")}all labs</a></div>` +
     '<nav class="ph-gx ph-dock" aria-label="Materials and tools">' +

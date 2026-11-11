@@ -2,7 +2,7 @@
 // difficulty, palette unlocks and the purse economy.
 import { bootLab } from "./labs.mjs";
 import { MATERIAL_IDS } from "../engines/ponts/materials.js";
-import { levelSpec, ladderFor, paletteFor, rewardFor, isHarder } from "../engines/ponts/levels.js";
+import { levelSpec, ladderFor, paletteFor, rewardFor, isHarder, bankPurse } from "../engines/ponts/levels.js";
 import { Suite } from "./harness.mjs";
 
 export const suite = new Suite("levels");
@@ -101,7 +101,7 @@ suite.property(
     const spec = levelSpec(level, purse, RULES);
     if (spec.budget !== Math.round(purse)) throw new Error("the level budget is not the purse");
     const spent = Math.min(spec.budget, Math.round(spec.budget * spentFrac));
-    const next = Math.max(0, purse - spent) + spec.reward;
+    const next = bankPurse(purse, spent, spec.reward);
     if (next < 0) throw new Error(`the purse went negative: ${next}`);
     if (spec.reward <= 0) throw new Error("clearing a level pays nothing");
     // Exact accounting: what is left over is kept, and the reward is added.
@@ -115,8 +115,8 @@ suite.property(
 
 suite.test("REQ-57 a cheap design banks more than an expensive one on the same level", () => {
   const spec = levelSpec(3, 400, RULES);
-  const cheap = Math.max(0, 400 - 60) + spec.reward;
-  const dear = Math.max(0, 400 - 300) + spec.reward;
+  const cheap = bankPurse(400, 60, spec.reward);
+  const dear = bankPurse(400, 300, spec.reward);
   if (!(cheap > dear)) throw new Error("spending less does not leave a bigger purse");
 });
 
