@@ -3,6 +3,7 @@
 import { bootHeadless } from "../core/headless.js";
 import { pontsPack } from "../engines/ponts/index.js";
 import { createWorld } from "../engines/ponts/world.js";
+import { MATERIALS } from "../engines/ponts/materials.js";
 import { buildMapView } from "../engines/ponts/mapview.js";
 import { buildHud } from "../engines/ponts/hud.js";
 
@@ -60,7 +61,7 @@ export async function startGame(source) {
     const design = save.designs[site.id];
     if (Array.isArray(design)) {
       for (const st of design) {
-        if (!st || (st.type !== "poutre" && st.type !== "cable")) continue;
+        if (!st || !MATERIALS[st.mat]) continue;
         if (!Number.isInteger(st.a) || !Number.isInteger(st.b)) continue;
         if (st.a < 0 || st.b < 0 || st.a >= world.nodes.length || st.b >= world.nodes.length) continue;
         world.place(st.a, st.b, st.type);
@@ -74,7 +75,7 @@ export async function startGame(source) {
   const ctx = {
     config, catalog, clock, isActive, setActive, save, persist,
     worlds,
-    tool: "poutre",
+    tool: "bois",
     selected: -1,
     message: "Build the ROAD on the pale row, then TEST.",
     activeId: () => activeId,
@@ -99,7 +100,7 @@ export async function startGame(source) {
       const r = w.place(a, b, ctx.tool);
       if (r.ok) {
         ctx.saveDesign();
-        ctx.announce(`${ctx.tool === "poutre" ? "Beam" : "Cable"} placed.`);
+        ctx.announce(`${MATERIALS[ctx.tool].label} placed.`);
       } else {
         ctx.announce(r.why);
       }
@@ -139,7 +140,7 @@ export async function startGame(source) {
     },
     saveDesign() {
       const w = active().world;
-      save.designs[activeId] = w.sticks.map((s) => ({ a: s.a, b: s.b, type: s.type }));
+      save.designs[activeId] = w.sticks.map((s) => ({ a: s.a, b: s.b, mat: s.mat }));
       persist();
     },
     test() {

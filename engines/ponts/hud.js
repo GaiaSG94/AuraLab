@@ -2,10 +2,15 @@
 // Top: brand, sites, score, home. Left: tool dock. Right: sensors card (laws, ghost, log).
 // Bottom: budget ring, hint, repair, Test. Same ctx contract as the game expects.
 import "../../core/ghost.js"; // side effect: window.AuraGhost (flask ghost logo)
+import { MATERIALS, materialsForSite } from "./materials.js";
 
 const PH_ICONS = {
   beam: '<rect x="3" y="9.5" width="18" height="5" rx="1.5"/><path d="M8 9.5v5M12 9.5v5M16 9.5v5"/>',
+  steel: '<rect x="3" y="9" width="18" height="6" rx="1"/><path d="M7 9v6M12 9v6M17 9v6"/><path d="M3 12h18"/>',
   cable: '<path d="M4 18L20 6"/><circle cx="4" cy="18" r="2" fill="currentColor"/><circle cx="20" cy="6" r="2" fill="currentColor"/>',
+  rope: '<path d="M4 17c4-1 4-9 8-9s4 8 8 7" stroke-dasharray="2.5 2"/><circle cx="4" cy="17" r="1.6" fill="currentColor"/>',
+  arch: '<path d="M3 19c0-8 4-13 9-13s9 5 9 13"/><path d="M3 19h18"/>',
+  pier: '<rect x="8" y="4" width="8" height="16" rx="1"/><path d="M8 9h8M8 14h8"/>',
   erase: '<path d="M8.5 19.5L3.8 14.8a1.8 1.8 0 0 1 0-2.6l8.4-8.4a1.8 1.8 0 0 1 2.6 0l5.4 5.4a1.8 1.8 0 0 1 0 2.6L13 19.5zM8.5 19.5H20M7 11l7 7"/>',
   undo: '<path d="M9 6L4 11l5 5M4 11h10.5a5 5 0 0 1 0 10H12"/>',
   clear: '<path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5"/>',
@@ -38,7 +43,12 @@ const PH_CSS = `
 .ph-score b{font:700 15px "JetBrains Mono",ui-monospace,Consolas,monospace}
 .ph-home{height:50px;padding:0 18px 0 12px;border-radius:999px;display:flex;align-items:center;gap:6px;font-weight:700;color:#1b1530;text-decoration:none;white-space:nowrap}
 .ph-home .ph-i{width:16px;height:16px}
-.ph-dock{position:absolute;left:20px;top:50%;transform:translateY(-50%);width:80px;padding:8px;display:flex;flex-direction:column;gap:6px}
+.ph-dock{position:absolute;left:20px;top:50%;transform:translateY(-50%);width:104px;padding:8px;display:flex;flex-direction:column;gap:6px}
+  .ph-mats{display:flex;flex-direction:column;gap:6px}
+  .ph-mats button{position:relative;padding-left:14px;text-align:left;align-items:flex-start;height:auto;min-height:52px;gap:1px}
+  .ph-mats button::before{content:"";position:absolute;left:6px;top:8px;bottom:8px;width:4px;border-radius:2px;background:var(--m,#888)}
+  .ph-mats button span{font-weight:700;font-size:11.5px;line-height:1.15}
+  .ph-mats button small{font:600 9.5px "JetBrains Mono",ui-monospace,monospace;opacity:.7}
 .ph-dock button{height:58px;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-weight:600;font-size:11px}
 .ph-dock button small{font:600 10px "JetBrains Mono",ui-monospace,monospace;opacity:.6}
 .ph-dock button:hover{background:rgba(255,255,255,.55)}
@@ -108,6 +118,10 @@ const PH_CSS = `
   .ph-sites{top:76px}
   .ph-dock{top:auto;bottom:96px;left:50%;transform:translateX(-50%);width:auto;flex-direction:row}
   .ph-dock button,.ph-dock button.act{width:54px;height:54px}
+  .ph-mats{flex-direction:row;flex-wrap:wrap}
+  .ph-mats button{width:54px;min-height:54px;padding-left:6px;align-items:center;text-align:center}
+  .ph-mats button::before{left:6px;right:6px;top:auto;bottom:4px;width:auto;height:4px}
+  .ph-mats button span{display:none}
   .ph-dock .ph-sep{width:1px;height:auto;margin:8px 2px}
   .ph-go .ph-sep,.ph-hint{display:none}
 }
@@ -129,10 +143,10 @@ export function buildHud(host, ctx) {
     '<nav class="ph-gx ph-sites" aria-label="Sites"></nav>' +
     '<div class="ph-tr"><span class="ph-gx ph-score" title="Total score">Score <b>0</b></span>' +
     `<a class="ph-gx ph-home">${phIcon("back")}all labs</a></div>` +
-    '<nav class="ph-gx ph-dock" aria-label="Tools">' +
-    `<button type="button" class="tool" data-tool="poutre" aria-pressed="false" title="Beam (1)">${phIcon("beam")}Beam<small>10</small></button>` +
-    `<button type="button" class="tool" data-tool="cable" aria-pressed="false" title="Cable (2)">${phIcon("cable")}Cable<small>5</small></button>` +
-    `<button type="button" class="tool" data-tool="gomme" aria-pressed="false" title="Eraser (3)">${phIcon("erase")}Eraser</button>` +
+    '<nav class="ph-gx ph-dock" aria-label="Materials and tools">' +
+    '<div class="ph-mats"></div>' +
+    '<span class="ph-sep"></span>' +
+    `<button type="button" class="tool act" data-tool="gomme" aria-pressed="false" title="Eraser (E)">${phIcon("erase")}Eraser</button>` +
     '<span class="ph-sep"></span>' +
     `<button type="button" class="act undo" title="Remove the last bar (Ctrl+Z)">${phIcon("undo")}Undo</button>` +
     `<button type="button" class="act clear" title="Clear this site">${phIcon("clear")}Clear</button>` +
@@ -185,6 +199,30 @@ export function buildHud(host, ctx) {
     sitesEl.appendChild(b);
     siteBtns[s.id] = b;
   }
+  // Material dock: one button per material the active site allows.
+  const MAT_ICON = { bois: "beam", acier: "steel", cable: "cable", corde: "rope", arche: "arch", pilier: "pier" };
+  const MAT_HINT = { beam: "tension + compression", cable: "pulls only", arch: "pushes only" };
+  const matsEl = $(".ph-mats");
+  function renderMaterials() {
+    const site = ctx.config.sites.find((s) => s.id === ctx.activeId());
+    const palette = materialsForSite(site);
+    matsEl.innerHTML = "";
+    palette.forEach((id, i) => {
+      const m = MATERIALS[id];
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "tool mat";
+      b.dataset.tool = id;
+      b.setAttribute("aria-pressed", "false");
+      b.title = `${m.label} — cost ${m.cost}, max ${m.maxLen} m, ${MAT_HINT[m.kind]} (${i + 1})`;
+      b.style.setProperty("--m", `#${m.color.toString(16).padStart(6, "0")}`);
+      b.innerHTML = `${phIcon(MAT_ICON[id])}<span>${m.label}</span><small>${m.cost} · ${m.maxLen}m</small>`;
+      b.addEventListener("click", () => ctx.setTool(id));
+      matsEl.appendChild(b);
+    });
+    if (!palette.includes(ctx.tool)) ctx.setTool(palette[0]);
+  }
+  renderMaterials();
   // Tools + actions.
   root.querySelectorAll("button.tool").forEach((b) => {
     b.addEventListener("click", () => ctx.setTool(b.dataset.tool));
@@ -351,11 +389,12 @@ export function buildHud(host, ctx) {
       ctx.test();
     } else if (e.key === "r" || e.key === "R") {
       ctx.repair();
-    } else if (e.key === "1") {
-      ctx.setTool("poutre");
-    } else if (e.key === "2") {
-      ctx.setTool("cable");
-    } else if (e.key === "3" || e.key.toLowerCase() === "g") {
+    } else if (/^[1-6]$/.test(e.key)) {
+      const site = ctx.config.sites.find((s) => s.id === ctx.activeId());
+      const palette = materialsForSite(site);
+      const id = palette[Number(e.key) - 1];
+      if (id) ctx.setTool(id);
+    } else if (e.key.toLowerCase() === "e" || e.key === "3") {
       ctx.setTool("gomme");
     } else if (e.key === "Escape") {
       ctx.selected = -1;
@@ -386,6 +425,7 @@ export function buildHud(host, ctx) {
         b.classList.toggle("on", s.id === ctx.activeId());
         b.setAttribute("aria-pressed", String(s.id === ctx.activeId()));
       }
+      renderMaterials();
       scoreEl.textContent = String(ctx.totalScore());
       V("spent").textContent = `${spent} / ${budget}`;
       const frac = budget > 0 ? Math.min(1, spent / budget) : 0;

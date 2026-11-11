@@ -2,10 +2,10 @@
   "lab": {
     "id": "ponts",
     "title": "Bridge Lab",
-    "subtitle": "Build a 3D bridge, send the ghost across — same kit as Chemistry Lab.",
+    "subtitle": "Build a 3D bridge from six real materials, send the ghost across.",
     "accent": "#f59e0b",
     "page": "#8fb7ff",
-    "note": "Same kit as Chemistry Lab. Only this lab differs: material, laws, instruments — and a 3D scene.",
+    "note": "Wood bends, steel holds, cables only pull, arches only push. Same kit as Chemistry Lab.",
     "lang": "en"
   },
   "bench": {
@@ -15,9 +15,27 @@
   },
   "bounds": "wrap",
   "sites": [
-    { "id": "ruisseau", "label": "Brook", "width": 12, "budget": 80 },
-    { "id": "riviere", "label": "River", "width": 28, "budget": 120 },
-    { "id": "fleuve", "label": "Great River", "width": 44, "budget": 180 }
+    {
+      "id": "ruisseau",
+      "label": "Brook",
+      "width": 12,
+      "budget": 90,
+      "materials": ["bois", "corde", "cable"]
+    },
+    {
+      "id": "riviere",
+      "label": "River",
+      "width": 28,
+      "budget": 150,
+      "materials": ["bois", "corde", "cable", "acier"]
+    },
+    {
+      "id": "fleuve",
+      "label": "Great River",
+      "width": 44,
+      "budget": 220,
+      "materials": ["bois", "corde", "cable", "acier", "arche", "pilier"]
+    }
   ],
   "substances": [],
   "material": [
@@ -28,6 +46,7 @@
   "laws": [
     { "law": "chantier", "params": { "budget": 120 } },
     { "law": "gravite" },
+    { "law": "poids-propre", "params": { "g": 9.81 } },
     { "law": "rupture" },
     { "law": "charge-flottante", "params": { "poids": 20, "vitesse": 6 } }
   ],
@@ -42,14 +61,18 @@
     { "type": "curve", "metrics": ["contrainte"] }
   ],
   "controls": [
-    { "path": "laws.3.poids", "label": "Ghost weight (t)", "min": 8, "max": 40, "step": 1 },
-    { "path": "laws.3.vitesse", "label": "Ghost speed", "min": 2, "max": 12, "step": 1 }
+    { "path": "laws.4.poids", "label": "Ghost weight (t)", "min": 8, "max": 40, "step": 1 },
+    { "path": "laws.4.vitesse", "label": "Ghost speed", "min": 2, "max": 12, "step": 1 }
   ],
   "notebook": {
     "enabled": true,
     "prompts": [
+      "Why does a rope deck sag before the ghost even steps on it?",
+      "Cables only pull: what happens if you try to support the deck with cables alone?",
+      "An arch only pushes: where in the bridge does that actually help?",
+      "Wood vs steel on the same span: which one breaks first, and why?",
       "Which deck holds 20 t at the lowest cost?",
-      "Cables or beams: where is each one better?"
+      "Double the ghost weight: which member type snaps first?"
     ]
   }
 }

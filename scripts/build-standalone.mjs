@@ -8,15 +8,49 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+// Drop ESM import statements, including multi-line ones, and unwrap exports.
 function stripModules(src, name) {
-  const kept = src
-    .split("\n")
-    .filter((line) => !/^\s*import\s/.test(line))
-    .join("\n");
+  const kept = dropImports(src.split("\n")).join("\n");
   if (/^\s*import\s/m.test(kept)) throw new Error(`${name}: unhandled import`);
   return kept
     .replace(/^(\s*)export\s+default\s+/gm, "$1")
     .replace(/^(\s*)export\s+(async\s+)?(function|const|let|class)\s+/gm, "$1$2$3 ");
+}
+
+// An import ends on the first line whose "outside-string" part closes the
+// statement (a `;` or a closing quote after balanced braces).
+function dropImports(lines) {
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (/^\s*import\b/.test(lines[i])) i = skipImport(lines, i);
+    else {
+      out.push(lines[i]);
+      i += 1;
+    }
+  }
+  return out;
+}
+
+function skipImport(lines, start) {
+  let depth = 0;
+  let i = start;
+  while (i < lines.length) {
+    const line = stripStrings(lines[i]);
+    for (const ch of line) {
+      if ("{[(".includes(ch)) depth += 1;
+      if ("}])".includes(ch)) depth -= 1;
+      if (depth <= 0 && ch === ";") return i + 1;
+    }
+    // A one-line import without a trailing `;`.
+    if (depth <= 0 && /["']\s*$/.test(lines[i])) return i + 1;
+    i += 1;
+  }
+  return i;
+}
+
+function stripStrings(line) {
+  return line.replace(/(["'])(?:\\.|[^\\])*?\1/g, '""');
 }
 
 const CORE = [
@@ -45,20 +79,34 @@ const PACKS = {
     "engines/particles/index.js",
   ],
   chimie: [
-    "engines/chimie/laws/melange-couleurs.js",
-    "engines/chimie/laws/reaction-acide.js",
-    "engines/chimie/laws/chauffage.js",
+    "engines/chimie/laws/dilution.js",
+    "engines/chimie/laws/equilibre-acido-basique.js",
+    "engines/chimie/laws/enthalpie-reaction.js",
+    "engines/chimie/laws/precipitation.js",
+    "engines/chimie/laws/degagement-gazeux.js",
+    "engines/chimie/laws/indicateur-colore.js",
+    "engines/chimie/laws/ebullition.js",
     "engines/chimie/world.js",
     "engines/chimie/index.js",
+    "engines/chimie/narration.js",
+    "engines/chimie/glassware.js",
+    "engines/chimie/bench-ghost.js",
+    "engines/chimie/hud-css.js",
     "engines/chimie/benchview.js",
     "engines/chimie/hud.js",
   ],
   ponts: [
+    "engines/ponts/materials.js",
     "engines/ponts/laws/chantier.js",
     "engines/ponts/laws/gravite.js",
     "engines/ponts/laws/rupture.js",
     "engines/ponts/laws/charge-flottante.js",
+    "engines/ponts/laws/poids-propre.js",
     "engines/ponts/world.js",
+    "engines/ponts/sky.js",
+    "engines/ponts/valley-dressing.js",
+    "engines/ponts/site-statics.js",
+    "engines/ponts/test-ghost.js",
     "engines/ponts/mapview.js",
   "engines/ponts/hud.js",
     "engines/ponts/index.js",

@@ -15,8 +15,8 @@ engines/chimie/        3D engine: glassware, mixing, heating
 engines/ponts/         3D engine: nodes, sticks, load, breakage
 app-space/             Space Lab  — gravity well, planets, asteroid belt (2D)
 app-eco/               Eco Lab    — rabbits, foxes, bushes, population chart (2D)
-app-chimie/            Chemistry Lab — pour, mix, heat in 3D glassware
-app-ponts/             Bridge Lab — build a 3D bridge, send the ghost across
+app-chimie/            Chemistry Lab — real aqueous chemistry: titration, pH, precipitates, CO2
+app-ponts/             Bridge Lab — six structural materials, tension/compression families, load test
 scripts/               validator, standalone builder, scaffolder, CI guards
 tests/                 property-based tests (zero dependency)
 mcp-server/            local MCP server for Kiro agents (stdio)
@@ -30,8 +30,8 @@ dist/                  standalone labs: one double-clickable file per lab
 Easiest: double-click a file in **`dist/`** — fully standalone, no server,
 no network:
 
-- `dist/labkit-chimie.html` — Chemistry Lab (3D)
-- `dist/labkit-ponts.html` — Bridge Lab (3D)
+- `dist/labkit-chimie.html` — Chemistry Lab (3D): 8 reagents, burette titration, pH / precipitate / pressure
+- `dist/labkit-ponts.html` — Bridge Lab (3D): wood, steel, cable, rope, arch, concrete pier
 - `dist/labkit-space.html` — Space Lab (2D)
 - `dist/labkit-eco.html` — Eco Lab (2D)
 

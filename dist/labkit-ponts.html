@@ -1873,13 +1873,124 @@ async function boot(source, buildLab, labManifest, packManifests) {
   return { config, lab };
 }
 
+// ---- engines/ponts/materials.js (inlined) ----
+// Bridge materials — the kit's structural catalogue.
+// Three families with real mechanics:
+//   beams   carry tension AND compression (wood, steel)
+//   cables  carry tension ONLY, and go slack (steel cable, rope)
+//   arches  carry compression ONLY, and buckle (arch, concrete pier)
+// DOM-free: importable in browsers and in Node.
+
+const MATERIALS = {
+  bois: {
+    id: "bois", label: "Wood beam", kind: "beam",
+    cost: 10, maxLen: 6.5, stiff: 1.0, strength: 1.0, weight: 1.0,
+    color: 0xb8875a,
+    notice: {
+      label: "Wood beam",
+      formule: "Carries tension and compression. Cheap, short, bends under load.",
+      sources: "Timber construction (allowable stress ~10 MPa).",
+      limites: "No rot, no grain direction.",
+    },
+  },
+  acier: {
+    id: "acier", label: "Steel beam", kind: "beam",
+    cost: 25, maxLen: 9, stiff: 1.7, strength: 2.4, weight: 1.7,
+    color: 0x9fb3c8,
+    notice: {
+      label: "Steel beam",
+      formule: "Carries tension and compression, 1.7x stiffer and 2.4x stronger than wood, but heavy and dear.",
+      sources: "Structural steel S275 (E = 210 GPa).",
+      limites: "No buckling curve; constant cross-section.",
+    },
+  },
+  cable: {
+    id: "cable", label: "Steel cable", kind: "cable",
+    cost: 5, maxLen: 12, stiff: 0.5, strength: 1.5, weight: 0.15,
+    color: 0x4b5563,
+    notice: {
+      label: "Steel cable",
+      formule: "Tension only: goes slack when shorter than its rest length. Long, light, strong in pull.",
+      sources: "Suspension and cable-stayed bridges (7-wire strand).",
+      limites: "Cannot push; no sag curve modelled.",
+    },
+  },
+  corde: {
+    id: "corde", label: "Rope", kind: "cable",
+    cost: 3, maxLen: 8, stiff: 0.15, strength: 0.6, weight: 0.1,
+    color: 0xd9c6a5,
+    notice: {
+      label: "Rope",
+      formule: "Tension only, very stretchy and weak. Cheapest member, for light spans only.",
+      sources: "Hemp rope (working load ~1/6 of breaking load).",
+      limites: "Creep and knots not modelled.",
+    },
+  },
+  arche: {
+    id: "arche", label: "Arch", kind: "arch",
+    cost: 40, maxLen: 7.5, stiff: 1.3, strength: 3.2, weight: 2.4,
+    color: 0xd98d5f,
+    notice: {
+      label: "Arch",
+      formule: "Compression only: buckles when stretched. Very strong under its own curve, heavy.",
+      sources: "Masonry and reinforced-concrete arches (thrust line).",
+      limites: "Idealised as a straight member; no thrust-line geometry.",
+    },
+  },
+  pilier: {
+    id: "pilier", label: "Concrete pier", kind: "arch",
+    cost: 30, maxLen: 5, stiff: 2.2, strength: 4.5, weight: 3.2,
+    color: 0xa8a29e,
+    notice: {
+      label: "Concrete pier",
+      formule: "Compression only, the stiffest and strongest member, but short and very heavy.",
+      sources: "Reinforced concrete C25/30 piers.",
+      limites: "No rebar detailing; no foundation settlement.",
+    },
+  },
+};
+
+const KINDS = {
+  beam: { tension: true, compression: true },
+  cable: { tension: true, compression: false },
+  arch: { tension: false, compression: true },
+};
+
+const MATERIAL_IDS = Object.keys(MATERIALS);
+
+function getMaterial(id) {
+  return MATERIALS[id] || null;
+}
+
+function costOf(id) {
+  const m = MATERIALS[id];
+  return m ? m.cost : 0;
+}
+
+function maxLenOf(id) {
+  const m = MATERIALS[id];
+  return m ? m.maxLen : 0;
+}
+
+// Which members does a site allow? Sites gate materials to create progression.
+function materialsForSite(site) {
+  const allowed = site && site.materials;
+  if (!Array.isArray(allowed) || allowed.length === 0) return MATERIAL_IDS;
+  return allowed.filter((id) => MATERIALS[id]);
+}
+
 // ---- engines/ponts/laws/chantier.js (inlined) ----
-// Law: chantier — the game rules: budget and beam costs live in params.
+// Law: chantier — the site rules: budget and the material palette live in params.
+
+function priceList() {
+  return MATERIAL_IDS.map((id) => `${MATERIALS[id].label} = ${MATERIALS[id].cost}`).join(", ");
+}
+
 const chantier = {
   id: "chantier",
   notice: {
     label: "Site rules",
-    formule: "Beam = 10, cable = 5. Each site sets its own budget — see the Budget ring. The road must link both banks.",
+    formule: `Budget per site; costs — ${priceList()}. The road must link both banks.`,
     sources: "Game rules (not a physics model).",
     limites: "Designs are saved locally, per site.",
   },
@@ -1908,22 +2019,25 @@ const gravite = {
 };
 
 // ---- engines/ponts/laws/rupture.js (inlined) ----
-// Law: rupture — a beam breaks past the stress threshold; records stress.
+// Law: rupture — a member snaps past its own strength; records peak stress.
+// The threshold is per material: steel and concrete hold far more than rope.
+
 const rupture = {
   id: "rupture",
   notice: {
     label: "Breaking",
-    formule: "A bar snaps past 100% load. Each cable tied to the deck holds 6 t of ghost; past that the rigging yields and the deck carries the ghost alone.",
-    sources: "Toy model: load estimated from the Verlet constraint correction; cable capacity is a game rule.",
-    limites: "No fatigue or buckling; same threshold for all.",
+    formule: "A member snaps when its load fraction exceeds strength(seuil / material.strength). Cables tied to the deck yield past 6 t of ghost each.",
+    sources: "Toy model: load estimated from the Verlet constraint correction; per-material strength ratios.",
+    limites: "No fatigue, no buckling curve; one threshold per material.",
   },
   defaults: { seuil: 0.0012 },
   apply(world, dt, params) {
     let worst = 0;
     for (const s of world.sticks) {
       if (s.broken) continue;
+      const def = MATERIALS[s.mat];
       const stress = (s.load || 0) / (world.loadNorm || 60);
-      const frac = stress / params.seuil;
+      const frac = stress / (params.seuil / (def ? def.strength : 1));
       s.strain = frac;
       if (frac > worst) worst = frac;
       if (frac > 1) {
@@ -1933,26 +2047,32 @@ const rupture = {
     }
     // Peak, not current: the collapse journal must show what broke the bridge.
     if (worst > (world.maxStrain || 0)) world.maxStrain = worst;
-    // Cable rigging yields (goes slack, reversibly) past 6 t of ghost per
-    // cable tied to the deck. Adding cables never hurts: yielded cables
-    // just stop helping and the deck beams decide holds/breaks.
-    if (world.testing) {
-      let deckCables = 0;
-      let anyCable = false;
-      for (const s of world.sticks) {
-        if (s.broken || s.type !== "cable") continue;
-        anyCable = true;
-        const A = world.nodes[s.a];
-        const B = world.nodes[s.b];
-        if ((A && A.deck) || (B && B.deck)) deckCables++;
-      }
-      const charge = (world.params && world.params()["charge-flottante"]) || {};
-      world.cablesYielding = anyCable && (charge.poids || 20) > 6 * deckCables;
-    } else {
-      world.cablesYielding = false;
-    }
+    updateCableYield(world);
   },
 };
+
+// Cable rigging yields (goes slack, reversibly) past 6 t of ghost per cable
+// tied to the deck. Adding cables never hurts: yielded cables just stop
+// helping and the deck beams decide holds/breaks.
+function updateCableYield(world) {
+  if (!world.testing) {
+    world.cablesYielding = false;
+    return;
+  }
+  let deckCables = 0;
+  let anyCable = false;
+  for (const s of world.sticks) {
+    if (s.broken) continue;
+    const def = MATERIALS[s.mat];
+    if (!def || def.kind !== "cable") continue;
+    anyCable = true;
+    const A = world.nodes[s.a];
+    const B = world.nodes[s.b];
+    if ((A && A.deck) || (B && B.deck)) deckCables++;
+  }
+  const charge = (world.params && world.params()["charge-flottante"]) || {};
+  world.cablesYielding = anyCable && (charge.poids || 20) > 6 * deckCables;
+}
 
 // ---- engines/ponts/laws/charge-flottante.js (inlined) ----
 // Law: charge-flottante — the test ghost hovers across and presses on nearby deck nodes.
@@ -1977,10 +2097,35 @@ const chargeFlottante = {
   },
 };
 
+// ---- engines/ponts/laws/poids-propre.js (inlined) ----
+// Law: poids-propre — each member pulls its own weight down onto its two nodes.
+// Heavy materials (steel, concrete) sag the deck before the ghost even moves.
+
+const poidsPropre = {
+  id: "poids-propre",
+  notice: {
+    label: "Self-weight",
+    formule: "Each member adds -g * weight to both its nodes, so a heavy deck sags before any load arrives.",
+    sources: "Dead load (structural self-weight), the first load every real bridge must carry.",
+    limites: "Lumped at the two end nodes; no continuous beam weight.",
+  },
+  defaults: { g: 9.81 },
+  apply(world, dt, params) {
+    for (const s of world.sticks) {
+      if (s.broken) continue;
+      const def = MATERIALS[s.mat];
+      if (!def) continue;
+      const pull = -params.g * def.weight * 0.5;
+      world.nodes[s.a].ay += pull;
+      world.nodes[s.b].ay += pull;
+    }
+  },
+};
+
 // ---- engines/ponts/world.js (inlined) ----
-// Bridge world: nodes + sticks (Verlet), ghost test, budget, score. Pure logic, no rendering.
-const COST = { poutre: 10, cable: 5 };
-const MAXLEN = { poutre: 6.5, cable: 12 };
+// Bridge world: nodes + members (Verlet), ghost test, budget, score.
+// Members are drawn from the structural catalogue (materials.js): stiffness,
+// tension-only / compression-only families, and self-weight per material.
 
 function makeNode(x, y, deck, fixed) {
   return { x, y, rx: x, ry: y, px: x, py: y, ax: 0, ay: 0, deck, fixed };
@@ -2005,6 +2150,7 @@ function createWorld({ laws, site }) {
   site = site || { width: 28, budget: 120 };
   const half = site.width / 2;
   const layout = buildLayout(half);
+  const palette = materialsForSite(site);
   const world = {
     site,
     half,
@@ -2012,6 +2158,7 @@ function createWorld({ laws, site }) {
     deckCount: layout.deckCount,
     sticks: [],
     laws: laws || [],
+    palette,
     ghost: { x: -half - 2, y: 1.8, tilt: 0, falling: false },
     testing: false,
     statut: -1,
@@ -2029,11 +2176,14 @@ function createWorld({ laws, site }) {
       return this.site.budget || (c && c.budget) || 120;
     },
     spent() {
-      return this.sticks.reduce((t, s) => t + (COST[s.type] || 0), 0);
+      return this.sticks.reduce((t, s) => t + MATERIALS[s.mat].cost, 0);
     },
-    canPlace(a, b, type) {
+    canPlace(a, b, mat) {
+      const def = MATERIALS[mat];
+      if (!def) return { ok: false, why: "Unknown material." };
       if (a === b) return { ok: false, why: "Two different nodes!" };
       if (this.testing) return { ok: false, why: "Test running…" };
+      if (!this.palette.includes(mat)) return { ok: false, why: `${def.label} is not on this site.` };
       if (this.sticks.some((s) => (s.a === a && s.b === b) || (s.a === b && s.b === a))) {
         return { ok: false, why: "Already linked." };
       }
@@ -2041,23 +2191,22 @@ function createWorld({ laws, site }) {
       const B = this.nodes[b];
       if (!A || !B) return { ok: false, why: "Unknown node." };
       const len = Math.hypot(B.rx - A.rx, B.ry - A.ry);
-      if (len > MAXLEN[type]) {
-        return { ok: false, why: type === "poutre" ? "Too long for a beam." : "Too long even for a cable." };
-      }
-      if (this.spent() + COST[type] > this.budget()) return { ok: false, why: "Budget spent!" };
+      if (len > def.maxLen) return { ok: false, why: `Too long for ${def.label.toLowerCase()} (max ${def.maxLen}).` };
+      if (this.spent() + def.cost > this.budget()) return { ok: false, why: "Budget spent!" };
       return { ok: true };
     },
-    place(a, b, type) {
-      const chk = this.canPlace(a, b, type);
+    place(a, b, mat) {
+      const chk = this.canPlace(a, b, mat);
       if (!chk.ok) return chk;
       const A = this.nodes[a];
       const B = this.nodes[b];
       this.sticks.push({
         a, b,
+        mat,
         rest: Math.hypot(B.rx - A.rx, B.ry - A.ry),
-        type,
         broken: false,
         strain: 0,
+        load: 0,
       });
       this.dirty = true;
       this.version++;
@@ -2077,7 +2226,6 @@ function createWorld({ laws, site }) {
       this.reset();
     },
     hasRoad() {
-      // Deck nodes are indices 0..7; anchors are 0 (-14) and 7 (+14).
       const adj = new Map();
       for (let i = 0; i < this.deckCount; i++) adj.set(i, []);
       for (const s of this.sticks) {
@@ -2137,7 +2285,7 @@ function createWorld({ laws, site }) {
       for (const n of this.nodes) {
         n.x = n.rx; n.y = n.ry; n.px = n.rx; n.py = n.ry; n.ax = 0; n.ay = 0;
       }
-      for (const s of this.sticks) { s.broken = false; s.strain = 0; }
+      for (const s of this.sticks) { s.broken = false; s.strain = 0; s.load = 0; }
       this.ghost.x = -this.half - 2; this.ghost.y = 1.8; this.ghost.tilt = 0; this.ghost.falling = false;
       this.testing = false;
       this.statut = -1;
@@ -2151,7 +2299,6 @@ function createWorld({ laws, site }) {
     },
     rebind() { /* no config refs held */ },
     step(dt, isActive) {
-      // Build phase is frozen: physics only runs while the ghost crosses.
       if (!this.testing) return;
       dt = Math.min(dt, 1 / 30);
       for (const n of this.nodes) { n.ax = 0; n.ay = 0; }
@@ -2171,12 +2318,10 @@ function createWorld({ laws, site }) {
       const SUB = 3;
       const ITER = 20;
       this.loadNorm = SUB * ITER;
-      const sub = SUB;
-      const h = dt / sub;
-      for (let k = 0; k < sub; k++) {
+      const h = dt / SUB;
+      for (let k = 0; k < SUB; k++) {
         for (const n of this.nodes) {
           if (n.fixed || !linked.has(this.nodes.indexOf(n))) continue;
-                    // 0.98 damps the settling ring so braced decks survive their own gravity transient.
           const nx = n.x + (n.x - n.px) * 0.98 + n.ax * h * h;
           const ny = n.y + (n.y - n.py) * 0.98 + n.ay * h * h;
           n.px = n.x; n.py = n.y; n.x = nx; n.y = ny;
@@ -2184,18 +2329,23 @@ function createWorld({ laws, site }) {
         for (let it = 0; it < ITER; it++) {
           for (const s of this.sticks) {
             if (s.broken) continue;
+            const def = MATERIALS[s.mat];
+            const fam = KINDS[def.kind];
             const A = this.nodes[s.a];
             const B = this.nodes[s.b];
             const dx = B.x - A.x;
             const dy = B.y - A.y;
             const len = Math.hypot(dx, dy) || 0.0001;
-            if (s.type === "cable" && len < s.rest) continue;
+            const stretched = len > s.rest;
+            // Cables only pull; arches and piers only push.
+            if (!fam.tension && stretched) continue;
+            if (!fam.compression && !stretched) continue;
             const diff = (len - s.rest) / len;
             const wa = A.fixed ? 0 : 1;
             const wb = B.fixed ? 0 : 1;
             const w = wa + wb;
             if (!w) continue;
-            const stiff = s.type === "poutre" ? 1 : (this.cablesYielding ? 0 : 0.5);
+            const stiff = def.stiff * (this.cablesYielding && def.kind === "cable" ? 0 : 1);
             s.load = (s.load || 0) + Math.abs(diff);
             const f = (diff * stiff) / w;
             A.x += dx * f * wa; A.y += dy * f * wa;
@@ -2206,7 +2356,6 @@ function createWorld({ laws, site }) {
       for (const n of this.nodes) {
         if (!n.fixed && n.y < -10) { n.y = -10; n.px = n.x; n.py = n.y; }
       }
-      // The ghost hovers over the deck, or plunges if the bridge gives way.
       if (this.testing) {
         if (this.sticks.some((s) => s.broken)) this.ghost.falling = true;
         if (this.ghost.falling) {
@@ -2235,10 +2384,427 @@ function createWorld({ laws, site }) {
   return world;
 }
 
+// ---- engines/ponts/sky.js (inlined) ----
+// Golden-hour sky (Three.js via the global THREE): a vertex-coloured gradient
+// dome, a cool hemisphere fill and the low warm sun with its shadow rig.
+function buildSky(THREE, scene, horizon) {
+  const R = 600;
+  const g = new THREE.SphereGeometry(R, 32, 24);
+  const p = g.attributes.position;
+  const col = new Float32Array(p.count * 3);
+  const zen = new THREE.Color(0x6d9cf0);
+  const mid = new THREE.Color(0xb8d2ff);
+  const hor = new THREE.Color(horizon);
+  const c = new THREE.Color();
+  for (let i = 0; i < p.count; i++) {
+    const k = p.getY(i) / R;
+    if (k <= 0) c.copy(hor);
+    else if (k < 0.12) c.copy(hor).lerp(mid, k / 0.12);
+    else c.copy(mid).lerp(zen, Math.min(1, (k - 0.12) / 0.5));
+    col[i * 3] = c.r;
+    col[i * 3 + 1] = c.g;
+    col[i * 3 + 2] = c.b;
+  }
+  g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  scene.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({
+    vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false,
+  })));
+
+  scene.add(new THREE.HemisphereLight(0xd8e7ff, 0x7d8f50, 0.85));
+  const sun = new THREE.DirectionalLight(0xffd09a, 1.8);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = -40;
+  sun.shadow.camera.right = 40;
+  sun.shadow.camera.top = 40;
+  sun.shadow.camera.bottom = -40;
+  sun.shadow.camera.near = 5;
+  sun.shadow.camera.far = 160;
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.03;
+  scene.add(sun);
+  scene.add(sun.target);
+  return sun;
+}
+
+// ---- engines/ponts/valley-dressing.js (inlined) ----
+// Valley dressing (Three.js via the global THREE): instanced low-poly trees,
+// rocks, a hazy mountain ring and drifting clouds.
+// Pure scene dressing: no game state, no DOM, no per-frame logic except clouds.
+
+// Distance from a point to a segment, used to keep the default camera views clear.
+function segDist(px, pz, ax, az, bx, bz) {
+  const vx = bx - ax;
+  const vz = bz - az;
+  const k = Math.max(0, Math.min(1, ((px - ax) * vx + (pz - az) * vz) / (vx * vx + vz * vz)));
+  return Math.hypot(px - ax - k * vx, pz - az - k * vz);
+}
+
+function pickTreeSpots({ rnd, sites, siteX, radiusFor, heightAt, bedAt, waterGap, START }) {
+  // Keep the default view of every bridge clear of trunks.
+  const views = sites.map((s) => {
+    const r = radiusFor(s.id);
+    return [
+      siteX[s.id] + r * Math.sin(START.phi) * Math.sin(START.theta),
+      r * Math.sin(START.phi) * Math.cos(START.theta),
+      siteX[s.id],
+    ];
+  });
+  const trees = [];
+  for (let n = 0; n < 480 && trees.length < 170; n++) {
+    const x = (rnd() - 0.5) * 290;
+    const z = (rnd() - 0.5) * 124;
+    const s = 0.8 + rnd() * 1.1;
+    const round = rnd() > 0.72;
+    const li = (rnd() * 4) | 0;
+    const rot = rnd() * 6.283;
+    if (bedAt(x, z) > 0.01 || waterGap(x) < 9) continue;
+    if (Math.abs(z) < 26 && waterGap(x) < 18) continue;
+    if (views.some(([cx, cz, tx]) => segDist(x, z, cx, cz, tx, 0) < 10 || Math.hypot(x - cx, z - cz) < 24)) continue;
+    trees.push({ x, y: heightAt(x, z) - 0.15, z, s, round, li, rot });
+  }
+  return trees;
+}
+
+function addTrees(THREE, scene, trees) {
+  const cone = new THREE.ConeGeometry(1, 1, 7);
+  cone.translate(0, 0.5, 0);
+  const stem = new THREE.CylinderGeometry(0.13, 0.18, 1, 6);
+  stem.translate(0, 0.5, 0);
+  const ball = new THREE.IcosahedronGeometry(1, 0);
+  const leafMat = new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 });
+  const woodMat = new THREE.MeshStandardMaterial({ color: 0x8a5a3c, flatShading: true, roughness: 1 });
+  const leaves = [0x3f9d4f, 0x52b25a, 0x2f8a46, 0x67bd5c].map((h) => new THREE.Color(h));
+  const nRound = trees.filter((t) => t.round).length;
+  const stems = new THREE.InstancedMesh(stem, woodMat, trees.length);
+  const cones = new THREE.InstancedMesh(cone, leafMat, trees.length - nRound);
+  const balls = new THREE.InstancedMesh(ball, leafMat, nRound);
+  const m4 = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const e = new THREE.Euler();
+  const v = new THREE.Vector3();
+  const sc = new THREE.Vector3();
+  let ic = 0;
+  let ib = 0;
+  trees.forEach((t, i) => {
+    q.setFromEuler(e.set(0, t.rot, 0));
+    stems.setMatrixAt(i, m4.compose(v.set(t.x, t.y, t.z), q, sc.set(t.s, 0.9 * t.s, t.s)));
+    if (t.round) {
+      balls.setMatrixAt(ib, m4.compose(v.set(t.x, t.y + 1.7 * t.s, t.z), q, sc.setScalar(1.15 * t.s)));
+      balls.setColorAt(ib++, leaves[t.li]);
+    } else {
+      cones.setMatrixAt(ic, m4.compose(v.set(t.x, t.y + 0.55 * t.s, t.z), q, sc.set(1.15 * t.s, 3 * t.s, 1.15 * t.s)));
+      cones.setColorAt(ic++, leaves[t.li]);
+    }
+  });
+  for (const im of [stems, cones, balls]) {
+    im.castShadow = true;
+    im.receiveShadow = true;
+    im.frustumCulled = false; // instances spread far from the geometry's own bounds
+    im.instanceMatrix.needsUpdate = true;
+    if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    scene.add(im);
+  }
+}
+
+function addRocks(THREE, scene, { rnd, heightAt, bedAt, waterGap }) {
+  const rockGeo = new THREE.DodecahedronGeometry(1, 0);
+  const rockMat = new THREE.MeshStandardMaterial({ color: 0xcfc6b8, flatShading: true, roughness: 1 });
+  for (let i = 0, placed = 0; i < 60 && placed < 16; i++) {
+    const x = (rnd() - 0.5) * 280;
+    const z = (rnd() - 0.5) * 110;
+    const s = 0.6 + rnd() * 1.6;
+    if (bedAt(x, z) > 0.01 || waterGap(x) < 8 || (Math.abs(z) < 20 && waterGap(x) < 14)) continue;
+    const r = new THREE.Mesh(rockGeo, rockMat);
+    r.position.set(x, heightAt(x, z) - 0.2, z);
+    r.scale.set(s, s * 0.7, s);
+    r.rotation.y = rnd() * 6.28;
+    r.castShadow = true;
+    r.receiveShadow = true;
+    scene.add(r);
+    placed++;
+  }
+}
+
+// Hazy mountain ring beyond the valley (no fog: they read as distant silhouettes).
+function addMountains(THREE, scene, rnd) {
+  const hazes = [0xf3dfc9, 0xeedac6, 0xe8d6c5].map(
+    (h) => new THREE.MeshStandardMaterial({ color: h, flatShading: true, roughness: 1, fog: false }),
+  );
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2 + rnd() * 0.2;
+    const R = 300 + rnd() * 40;
+    const h = 22 + rnd() * 22;
+    const m = new THREE.Mesh(new THREE.ConeGeometry(60 + rnd() * 30, h, 5 + (i % 3), 1), hazes[i % 3]);
+    m.position.set(Math.cos(a) * R * 1.25, h / 2 - 14, Math.sin(a) * R);
+    m.rotation.y = rnd() * 6.28;
+    scene.add(m);
+  }
+}
+
+function addClouds(THREE, scene, rnd) {
+  const clouds = [];
+  const geo = new THREE.IcosahedronGeometry(1, 1);
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0xffffff, emissive: 0xffe2c4, emissiveIntensity: 0.35, flatShading: true, roughness: 1, fog: false,
+  });
+  const puff = [[0, 0, 0, 1.5], [1.6, -0.25, 0.2, 1.1], [-1.5, -0.35, -0.1, 1.05], [0.5, 0.6, -0.2, 1.05], [-0.4, 0.45, 0.5, 0.9]];
+  for (let i = 0; i < 9; i++) {
+    const g = new THREE.Group();
+    for (const [a, b, c, r] of puff) {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(a, b, c);
+      m.scale.setScalar(r);
+      g.add(m);
+    }
+    g.position.set(-170 + i * 40 + rnd() * 10, 34 + rnd() * 14, -120 + rnd() * 160);
+    g.scale.setScalar(3 + rnd() * 2.5);
+    scene.add(g);
+    clouds.push({ g, speed: 0.6 + rnd() * 0.8 });
+  }
+  return clouds;
+}
+
+function dressValley(THREE, scene, deps) {
+  const { rnd, sites, siteX, radiusFor, heightAt, bedAt, waterGap, START } = deps;
+  addTrees(THREE, scene, pickTreeSpots(deps));
+  addRocks(THREE, scene, deps);
+  addMountains(THREE, scene, rnd);
+  return addClouds(THREE, scene, rnd);
+}
+
+// ---- engines/ponts/site-statics.js (inlined) ----
+// Bridge site statics (Three.js via the global THREE): abutments, white pylons,
+// the dashed deck guide and the floating ROAD label. One group per site.
+// Pure scene dressing: built once, no per-frame logic.
+
+function box(THREE, w, h, d, mat, x, y, z, parent) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+
+function roadSprite(THREE) {
+  const cv = document.createElement("canvas");
+  cv.width = 320;
+  cv.height = 80;
+  const c = cv.getContext("2d");
+  const r = 32;
+  c.beginPath();
+  c.moveTo(r + 4, 8);
+  c.lineTo(316 - r, 8);
+  c.arc(316 - r, 40, r, -Math.PI / 2, Math.PI / 2);
+  c.lineTo(r + 4, 72);
+  c.arc(r + 4, 40, r, Math.PI / 2, (Math.PI * 3) / 2);
+  c.closePath();
+  c.fillStyle = "rgba(255,255,255,0.9)";
+  c.fill();
+  c.font = '800 34px Archivo, "Segoe UI", system-ui, sans-serif';
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  c.fillStyle = "#1b1530";
+  c.fillText("ROAD ↓", 160, 42);
+  const tex = new THREE.CanvasTexture(cv);
+  if ("colorSpace" in tex) tex.colorSpace = THREE.SRGBColorSpace;
+  else tex.encoding = THREE.sRGBEncoding;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false }));
+  sp.scale.set(6, 1.5, 1);
+  return sp;
+}
+
+// deps: { scene, ctx, sites, siteX, halfOf, BED }
+function buildSiteStatics(THREE, deps) {
+  const { scene, ctx, sites, siteX, halfOf, BED } = deps;
+  const concrete = new THREE.MeshStandardMaterial({ color: 0xe4ddd0, roughness: 0.9 });
+  const white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+  const siteGroups = {};
+  const siteTags = {};
+  const roadDone = {};
+
+  for (const s of sites) {
+    const half = halfOf(s.id);
+    const g = new THREE.Group();
+    g.position.x = siteX[s.id];
+    scene.add(g);
+    const abW = 2.5 + half * 0.18;
+    const abD = 4 + half * 0.2;
+    box(THREE, abW, -BED + 0.5, abD, concrete, -(half + abW / 2 + 0.5), (BED - 0.5) / 2, 0, g);
+    box(THREE, abW, -BED + 0.5, abD, concrete, half + abW / 2 + 0.5, (BED - 0.5) / 2, 0, g);
+    // Slim H pylons around the fixed anchors (half/2, 8): the road passes between the legs.
+    for (const tx of [-half / 2, half / 2]) {
+      for (const tz of [-1.6, 1.6]) box(THREE, 0.55, 8.6 - BED, 0.55, white, tx, (8.6 + BED) / 2, tz, g);
+      box(THREE, 0.55, 0.55, 3.75, white, tx, 7.2, 0, g);
+      box(THREE, 2.6, 1.6, 4.4, concrete, tx, BED + 0.5, 0, g);
+    }
+    // Deck guide: dashed line along the road row.
+    const world = ctx.worlds[s.id].world;
+    const guidePts = [];
+    for (let i = 0; i < world.deckCount; i++) guidePts.push(new THREE.Vector3(world.nodes[i].rx, 0.15, 0));
+    const guide = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(guidePts),
+      new THREE.LineDashedMaterial({
+        color: 0xffffff, transparent: true, opacity: 0.9, dashSize: 1.2, gapSize: 0.7,
+      }),
+    );
+    guide.computeLineDistances();
+    g.add(guide);
+    const tag = roadSprite(THREE);
+    tag.position.set(0, 10.2, 0);
+    g.add(tag);
+    siteTags[s.id] = tag;
+    siteGroups[s.id] = g;
+  }
+
+  return { siteGroups, siteTags, roadDone };
+}
+
+// ---- engines/ponts/test-ghost.js (inlined) ----
+// Test ghost (Three.js via the global THREE): the flask mascot of the logo,
+// turned on a lathe, that walks the deck during a load test and plunges when
+// the bridge gives way. Open body with a scalloped, swaying hem; eyes that
+// follow the pointer, look ahead while testing, and blink.
+const PH_HEM = 0.42;
+const PH_LOBES = 7;
+const PH_LOBE = 0.17;
+const PROFILE = [
+  [0.8, 0], [0.795, 0.07], [0.79, 0.14], [0.785, 0.21], [0.78, 0.28], [0.78, 0.35],
+  [0.78, PH_HEM], [0.745, 0.716], [0.641, 0.94], [0.468, 1.116], [0.225, 1.25],
+  [0.225, 1.6], [0.35, 1.6], [0.35, 1.75], [0, 1.75],
+];
+
+// deps: { scene, host, ctx, camera }
+function buildTestGhost(THREE, deps) {
+  const { scene, host, ctx, camera } = deps;
+  const group = new THREE.Group(); // position + yaw towards the camera
+  const tilt = new THREE.Group(); // falling tilt
+  group.add(tilt);
+  const eyes = [];
+  const inner = new THREE.Group();
+  let hemGeo = null;
+  let hemBase = null;
+
+  const prof = PROFILE.map((p) => new THREE.Vector2(p[0], p[1]));
+  const ink = new THREE.MeshStandardMaterial({ color: 0x17141f, roughness: 0.3 });
+  const cheek = new THREE.MeshStandardMaterial({ color: 0xff9a62, roughness: 0.6 });
+  hemGeo = new THREE.LatheGeometry(prof, 96);
+  hemBase = Float32Array.from(hemGeo.attributes.position.array);
+  const body = new THREE.Mesh(hemGeo, new THREE.MeshStandardMaterial({ color: 0xfbf8ff, roughness: 0.38, side: THREE.DoubleSide }));
+  body.castShadow = true;
+  inner.add(body);
+  const eyeGeo = new THREE.SphereGeometry(0.085, 16, 12);
+  const cheekGeo = new THREE.SphereGeometry(0.1, 16, 10);
+  for (const sx of [-1, 1]) {
+    const eye = new THREE.Mesh(eyeGeo, ink);
+    eye.scale.set(1, 1.3, 0.55);
+    eye.position.set(sx * 0.225, 0.62, 0.72);
+    eye.userData.sx = sx;
+    eyes.push(eye);
+    inner.add(eye);
+    const ch = new THREE.Mesh(cheekGeo, cheek);
+    ch.scale.set(1.2, 0.55, 0.3);
+    ch.position.set(sx * 0.46, 0.4, 0.62);
+    inner.add(ch);
+  }
+  const smile = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.017, 8, 16, Math.PI), ink);
+  smile.rotation.z = Math.PI;
+  smile.position.set(0, 0.45, 0.77);
+  inner.add(smile);
+  inner.scale.setScalar(1.4);
+  inner.position.y = -0.6 + PH_LOBE * 1.4; // scallop tips where the old round bottom was
+  tilt.add(inner);
+  scene.add(group);
+  waveHem(0);
+
+  const look = { x: 0, y: 0 };
+  let ptr = { x: 0, y: 0, at: -1e9 };
+  window.addEventListener("pointermove", (e) => {
+    const r = host.getBoundingClientRect();
+    ptr = {
+      x: ((e.clientX - r.left) / r.width) * 2 - 1,
+      y: -((e.clientY - r.top) / r.height) * 2 + 1,
+      at: performance.now(),
+    };
+  });
+  let blinkAt = 2.5;
+  const headV = new THREE.Vector3();
+  const aheadV = new THREE.Vector3();
+
+  function waveHem(phase) {
+    const p = hemGeo.attributes.position.array;
+    for (let i = 0; i < p.length; i += 3) {
+      const y0 = hemBase[i + 1];
+      if (y0 >= PH_HEM) continue;
+      const x = hemBase[i];
+      const z = hemBase[i + 2];
+      const a = Math.atan2(x, z);
+      const k = 1 - y0 / PH_HEM;
+      const lobe = 0.5 + 0.5 * Math.cos(PH_LOBES * a + phase);
+      const sway = 1 + 0.06 * k * Math.sin(PH_LOBES * a + phase * 1.7);
+      p[i] = x * sway;
+      p[i + 1] = y0 - PH_LOBE * lobe * k * k;
+      p[i + 2] = z * sway;
+    }
+    hemGeo.attributes.position.needsUpdate = true;
+    hemGeo.computeVertexNormals();
+  }
+
+  // Eyes: follow the pointer, look ahead while testing, glance around otherwise.
+  function moveEyes(dt, t, testing) {
+    inner.localToWorld(headV.set(0, 0.62, 0.7));
+    const head = headV.clone().project(camera);
+    let tx;
+    let ty;
+    if (performance.now() - ptr.at < 2500) {
+      tx = ptr.x;
+      ty = ptr.y;
+    } else {
+      inner.localToWorld(aheadV.set(0, 0.62, 0.7));
+      aheadV.x += testing ? 6 : Math.sin(t * 0.6) * 5;
+      aheadV.y += testing ? -1.5 : 0;
+      const a = aheadV.project(camera);
+      tx = a.x;
+      ty = a.y;
+    }
+    const r = host.getBoundingClientRect();
+    let dx = ((tx - head.x) * r.width) / 2;
+    let dy = (-(ty - head.y) * r.height) / 2;
+    const len = Math.hypot(dx, dy);
+    const k = Math.min(1, len / 160) / (len || 1);
+    dx *= k;
+    dy *= k;
+    const ease = Math.min(1, dt * 9);
+    look.x += (dx - look.x) * ease;
+    look.y += (dy - look.y) * ease;
+    const blinking = t > blinkAt && t < blinkAt + 0.13;
+    if (t > blinkAt + 0.13) blinkAt = t + 2.4 + Math.random() * 3.2;
+    const bodyR = (y) => 0.78 - ((y - PH_HEM) / (0.716 - PH_HEM)) * (0.78 - 0.745);
+    eyes.forEach((e) => {
+      const x = e.userData.sx * 0.225 + look.x * 0.085;
+      const y = 0.62 - look.y * 0.07;
+      const rr = bodyR(y);
+      e.position.set(x, y, Math.sqrt(Math.max(0, rr * rr - x * x)) - 0.01);
+      e.rotation.y = Math.asin(Math.max(-1, Math.min(1, x / rr)));
+      e.scale.y = blinking ? 0.15 : 1.3;
+    });
+  }
+
+  function chargePoids() {
+    const w = ctx.worlds[ctx.activeId()];
+    const law = w.laws.find((l) => l.mod.id === "charge-flottante");
+    return (law && law.params.poids) || 20;
+  }
+
+  return { group, tilt, waveHem, moveEyes, chargePoids };
+}
+
 // ---- engines/ponts/mapview.js (inlined) ----
 // Bridge map view (Three.js via global THREE): full-screen golden-hour valley, one river
 // site per config entry, per-site bridge dynamics, orbit camera. No imports:
 // vendor/three.min.js (modular) or the inlined bundle (standalone) provides window.THREE.
+
 function buildMapView(host, ctx) {
   const THREE = window.THREE;
   if (!THREE) throw new Error("THREE missing: load vendor/three.min.js first");
@@ -2247,8 +2813,9 @@ function buildMapView(host, ctx) {
 
   const HORIZON = 0xffd6ad;
   const RED = new THREE.Color(0xef4444);
-  const BEAM = new THREE.Color(0xf1e9da);
-  const CABLE = new THREE.Color(0x2a2340);
+  const BROKEN = new THREE.Color(0x7f1d1d);
+  const MAT_COLOR = {};
+  for (const id of Object.keys(MATERIALS)) MAT_COLOR[id] = new THREE.Color(MATERIALS[id].color);
   const REDUCED = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const sites = ctx.config.sites;
 
@@ -2269,36 +2836,7 @@ function buildMapView(host, ctx) {
   const camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 1500);
 
   // Sky: gradient dome (no fog), warm low sun, cool sky fill.
-  {
-    const R = 600;
-    const g = new THREE.SphereGeometry(R, 32, 24);
-    const p = g.attributes.position;
-    const col = new Float32Array(p.count * 3);
-    const zen = new THREE.Color(0x6d9cf0);
-    const mid = new THREE.Color(0xb8d2ff);
-    const hor = new THREE.Color(HORIZON);
-    const c = new THREE.Color();
-    for (let i = 0; i < p.count; i++) {
-      const k = p.getY(i) / R;
-      if (k <= 0) c.copy(hor);
-      else if (k < 0.12) c.copy(hor).lerp(mid, k / 0.12);
-      else c.copy(mid).lerp(zen, Math.min(1, (k - 0.12) / 0.5));
-      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
-    }
-    g.setAttribute("color", new THREE.BufferAttribute(col, 3));
-    scene.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false })));
-  }
-  scene.add(new THREE.HemisphereLight(0xd8e7ff, 0x7d8f50, 0.85));
-  const sun = new THREE.DirectionalLight(0xffd09a, 1.8);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.left = -40; sun.shadow.camera.right = 40;
-  sun.shadow.camera.top = 40; sun.shadow.camera.bottom = -40;
-  sun.shadow.camera.near = 5; sun.shadow.camera.far = 160;
-  sun.shadow.bias = -0.0004;
-  sun.shadow.normalBias = 0.03;
-  scene.add(sun);
-  scene.add(sun.target);
+  const sun = buildSky(THREE, scene, HORIZON);
 
   function mulberry(seed) {
     let a = seed;
@@ -2396,179 +2934,15 @@ function buildMapView(host, ctx) {
     waters.push({ geo: g, base: g.attributes.position.array.slice() });
   }
 
-  // Dressing: low-poly trees (instanced), rocks, far mountains, clouds.
-  {
-    const segDist = (px, pz, ax, az, bx, bz) => {
-      const vx = bx - ax, vz = bz - az;
-      const k = Math.max(0, Math.min(1, ((px - ax) * vx + (pz - az) * vz) / (vx * vx + vz * vz)));
-      return Math.hypot(px - ax - k * vx, pz - az - k * vz);
-    };
-    // Keep the default view of every bridge clear of trunks.
-    const views = sites.map((s) => {
-      const r = radiusFor(s.id);
-      return [siteX[s.id] + r * Math.sin(START.phi) * Math.sin(START.theta), r * Math.sin(START.phi) * Math.cos(START.theta), siteX[s.id]];
-    });
-    const trees = [];
-    for (let n = 0; n < 480 && trees.length < 170; n++) {
-      const x = (rnd() - 0.5) * 290;
-      const z = (rnd() - 0.5) * 124;
-      const s = 0.8 + rnd() * 1.1;
-      const round = rnd() > 0.72;
-      const li = (rnd() * 4) | 0;
-      const rot = rnd() * 6.283;
-      if (bedAt(x, z) > 0.01 || waterGap(x) < 9) continue;
-      if (Math.abs(z) < 26 && waterGap(x) < 18) continue;
-      if (views.some(([cx, cz, tx]) => segDist(x, z, cx, cz, tx, 0) < 10 || Math.hypot(x - cx, z - cz) < 24)) continue;
-      trees.push({ x, y: heightAt(x, z) - 0.15, z, s, round, li, rot });
-    }
-    const cone = new THREE.ConeGeometry(1, 1, 7); cone.translate(0, 0.5, 0);
-    const stem = new THREE.CylinderGeometry(0.13, 0.18, 1, 6); stem.translate(0, 0.5, 0);
-    const ball = new THREE.IcosahedronGeometry(1, 0);
-    const leafMat = new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 });
-    const woodMat = new THREE.MeshStandardMaterial({ color: 0x8a5a3c, flatShading: true, roughness: 1 });
-    const leaves = [0x3f9d4f, 0x52b25a, 0x2f8a46, 0x67bd5c].map((h) => new THREE.Color(h));
-    const nRound = trees.filter((t) => t.round).length;
-    const stems = new THREE.InstancedMesh(stem, woodMat, trees.length);
-    const cones = new THREE.InstancedMesh(cone, leafMat, trees.length - nRound);
-    const balls = new THREE.InstancedMesh(ball, leafMat, nRound);
-    const m4 = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    const e = new THREE.Euler();
-    const v = new THREE.Vector3();
-    const sc = new THREE.Vector3();
-    let ic = 0;
-    let ib = 0;
-    trees.forEach((t, i) => {
-      q.setFromEuler(e.set(0, t.rot, 0));
-      stems.setMatrixAt(i, m4.compose(v.set(t.x, t.y, t.z), q, sc.set(t.s, 0.9 * t.s, t.s)));
-      if (t.round) {
-        balls.setMatrixAt(ib, m4.compose(v.set(t.x, t.y + 1.7 * t.s, t.z), q, sc.setScalar(1.15 * t.s)));
-        balls.setColorAt(ib++, leaves[t.li]);
-      } else {
-        cones.setMatrixAt(ic, m4.compose(v.set(t.x, t.y + 0.55 * t.s, t.z), q, sc.set(1.15 * t.s, 3 * t.s, 1.15 * t.s)));
-        cones.setColorAt(ic++, leaves[t.li]);
-      }
-    });
-    for (const im of [stems, cones, balls]) {
-      im.castShadow = true;
-      im.receiveShadow = true;
-      im.frustumCulled = false; // instances spread far from the geometry's own bounds
-      im.instanceMatrix.needsUpdate = true;
-      if (im.instanceColor) im.instanceColor.needsUpdate = true;
-      scene.add(im);
-    }
-    const rockGeo = new THREE.DodecahedronGeometry(1, 0);
-    const rockMat = new THREE.MeshStandardMaterial({ color: 0xcfc6b8, flatShading: true, roughness: 1 });
-    for (let i = 0, placed = 0; i < 60 && placed < 16; i++) {
-      const x = (rnd() - 0.5) * 280;
-      const z = (rnd() - 0.5) * 110;
-      const s = 0.6 + rnd() * 1.6;
-      if (bedAt(x, z) > 0.01 || waterGap(x) < 8 || (Math.abs(z) < 20 && waterGap(x) < 14)) continue;
-      const r = new THREE.Mesh(rockGeo, rockMat);
-      r.position.set(x, heightAt(x, z) - 0.2, z);
-      r.scale.set(s, s * 0.7, s);
-      r.rotation.y = rnd() * 6.28;
-      r.castShadow = true; r.receiveShadow = true;
-      scene.add(r);
-      placed++;
-    }
-    // Hazy mountain ring beyond the valley (no fog: they read as distant silhouettes).
-    const hazes = [0xf3dfc9, 0xeedac6, 0xe8d6c5].map((h) => new THREE.MeshStandardMaterial({ color: h, flatShading: true, roughness: 1, fog: false }));
-    for (let i = 0; i < 16; i++) {
-      const a = (i / 16) * Math.PI * 2 + rnd() * 0.2;
-      const R = 300 + rnd() * 40;
-      const h = 22 + rnd() * 22;
-      const m = new THREE.Mesh(new THREE.ConeGeometry(60 + rnd() * 30, h, 5 + (i % 3), 1), hazes[i % 3]);
-      m.position.set(Math.cos(a) * R * 1.25, h / 2 - 14, Math.sin(a) * R);
-      m.rotation.y = rnd() * 6.28;
-      scene.add(m);
-    }
-  }
-  const clouds = [];
-  {
-    const geo = new THREE.IcosahedronGeometry(1, 1);
-    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffe2c4, emissiveIntensity: 0.35, flatShading: true, roughness: 1, fog: false });
-    const puff = [[0, 0, 0, 1.5], [1.6, -0.25, 0.2, 1.1], [-1.5, -0.35, -0.1, 1.05], [0.5, 0.6, -0.2, 1.05], [-0.4, 0.45, 0.5, 0.9]];
-    for (let i = 0; i < 9; i++) {
-      const g = new THREE.Group();
-      for (const [a, b, c, r] of puff) {
-        const m = new THREE.Mesh(geo, mat);
-        m.position.set(a, b, c);
-        m.scale.setScalar(r);
-        g.add(m);
-      }
-      g.position.set(-170 + i * 40 + rnd() * 10, 34 + rnd() * 14, -120 + rnd() * 160);
-      g.scale.setScalar(3 + rnd() * 2.5);
-      scene.add(g);
-      clouds.push({ g, speed: 0.6 + rnd() * 0.8 });
-    }
-  }
+  // Dressing: trees, rocks, mountain ring and drifting clouds.
+  const clouds = dressValley(THREE, scene, {
+    rnd, sites, siteX, radiusFor, heightAt, bedAt, waterGap, START,
+  });
 
-  // Per-site statics: abutments, white pylons, deck guide, ROAD label.
-  const concrete = new THREE.MeshStandardMaterial({ color: 0xe4ddd0, roughness: 0.9 });
-  const white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
-  function box(w, h, d, mat, x, y, z, parent) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    m.position.set(x, y, z);
-    m.castShadow = true; m.receiveShadow = true;
-    parent.add(m);
-    return m;
-  }
-  function roadSprite() {
-    const cv = document.createElement("canvas");
-    cv.width = 320; cv.height = 80;
-    const c = cv.getContext("2d");
-    const r = 32;
-    c.beginPath();
-    c.moveTo(r + 4, 8); c.lineTo(316 - r, 8); c.arc(316 - r, 40, r, -Math.PI / 2, Math.PI / 2);
-    c.lineTo(r + 4, 72); c.arc(r + 4, 40, r, Math.PI / 2, (Math.PI * 3) / 2);
-    c.closePath();
-    c.fillStyle = "rgba(255,255,255,0.9)";
-    c.fill();
-    c.font = '800 34px Archivo, "Segoe UI", system-ui, sans-serif';
-    c.textAlign = "center"; c.textBaseline = "middle";
-    c.fillStyle = "#1b1530";
-    c.fillText("ROAD ↓", 160, 42);
-    const tex = new THREE.CanvasTexture(cv);
-    if ("colorSpace" in tex) tex.colorSpace = THREE.SRGBColorSpace;
-    else tex.encoding = THREE.sRGBEncoding;
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false }));
-    sp.scale.set(6, 1.5, 1);
-    return sp;
-  }
-  const siteGroups = {};
-  const siteTags = {};
-  const roadDone = {};
-  for (const s of sites) {
-    const half = halfOf(s.id);
-    const g = new THREE.Group();
-    g.position.x = siteX[s.id];
-    scene.add(g);
-    const abW = 2.5 + half * 0.18;
-    const abD = 4 + half * 0.2;
-    box(abW, -BED + 0.5, abD, concrete, -(half + abW / 2 + 0.5), (BED - 0.5) / 2, 0, g);
-    box(abW, -BED + 0.5, abD, concrete, half + abW / 2 + 0.5, (BED - 0.5) / 2, 0, g);
-    // Slim H pylons around the fixed anchors (half/2, 8): the road passes between the legs.
-    for (const tx of [-half / 2, half / 2]) {
-      for (const tz of [-1.6, 1.6]) box(0.55, 8.6 - BED, 0.55, white, tx, (8.6 + BED) / 2, tz, g);
-      box(0.55, 0.55, 3.75, white, tx, 7.2, 0, g);
-      box(2.6, 1.6, 4.4, concrete, tx, BED + 0.5, 0, g);
-    }
-    // Deck guide: dashed line along the road row.
-    const world = ctx.worlds[s.id].world;
-    const guidePts = [];
-    for (let i = 0; i < world.deckCount; i++) guidePts.push(new THREE.Vector3(world.nodes[i].rx, 0.15, 0));
-    const guide = new THREE.Line(new THREE.BufferGeometry().setFromPoints(guidePts), new THREE.LineDashedMaterial({
-      color: 0xffffff, transparent: true, opacity: 0.9, dashSize: 1.2, gapSize: 0.7,
-    }));
-    guide.computeLineDistances();
-    g.add(guide);
-    const tag = roadSprite();
-    tag.position.set(0, 10.2, 0);
-    g.add(tag);
-    siteTags[s.id] = tag;
-    siteGroups[s.id] = g;
-  }
+  // Per-site statics: abutments, pylons, deck guide, ROAD label.
+  const { siteGroups, siteTags, roadDone } = buildSiteStatics(THREE, {
+    scene, ctx, sites, siteX, halfOf, BED,
+  });
 
   // Per-site dynamics (nodes, sticks, road). Only the active site animates.
   const nodeGeo = new THREE.SphereGeometry(0.5, 16, 12);
@@ -2576,8 +2950,17 @@ function buildMapView(host, ctx) {
   const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
   hitMat.colorWrite = false;
   const beamGeo = new THREE.BoxGeometry(1, 0.45, 0.45);
+  const archGeo = new THREE.BoxGeometry(1, 0.62, 0.62);
+  const pierGeo = new THREE.BoxGeometry(1, 0.75, 0.75);
   const cableGeo = new THREE.CylinderGeometry(0.1, 0.1, 1, 8);
+  const ropeGeo = new THREE.CylinderGeometry(0.07, 0.07, 1, 6);
   cableGeo.rotateZ(Math.PI / 2); // along X, like the beams, so placeBeam can stretch it
+  ropeGeo.rotateZ(Math.PI / 2);
+  // Geometry per material: a box reads as a beam, a thin cylinder as a cable.
+  const GEO = { bois: beamGeo, acier: beamGeo, arche: archGeo, pilier: pierGeo, cable: cableGeo, corde: ropeGeo };
+  function geoFor(id) {
+    return GEO[id] || beamGeo;
+  }
   const roadGeo = new THREE.BoxGeometry(1, 0.16, 2.0);
   const roadMat = new THREE.MeshStandardMaterial({ color: 0xe9e1d3, roughness: 0.85 });
   const dyn = {};
@@ -2622,10 +3005,10 @@ function buildMapView(host, ctx) {
       d.hits.push(hit);
     });
     world.sticks.forEach((s, i) => {
-      const beam = s.type === "poutre";
+      const def = MATERIALS[s.mat] || MATERIALS.bois;
       const m = new THREE.Mesh(
-        beam ? beamGeo : cableGeo,
-        new THREE.MeshStandardMaterial({ color: (beam ? BEAM : CABLE).clone(), roughness: beam ? 0.6 : 0.45 })
+        geoFor(s.mat),
+        new THREE.MeshStandardMaterial({ color: MAT_COLOR[s.mat].clone(), roughness: def.kind === "cable" ? 0.45 : 0.6 })
       );
       m.castShadow = true;
       m.receiveShadow = true;
@@ -2647,6 +3030,14 @@ function buildMapView(host, ctx) {
     updateSite(id);
   }
   const tmpC = new THREE.Color();
+  const BEAM_FALLBACK = new THREE.Color(0xf1e9da);
+  // A broken member is drawn as a 40% stub hanging from its first node.
+  function placeStub(mesh, A, B) {
+    mesh.position.set(A.x + (B.x - A.x) * 0.2, A.y + (B.y - A.y) * 0.2 - 0.4, 0);
+    mesh.rotation.z = Math.atan2(B.y - A.y, B.x - A.x) + 0.5;
+    const len = Math.hypot(B.x - A.x, B.y - A.y);
+    mesh.scale.set(Math.max(0.01, len * 0.4), 1, 1);
+  }
   function placeBeam(mesh, A, B) {
     const len = Math.hypot(B.x - A.x, B.y - A.y);
     mesh.position.set((A.x + B.x) / 2, (A.y + B.y) / 2, 0);
@@ -2678,10 +3069,16 @@ function buildMapView(host, ctx) {
     for (let i = 0; i < d.sticks.length; i++) {
       const s = world.sticks[i];
       const mesh = d.sticks[i];
-      mesh.visible = !s.broken;
-      if (!s.broken) {
-        placeBeam(mesh, world.nodes[s.a], world.nodes[s.b]);
-        tmpC.copy(s.type === "poutre" ? BEAM : CABLE).lerp(RED, Math.min(1, s.strain || 0));
+      const A = world.nodes[s.a];
+      const B = world.nodes[s.b];
+      if (s.broken) {
+        // Snapped: keep a short dark stub at the fixed end so the failure is visible.
+        mesh.visible = true;
+        mesh.material.color.copy(BROKEN);
+        placeStub(mesh, A, B);
+      } else {
+        placeBeam(mesh, A, B);
+        tmpC.copy(MAT_COLOR[s.mat] || BEAM_FALLBACK).lerp(RED, Math.min(1, s.strain || 0));
         mesh.material.color.copy(tmpC);
       }
     }
@@ -2702,125 +3099,38 @@ function buildMapView(host, ctx) {
   let hovered = -1;
   for (const s of sites) buildSite(s.id);
 
-  // Test ghost: the flask ghost of the logo, turned on a lathe (single, follows the active site).
-  const ghost = new THREE.Group(); // position + yaw towards the camera
-  const ghostTilt = new THREE.Group(); // falling tilt
-  ghost.add(ghostTilt);
-  // Open body: below PH_HEM the lathe is pushed into scallops that sway (ghost hem).
-  const PH_HEM = 0.42;
-  const PH_LOBES = 7;
-  const PH_LOBE = 0.17;
-  const ghostEyes = [];
-  const ghostInner = new THREE.Group();
-  let hemGeo = null;
-  let hemBase = null;
-  {
-    const prof = [[0.8, 0], [0.795, 0.07], [0.79, 0.14], [0.785, 0.21], [0.78, 0.28], [0.78, 0.35], [0.78, PH_HEM], [0.745, 0.716], [0.641, 0.94], [0.468, 1.116], [0.225, 1.25], [0.225, 1.6], [0.35, 1.6], [0.35, 1.75], [0, 1.75]]
-      .map((p) => new THREE.Vector2(p[0], p[1]));
-    const ink = new THREE.MeshStandardMaterial({ color: 0x17141f, roughness: 0.3 });
-    const cheek = new THREE.MeshStandardMaterial({ color: 0xff9a62, roughness: 0.6 });
-    const inner = ghostInner;
-    hemGeo = new THREE.LatheGeometry(prof, 96);
-    hemBase = Float32Array.from(hemGeo.attributes.position.array);
-    const body = new THREE.Mesh(hemGeo, new THREE.MeshStandardMaterial({ color: 0xfbf8ff, roughness: 0.38, side: THREE.DoubleSide }));
-    body.castShadow = true;
-    inner.add(body);
-    const eyeGeo = new THREE.SphereGeometry(0.085, 16, 12);
-    const cheekGeo = new THREE.SphereGeometry(0.1, 16, 10);
-    for (const sx of [-1, 1]) {
-      const eye = new THREE.Mesh(eyeGeo, ink);
-      eye.scale.set(1, 1.3, 0.55);
-      eye.position.set(sx * 0.225, 0.62, 0.72);
-      eye.userData.sx = sx;
-      ghostEyes.push(eye);
-      inner.add(eye);
-      const ch = new THREE.Mesh(cheekGeo, cheek);
-      ch.scale.set(1.2, 0.55, 0.3);
-      ch.position.set(sx * 0.46, 0.4, 0.62);
-      inner.add(ch);
-    }
-    const smile = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.017, 8, 16, Math.PI), ink);
-    smile.rotation.z = Math.PI;
-    smile.position.set(0, 0.45, 0.77);
-    inner.add(smile);
-    inner.scale.setScalar(1.4);
-    inner.position.y = -0.6 + PH_LOBE * 1.4; // scallop tips where the old round bottom was
-    ghostTilt.add(inner);
-  }
-  scene.add(ghost);
-  function waveHem(phase) {
-    const p = hemGeo.attributes.position.array;
-    for (let i = 0; i < p.length; i += 3) {
-      const y0 = hemBase[i + 1];
-      if (y0 >= PH_HEM) continue;
-      const x = hemBase[i];
-      const z = hemBase[i + 2];
-      const a = Math.atan2(x, z);
-      const k = 1 - y0 / PH_HEM;
-      const lobe = 0.5 + 0.5 * Math.cos(PH_LOBES * a + phase);
-      const sway = 1 + 0.06 * k * Math.sin(PH_LOBES * a + phase * 1.7);
-      p[i] = x * sway;
-      p[i + 1] = y0 - PH_LOBE * lobe * k * k;
-      p[i + 2] = z * sway;
-    }
-    hemGeo.attributes.position.needsUpdate = true;
-    hemGeo.computeVertexNormals();
-  }
-  waveHem(0);
-  // Eyes: follow the pointer, look ahead while testing, glance around otherwise; blink now and then.
-  const ghostLook = { x: 0, y: 0 };
-  let ghostPtr = { x: 0, y: 0, at: -1e9 };
-  window.addEventListener("pointermove", (e) => {
-    const r = host.getBoundingClientRect();
-    ghostPtr = { x: ((e.clientX - r.left) / r.width) * 2 - 1, y: -((e.clientY - r.top) / r.height) * 2 + 1, at: performance.now() };
+  const previewMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false,
   });
-  let blinkAt = 2.5;
-  const headV = new THREE.Vector3();
-  const aheadV = new THREE.Vector3();
-  function moveGhostEyes(dt, testing) {
-    ghostInner.localToWorld(headV.set(0, 0.62, 0.7));
-    const head = headV.clone().project(camera);
-    let tx;
-    let ty;
-    if (performance.now() - ghostPtr.at < 2500) {
-      tx = ghostPtr.x;
-      ty = ghostPtr.y;
-    } else {
-      // Ahead along the bridge while testing, otherwise a slow glance left and right.
-      ghostInner.localToWorld(aheadV.set(0, 0.62, 0.7));
-      aheadV.x += testing ? 6 : Math.sin(t * 0.6) * 5;
-      aheadV.y += testing ? -1.5 : 0;
-      const a = aheadV.project(camera);
-      tx = a.x;
-      ty = a.y;
+  const preview = new THREE.Mesh(beamGeo, previewMat);
+  preview.visible = false;
+  preview.renderOrder = 5;
+  scene.add(preview);
+  function updatePreview() {
+    const id = ctx.activeId();
+    const world = ctx.worlds[id] && ctx.worlds[id].world;
+    const from = ctx.selected;
+    if (!world || from < 0 || hovered < 0 || hovered === from || ctx.tool === "gomme") {
+      preview.visible = false;
+      return;
     }
-    const r = host.getBoundingClientRect();
-    let dx = ((tx - head.x) * r.width) / 2;
-    let dy = (-(ty - head.y) * r.height) / 2;
-    const len = Math.hypot(dx, dy);
-    const k = Math.min(1, len / 160) / (len || 1);
-    dx *= k;
-    dy *= k;
-    const ease = Math.min(1, dt * 9);
-    ghostLook.x += (dx - ghostLook.x) * ease;
-    ghostLook.y += (dy - ghostLook.y) * ease;
-    const blinking = t > blinkAt && t < blinkAt + 0.13;
-    if (t > blinkAt + 0.13) blinkAt = t + 2.4 + Math.random() * 3.2;
-    const bodyR = (y) => 0.78 - ((y - PH_HEM) / (0.716 - PH_HEM)) * (0.78 - 0.745);
-    ghostEyes.forEach((e) => {
-      const x = e.userData.sx * 0.225 + ghostLook.x * 0.085;
-      const y = 0.62 - ghostLook.y * 0.07;
-      const rr = bodyR(y);
-      e.position.set(x, y, Math.sqrt(Math.max(0, rr * rr - x * x)) - 0.01);
-      e.rotation.y = Math.asin(Math.max(-1, Math.min(1, x / rr)));
-      e.scale.y = blinking ? 0.15 : 1.3;
-    });
+    const def = MATERIALS[ctx.tool];
+    if (!def) { preview.visible = false; return; }
+    const A = world.nodes[from];
+    const B = world.nodes[hovered];
+    if (!A || !B) { preview.visible = false; return; }
+    const len = Math.hypot(B.x - A.x, B.y - A.y);
+    preview.visible = true;
+    placeBeam(preview, A, B);
+    previewMat.color.set(len > def.maxLen ? 0xef4444 : def.color);
+    previewMat.opacity = len > def.maxLen ? 0.35 : 0.55;
   }
-  function chargePoids() {
-    const w = ctx.worlds[ctx.activeId()];
-    const law = w.laws.find((l) => l.mod.id === "charge-flottante");
-    return (law && law.params.poids) || 20;
-  }
+
+  // Test ghost: the mascot that walks the deck during a load test.
+  const ghostApi = buildTestGhost(THREE, { scene, host, ctx, camera });
+  const ghost = ghostApi.group;
+  const ghostTilt = ghostApi.tilt;
+  const chargePoids = ghostApi.chargePoids;
 
   // Camera: orbit around the active site, animated transitions.
   const orbit = { theta: START.theta, phi: START.phi, radius: 47, tx: siteX[ctx.activeId()], ty: 0.5 };
@@ -2925,6 +3235,7 @@ function buildMapView(host, ctx) {
   resize();
 
   function render(dt) {
+    updatePreview();
     if (!REDUCED) t += dt;
     const id = ctx.activeId();
     const w = ctx.worlds[id].world;
@@ -2947,9 +3258,9 @@ function buildMapView(host, ctx) {
       ghostTilt.rotation.z = -gh.tilt;
     }
     ghost.rotation.y = Math.atan2(camera.position.x - ghost.position.x, camera.position.z - ghost.position.z);
-    if (!REDUCED) waveHem(t * (w.testing ? 4 : 2.4));
+    if (!REDUCED) ghostApi.waveHem(t * (w.testing ? 4 : 2.4));
     ghost.updateMatrixWorld(true);
-    moveGhostEyes(REDUCED ? 1 : dt, w.testing);
+    ghostApi.moveEyes(REDUCED ? 1 : dt, t, w.testing);
     // Water + clouds drift.
     if (!REDUCED) {
       for (const wtr of waters) {
@@ -2997,7 +3308,11 @@ function buildMapView(host, ctx) {
 
 const PH_ICONS = {
   beam: '<rect x="3" y="9.5" width="18" height="5" rx="1.5"/><path d="M8 9.5v5M12 9.5v5M16 9.5v5"/>',
+  steel: '<rect x="3" y="9" width="18" height="6" rx="1"/><path d="M7 9v6M12 9v6M17 9v6"/><path d="M3 12h18"/>',
   cable: '<path d="M4 18L20 6"/><circle cx="4" cy="18" r="2" fill="currentColor"/><circle cx="20" cy="6" r="2" fill="currentColor"/>',
+  rope: '<path d="M4 17c4-1 4-9 8-9s4 8 8 7" stroke-dasharray="2.5 2"/><circle cx="4" cy="17" r="1.6" fill="currentColor"/>',
+  arch: '<path d="M3 19c0-8 4-13 9-13s9 5 9 13"/><path d="M3 19h18"/>',
+  pier: '<rect x="8" y="4" width="8" height="16" rx="1"/><path d="M8 9h8M8 14h8"/>',
   erase: '<path d="M8.5 19.5L3.8 14.8a1.8 1.8 0 0 1 0-2.6l8.4-8.4a1.8 1.8 0 0 1 2.6 0l5.4 5.4a1.8 1.8 0 0 1 0 2.6L13 19.5zM8.5 19.5H20M7 11l7 7"/>',
   undo: '<path d="M9 6L4 11l5 5M4 11h10.5a5 5 0 0 1 0 10H12"/>',
   clear: '<path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5"/>',
@@ -3030,7 +3345,12 @@ const PH_CSS = `
 .ph-score b{font:700 15px "JetBrains Mono",ui-monospace,Consolas,monospace}
 .ph-home{height:50px;padding:0 18px 0 12px;border-radius:999px;display:flex;align-items:center;gap:6px;font-weight:700;color:#1b1530;text-decoration:none;white-space:nowrap}
 .ph-home .ph-i{width:16px;height:16px}
-.ph-dock{position:absolute;left:20px;top:50%;transform:translateY(-50%);width:80px;padding:8px;display:flex;flex-direction:column;gap:6px}
+.ph-dock{position:absolute;left:20px;top:50%;transform:translateY(-50%);width:104px;padding:8px;display:flex;flex-direction:column;gap:6px}
+  .ph-mats{display:flex;flex-direction:column;gap:6px}
+  .ph-mats button{position:relative;padding-left:14px;text-align:left;align-items:flex-start;height:auto;min-height:52px;gap:1px}
+  .ph-mats button::before{content:"";position:absolute;left:6px;top:8px;bottom:8px;width:4px;border-radius:2px;background:var(--m,#888)}
+  .ph-mats button span{font-weight:700;font-size:11.5px;line-height:1.15}
+  .ph-mats button small{font:600 9.5px "JetBrains Mono",ui-monospace,monospace;opacity:.7}
 .ph-dock button{height:58px;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-weight:600;font-size:11px}
 .ph-dock button small{font:600 10px "JetBrains Mono",ui-monospace,monospace;opacity:.6}
 .ph-dock button:hover{background:rgba(255,255,255,.55)}
@@ -3100,6 +3420,10 @@ const PH_CSS = `
   .ph-sites{top:76px}
   .ph-dock{top:auto;bottom:96px;left:50%;transform:translateX(-50%);width:auto;flex-direction:row}
   .ph-dock button,.ph-dock button.act{width:54px;height:54px}
+  .ph-mats{flex-direction:row;flex-wrap:wrap}
+  .ph-mats button{width:54px;min-height:54px;padding-left:6px;align-items:center;text-align:center}
+  .ph-mats button::before{left:6px;right:6px;top:auto;bottom:4px;width:auto;height:4px}
+  .ph-mats button span{display:none}
   .ph-dock .ph-sep{width:1px;height:auto;margin:8px 2px}
   .ph-go .ph-sep,.ph-hint{display:none}
 }
@@ -3121,10 +3445,10 @@ function buildHud(host, ctx) {
     '<nav class="ph-gx ph-sites" aria-label="Sites"></nav>' +
     '<div class="ph-tr"><span class="ph-gx ph-score" title="Total score">Score <b>0</b></span>' +
     `<a class="ph-gx ph-home">${phIcon("back")}all labs</a></div>` +
-    '<nav class="ph-gx ph-dock" aria-label="Tools">' +
-    `<button type="button" class="tool" data-tool="poutre" aria-pressed="false" title="Beam (1)">${phIcon("beam")}Beam<small>10</small></button>` +
-    `<button type="button" class="tool" data-tool="cable" aria-pressed="false" title="Cable (2)">${phIcon("cable")}Cable<small>5</small></button>` +
-    `<button type="button" class="tool" data-tool="gomme" aria-pressed="false" title="Eraser (3)">${phIcon("erase")}Eraser</button>` +
+    '<nav class="ph-gx ph-dock" aria-label="Materials and tools">' +
+    '<div class="ph-mats"></div>' +
+    '<span class="ph-sep"></span>' +
+    `<button type="button" class="tool act" data-tool="gomme" aria-pressed="false" title="Eraser (E)">${phIcon("erase")}Eraser</button>` +
     '<span class="ph-sep"></span>' +
     `<button type="button" class="act undo" title="Remove the last bar (Ctrl+Z)">${phIcon("undo")}Undo</button>` +
     `<button type="button" class="act clear" title="Clear this site">${phIcon("clear")}Clear</button>` +
@@ -3177,6 +3501,30 @@ function buildHud(host, ctx) {
     sitesEl.appendChild(b);
     siteBtns[s.id] = b;
   }
+  // Material dock: one button per material the active site allows.
+  const MAT_ICON = { bois: "beam", acier: "steel", cable: "cable", corde: "rope", arche: "arch", pilier: "pier" };
+  const MAT_HINT = { beam: "tension + compression", cable: "pulls only", arch: "pushes only" };
+  const matsEl = $(".ph-mats");
+  function renderMaterials() {
+    const site = ctx.config.sites.find((s) => s.id === ctx.activeId());
+    const palette = materialsForSite(site);
+    matsEl.innerHTML = "";
+    palette.forEach((id, i) => {
+      const m = MATERIALS[id];
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "tool mat";
+      b.dataset.tool = id;
+      b.setAttribute("aria-pressed", "false");
+      b.title = `${m.label} — cost ${m.cost}, max ${m.maxLen} m, ${MAT_HINT[m.kind]} (${i + 1})`;
+      b.style.setProperty("--m", `#${m.color.toString(16).padStart(6, "0")}`);
+      b.innerHTML = `${phIcon(MAT_ICON[id])}<span>${m.label}</span><small>${m.cost} · ${m.maxLen}m</small>`;
+      b.addEventListener("click", () => ctx.setTool(id));
+      matsEl.appendChild(b);
+    });
+    if (!palette.includes(ctx.tool)) ctx.setTool(palette[0]);
+  }
+  renderMaterials();
   // Tools + actions.
   root.querySelectorAll("button.tool").forEach((b) => {
     b.addEventListener("click", () => ctx.setTool(b.dataset.tool));
@@ -3343,11 +3691,12 @@ function buildHud(host, ctx) {
       ctx.test();
     } else if (e.key === "r" || e.key === "R") {
       ctx.repair();
-    } else if (e.key === "1") {
-      ctx.setTool("poutre");
-    } else if (e.key === "2") {
-      ctx.setTool("cable");
-    } else if (e.key === "3" || e.key.toLowerCase() === "g") {
+    } else if (/^[1-6]$/.test(e.key)) {
+      const site = ctx.config.sites.find((s) => s.id === ctx.activeId());
+      const palette = materialsForSite(site);
+      const id = palette[Number(e.key) - 1];
+      if (id) ctx.setTool(id);
+    } else if (e.key.toLowerCase() === "e" || e.key === "3") {
       ctx.setTool("gomme");
     } else if (e.key === "Escape") {
       ctx.selected = -1;
@@ -3378,6 +3727,7 @@ function buildHud(host, ctx) {
         b.classList.toggle("on", s.id === ctx.activeId());
         b.setAttribute("aria-pressed", String(s.id === ctx.activeId()));
       }
+      renderMaterials();
       scoreEl.textContent = String(ctx.totalScore());
       V("spent").textContent = `${spent} / ${budget}`;
       const frac = budget > 0 ? Math.min(1, spent / budget) : 0;
@@ -3451,13 +3801,14 @@ function buildHud(host, ctx) {
 }
 
 // ---- engines/ponts/index.js (inlined) ----
-// Bridge pack manifest — game rules, physics laws, apparatus, exposed measures.
+// Bridge pack manifest — game rules, physics laws, materials, exposed measures.
 
 const pontsLaws = {
   chantier,
   gravite,
   rupture,
   "charge-flottante": chargeFlottante,
+  "poids-propre": poidsPropre,
 };
 
 const pontsPack = {
@@ -3560,7 +3911,7 @@ async function startGame(source) {
     const design = save.designs[site.id];
     if (Array.isArray(design)) {
       for (const st of design) {
-        if (!st || (st.type !== "poutre" && st.type !== "cable")) continue;
+        if (!st || !MATERIALS[st.mat]) continue;
         if (!Number.isInteger(st.a) || !Number.isInteger(st.b)) continue;
         if (st.a < 0 || st.b < 0 || st.a >= world.nodes.length || st.b >= world.nodes.length) continue;
         world.place(st.a, st.b, st.type);
@@ -3574,7 +3925,7 @@ async function startGame(source) {
   const ctx = {
     config, catalog, clock, isActive, setActive, save, persist,
     worlds,
-    tool: "poutre",
+    tool: "bois",
     selected: -1,
     message: "Build the ROAD on the pale row, then TEST.",
     activeId: () => activeId,
@@ -3599,7 +3950,7 @@ async function startGame(source) {
       const r = w.place(a, b, ctx.tool);
       if (r.ok) {
         ctx.saveDesign();
-        ctx.announce(`${ctx.tool === "poutre" ? "Beam" : "Cable"} placed.`);
+        ctx.announce(`${MATERIALS[ctx.tool].label} placed.`);
       } else {
         ctx.announce(r.why);
       }
@@ -3639,7 +3990,7 @@ async function startGame(source) {
     },
     saveDesign() {
       const w = active().world;
-      save.designs[activeId] = w.sticks.map((s) => ({ a: s.a, b: s.b, type: s.type }));
+      save.designs[activeId] = w.sticks.map((s) => ({ a: s.a, b: s.b, mat: s.mat }));
       persist();
     },
     test() {
@@ -3731,10 +4082,10 @@ startGame({
   "lab": {
     "id": "ponts",
     "title": "Bridge Lab",
-    "subtitle": "Build a 3D bridge, send the ghost across — same kit as Chemistry Lab.",
+    "subtitle": "Build a 3D bridge from six real materials, send the ghost across.",
     "accent": "#f59e0b",
     "page": "#8fb7ff",
-    "note": "Same kit as Chemistry Lab. Only this lab differs: material, laws, instruments — and a 3D scene.",
+    "note": "Wood bends, steel holds, cables only pull, arches only push. Same kit as Chemistry Lab.",
     "lang": "en"
   },
   "bench": {
@@ -3744,9 +4095,27 @@ startGame({
   },
   "bounds": "wrap",
   "sites": [
-    { "id": "ruisseau", "label": "Brook", "width": 12, "budget": 80 },
-    { "id": "riviere", "label": "River", "width": 28, "budget": 120 },
-    { "id": "fleuve", "label": "Great River", "width": 44, "budget": 180 }
+    {
+      "id": "ruisseau",
+      "label": "Brook",
+      "width": 12,
+      "budget": 90,
+      "materials": ["bois", "corde", "cable"]
+    },
+    {
+      "id": "riviere",
+      "label": "River",
+      "width": 28,
+      "budget": 150,
+      "materials": ["bois", "corde", "cable", "acier"]
+    },
+    {
+      "id": "fleuve",
+      "label": "Great River",
+      "width": 44,
+      "budget": 220,
+      "materials": ["bois", "corde", "cable", "acier", "arche", "pilier"]
+    }
   ],
   "substances": [],
   "material": [
@@ -3757,6 +4126,7 @@ startGame({
   "laws": [
     { "law": "chantier", "params": { "budget": 120 } },
     { "law": "gravite" },
+    { "law": "poids-propre", "params": { "g": 9.81 } },
     { "law": "rupture" },
     { "law": "charge-flottante", "params": { "poids": 20, "vitesse": 6 } }
   ],
@@ -3771,14 +4141,18 @@ startGame({
     { "type": "curve", "metrics": ["contrainte"] }
   ],
   "controls": [
-    { "path": "laws.3.poids", "label": "Ghost weight (t)", "min": 8, "max": 40, "step": 1 },
-    { "path": "laws.3.vitesse", "label": "Ghost speed", "min": 2, "max": 12, "step": 1 }
+    { "path": "laws.4.poids", "label": "Ghost weight (t)", "min": 8, "max": 40, "step": 1 },
+    { "path": "laws.4.vitesse", "label": "Ghost speed", "min": 2, "max": 12, "step": 1 }
   ],
   "notebook": {
     "enabled": true,
     "prompts": [
+      "Why does a rope deck sag before the ghost even steps on it?",
+      "Cables only pull: what happens if you try to support the deck with cables alone?",
+      "An arch only pushes: where in the bridge does that actually help?",
+      "Wood vs steel on the same span: which one breaks first, and why?",
       "Which deck holds 20 t at the lowest cost?",
-      "Cables or beams: where is each one better?"
+      "Double the ghost weight: which member type snaps first?"
     ]
   }
 }

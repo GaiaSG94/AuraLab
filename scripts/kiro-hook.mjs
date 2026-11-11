@@ -71,9 +71,13 @@ function shipChecks() {
   if (build.status !== 0) {
     failures.push(`the standalone build failed:\n${(build.stderr || "").trim()}`);
   } else {
-    const dirty = run("git", ["status", "--porcelain", "--", "dist/"]);
-    if (dirty.status === 0 && dirty.stdout.trim() !== "") {
-      failures.push(`dist/ is out of date, rebuild and commit it:\n${dirty.stdout.trim()}`);
+    // Unstaged diff only: the rebuild just rewrote dist/, so anything left in
+    // the working tree that differs from the index means the sources moved
+    // after dist/ was last built and staged.
+    const dirty = run("git", ["diff", "--quiet", "--", "dist/"]);
+    if (dirty.status !== 0) {
+      const list = run("git", ["diff", "--name-only", "--", "dist/"]);
+      failures.push(`dist/ is out of date, rebuild and commit it:\n${(list.stdout || "").trim()}`);
     }
   }
 

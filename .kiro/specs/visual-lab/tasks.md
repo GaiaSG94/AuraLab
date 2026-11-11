@@ -27,7 +27,11 @@ Agent-executable build plan. Each task ends with an observable check.
 - [x] 11. MCP dev server (list_catalog, validate_lab, scaffold_law, list_labs,
   headless_check) + workspace config + smoke test
   - Check: stdio probe drives all tools; `node mcp-server/smoke-test.mjs`.
-- [ ] 12. Open decisions: guide block, JSONC, scenario buttons (see INTENT.md)
+- [x] 12. Two 3D labs rebuilt on real science: chemistry (8 reagents, 7 stoichiometric laws, 5 measures, burette) and bridge (6 structural materials, tension/compression families, self-weight law, per-site palettes, material dock with colour chips and span preview)
+  - Check: 15 chemistry + 9 bridge properties hold; 13/13 chemistry and 9/9 bridge DOM assertions on the standalone bundles.
+- [x] 13. split the 3D renderers into modules under the 500-line rule (chimie: glassware/bench-ghost/benchview/hud-css/hud/narration; ponts: materials/sky/valley-dressing/site-statics/test-ghost/mapview)
+  - Check: no file above 500 lines; every bundle still parses (check-dist).
+- [ ] 14. Open decisions: guide block, JSONC, scenario buttons (see INTENT.md)
   - Check: user signs off each one, in writing, before any of them lands.
 
 > Tasks 10 and 12 are the only open work. Everything else is implemented,

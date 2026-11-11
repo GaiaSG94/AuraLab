@@ -2,10 +2,10 @@
   "lab": {
     "id": "chimie",
     "title": "Chemistry Lab",
-    "subtitle": "Pour, mix and heat in real 3D glassware.",
+    "subtitle": "Real aqueous chemistry: acids, bases, precipitates, gas, titration.",
     "accent": "#a8e05f",
     "page": "#6cc95a",
-    "note": "Same kit as Bridge Lab. Only this lab differs: substances, material, laws and instruments.",
+    "note": "Pour real reagents, watch the pH meter, the balance and the manometer. Titrate with the burette.",
     "lang": "en"
   },
   "bench": {
@@ -15,39 +15,54 @@
   },
   "bounds": "wrap",
   "substances": [
-    { "id": "bleu", "label": "Blue solution", "count": 1, "color": "#2563eb", "radius": 3, "mass": 1, "speed": 0 },
-    { "id": "jaune", "label": "Yellow solution", "count": 1, "color": "#facc15", "radius": 3, "mass": 1, "speed": 0 },
-    { "id": "acide", "label": "Mild acid", "count": 0, "color": "#f97316", "radius": 3, "mass": 1, "speed": 0 }
+    { "id": "hcl", "label": "Hydrochloric acid 0.1 M", "count": 0, "color": "#f59e0b", "radius": 3, "mass": 1, "speed": 0 },
+    { "id": "ch3cooh", "label": "Acetic acid 0.1 M", "count": 0, "color": "#84cc16", "radius": 3, "mass": 1, "speed": 0 },
+    { "id": "naoh", "label": "Sodium hydroxide 0.1 M", "count": 0, "color": "#a855f7", "radius": 3, "mass": 1, "speed": 0 },
+    { "id": "nh3", "label": "Ammonia 0.1 M", "count": 0, "color": "#ec4899", "radius": 3, "mass": 1, "speed": 0 },
+    { "id": "cuso4", "label": "Copper(II) sulfate 0.1 M", "count": 0, "color": "#38bdf8", "radius": 3, "mass": 1, "speed": 0 },
+    { "id": "nahco3", "label": "Sodium bicarbonate 0.1 M", "count": 0, "color": "#fde68a", "radius": 3, "mass": 1, "speed": 0 },
+    { "id": "agno3", "label": "Silver nitrate 0.1 M", "count": 0, "color": "#e2e8f0", "radius": 3, "mass": 1, "speed": 0 },
+    { "id": "bbt", "label": "Bromothymol blue (5 mL)", "count": 0, "color": "#22c55e", "radius": 3, "mass": 1, "speed": 0 }
   ],
   "material": [
     { "id": "erlenmeyer", "kind": "recipient", "label": "Erlenmeyer 500 mL", "x": 0.38, "y": 0.62 },
-    { "id": "bruleur", "kind": "bruleur", "label": "Bunsen burner", "x": 0.38, "y": 0.9, "strength": 60 }
+    { "id": "bruleur", "kind": "bruleur", "label": "Bunsen burner", "x": 0.38, "y": 0.9, "strength": 0 },
+    { "id": "burette", "kind": "burette", "label": "NaOH burette", "x": 0.38, "y": 0.25, "strength": 0 }
   ],
   "laws": [
-    { "law": "melange-couleurs" },
-    { "law": "reaction-acide" },
-    { "law": "chauffage" }
+    { "law": "dilution", "params": { "doseMl": 25, "molarity": 0.1 } },
+    { "law": "equilibre-acido-basique" },
+    { "law": "enthalpie-reaction", "params": { "ambient": 20, "deltaH": 57.3 } },
+    { "law": "precipitation" },
+    { "law": "degagement-gazeux", "params": { "pAtm": 101.3 } },
+    { "law": "indicateur-colore" },
+    { "law": "ebullition", "params": { "boilingPoint": 99.5 } }
   ],
   "metrics": [
     { "id": "temperature", "label": "Temperature", "unit": "°C", "source": "temp", "color": "#dc2626" },
-    { "id": "ph", "label": "pH", "unit": "", "source": "ph", "color": "#16a34a" },
-    { "id": "volume", "label": "Volume", "unit": "mL", "source": "volume", "color": "#2563eb" }
+    { "id": "ph", "label": "pH", "unit": "", "source": "ph", "color": "#7c3aed" },
+    { "id": "volume", "label": "Volume", "unit": "mL", "source": "volume", "color": "#2563eb" },
+    { "id": "precipite", "label": "Precipitate", "unit": "g", "source": "precipite", "color": "#0ea5e9" },
+    { "id": "pression", "label": "Pressure", "unit": "kPa", "source": "pression", "color": "#f97316" }
   ],
   "instruments": [
-    { "type": "chips", "metrics": ["temperature", "ph", "volume"] },
-    { "type": "curve", "metrics": ["temperature"] }
+    { "type": "chips", "metrics": ["temperature", "ph", "volume", "precipite", "pression"] },
+    { "type": "curve", "title": "pH titration curve", "metrics": ["ph"], "samples": 200 }
   ],
   "controls": [
-    { "path": "substances.bleu.count", "label": "Blue doses", "min": 0, "max": 2, "step": 1 },
-    { "path": "substances.jaune.count", "label": "Yellow doses", "min": 0, "max": 2, "step": 1 },
-    { "path": "substances.acide.count", "label": "Acid doses", "min": 0, "max": 1, "step": 1 },
-    { "path": "material.bruleur.strength", "label": "Burner power", "min": 0, "max": 100, "step": 5 }
+    { "path": "material.bruleur.strength", "label": "Burner power", "min": 0, "max": 100, "step": 5 },
+    { "path": "material.burette.strength", "label": "Burette (mL NaOH added)", "min": 0, "max": 50, "step": 1 }
   ],
   "notebook": {
     "enabled": true,
     "prompts": [
-      "Blue + yellow: what color do you get?",
-      "What does the acid change: bubbles, heat, pH?"
+      "Titrate 25 mL of HCl with the NaOH burette: where is the equivalence point on the pH curve?",
+      "Mix CuSO4 with NaOH: what blue solid falls out, and how many grams?",
+      "Add NH3 on top of that precipitate: why does it dissolve back into a deep blue solution?",
+      "Mix NaHCO3 with HCl: watch the manometer climb. How much CO2 escapes?",
+      "Titrate CH3COOH instead of HCl: why is the pH jump smaller at equivalence?",
+      "Drop bromothymol blue in, then push the pH past 7.6: what color wins?",
+      "Which mixture warms up the most: strong acid + strong base, or weak acid + strong base?"
     ]
   }
 }

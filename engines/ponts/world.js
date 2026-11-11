@@ -1,6 +1,7 @@
-// Bridge world: nodes + sticks (Verlet), ghost test, budget, score. Pure logic, no rendering.
-const COST = { poutre: 10, cable: 5 };
-const MAXLEN = { poutre: 6.5, cable: 12 };
+// Bridge world: nodes + members (Verlet), ghost test, budget, score.
+// Members are drawn from the structural catalogue (materials.js): stiffness,
+// tension-only / compression-only families, and self-weight per material.
+import { MATERIALS, KINDS, materialsForSite } from "./materials.js";
 
 function makeNode(x, y, deck, fixed) {
   return { x, y, rx: x, ry: y, px: x, py: y, ax: 0, ay: 0, deck, fixed };
@@ -25,6 +26,7 @@ export function createWorld({ laws, site }) {
   site = site || { width: 28, budget: 120 };
   const half = site.width / 2;
   const layout = buildLayout(half);
+  const palette = materialsForSite(site);
   const world = {
     site,
     half,
@@ -32,6 +34,7 @@ export function createWorld({ laws, site }) {
     deckCount: layout.deckCount,
     sticks: [],
     laws: laws || [],
+    palette,
     ghost: { x: -half - 2, y: 1.8, tilt: 0, falling: false },
     testing: false,
     statut: -1,
@@ -49,11 +52,14 @@ export function createWorld({ laws, site }) {
       return this.site.budget || (c && c.budget) || 120;
     },
     spent() {
-      return this.sticks.reduce((t, s) => t + (COST[s.type] || 0), 0);
+      return this.sticks.reduce((t, s) => t + MATERIALS[s.mat].cost, 0);
     },
-    canPlace(a, b, type) {
+    canPlace(a, b, mat) {
+      const def = MATERIALS[mat];
+      if (!def) return { ok: false, why: "Unknown material." };
       if (a === b) return { ok: false, why: "Two different nodes!" };
       if (this.testing) return { ok: false, why: "Test running…" };
+      if (!this.palette.includes(mat)) return { ok: false, why: `${def.label} is not on this site.` };
       if (this.sticks.some((s) => (s.a === a && s.b === b) || (s.a === b && s.b === a))) {
         return { ok: false, why: "Already linked." };
       }
@@ -61,23 +67,22 @@ export function createWorld({ laws, site }) {
       const B = this.nodes[b];
       if (!A || !B) return { ok: false, why: "Unknown node." };
       const len = Math.hypot(B.rx - A.rx, B.ry - A.ry);
-      if (len > MAXLEN[type]) {
-        return { ok: false, why: type === "poutre" ? "Too long for a beam." : "Too long even for a cable." };
-      }
-      if (this.spent() + COST[type] > this.budget()) return { ok: false, why: "Budget spent!" };
+      if (len > def.maxLen) return { ok: false, why: `Too long for ${def.label.toLowerCase()} (max ${def.maxLen}).` };
+      if (this.spent() + def.cost > this.budget()) return { ok: false, why: "Budget spent!" };
       return { ok: true };
     },
-    place(a, b, type) {
-      const chk = this.canPlace(a, b, type);
+    place(a, b, mat) {
+      const chk = this.canPlace(a, b, mat);
       if (!chk.ok) return chk;
       const A = this.nodes[a];
       const B = this.nodes[b];
       this.sticks.push({
         a, b,
+        mat,
         rest: Math.hypot(B.rx - A.rx, B.ry - A.ry),
-        type,
         broken: false,
         strain: 0,
+        load: 0,
       });
       this.dirty = true;
       this.version++;
@@ -97,7 +102,6 @@ export function createWorld({ laws, site }) {
       this.reset();
     },
     hasRoad() {
-      // Deck nodes are indices 0..7; anchors are 0 (-14) and 7 (+14).
       const adj = new Map();
       for (let i = 0; i < this.deckCount; i++) adj.set(i, []);
       for (const s of this.sticks) {
@@ -157,7 +161,7 @@ export function createWorld({ laws, site }) {
       for (const n of this.nodes) {
         n.x = n.rx; n.y = n.ry; n.px = n.rx; n.py = n.ry; n.ax = 0; n.ay = 0;
       }
-      for (const s of this.sticks) { s.broken = false; s.strain = 0; }
+      for (const s of this.sticks) { s.broken = false; s.strain = 0; s.load = 0; }
       this.ghost.x = -this.half - 2; this.ghost.y = 1.8; this.ghost.tilt = 0; this.ghost.falling = false;
       this.testing = false;
       this.statut = -1;
@@ -171,7 +175,6 @@ export function createWorld({ laws, site }) {
     },
     rebind() { /* no config refs held */ },
     step(dt, isActive) {
-      // Build phase is frozen: physics only runs while the ghost crosses.
       if (!this.testing) return;
       dt = Math.min(dt, 1 / 30);
       for (const n of this.nodes) { n.ax = 0; n.ay = 0; }
@@ -191,12 +194,10 @@ export function createWorld({ laws, site }) {
       const SUB = 3;
       const ITER = 20;
       this.loadNorm = SUB * ITER;
-      const sub = SUB;
-      const h = dt / sub;
-      for (let k = 0; k < sub; k++) {
+      const h = dt / SUB;
+      for (let k = 0; k < SUB; k++) {
         for (const n of this.nodes) {
           if (n.fixed || !linked.has(this.nodes.indexOf(n))) continue;
-                    // 0.98 damps the settling ring so braced decks survive their own gravity transient.
           const nx = n.x + (n.x - n.px) * 0.98 + n.ax * h * h;
           const ny = n.y + (n.y - n.py) * 0.98 + n.ay * h * h;
           n.px = n.x; n.py = n.y; n.x = nx; n.y = ny;
@@ -204,18 +205,23 @@ export function createWorld({ laws, site }) {
         for (let it = 0; it < ITER; it++) {
           for (const s of this.sticks) {
             if (s.broken) continue;
+            const def = MATERIALS[s.mat];
+            const fam = KINDS[def.kind];
             const A = this.nodes[s.a];
             const B = this.nodes[s.b];
             const dx = B.x - A.x;
             const dy = B.y - A.y;
             const len = Math.hypot(dx, dy) || 0.0001;
-            if (s.type === "cable" && len < s.rest) continue;
+            const stretched = len > s.rest;
+            // Cables only pull; arches and piers only push.
+            if (!fam.tension && stretched) continue;
+            if (!fam.compression && !stretched) continue;
             const diff = (len - s.rest) / len;
             const wa = A.fixed ? 0 : 1;
             const wb = B.fixed ? 0 : 1;
             const w = wa + wb;
             if (!w) continue;
-            const stiff = s.type === "poutre" ? 1 : (this.cablesYielding ? 0 : 0.5);
+            const stiff = def.stiff * (this.cablesYielding && def.kind === "cable" ? 0 : 1);
             s.load = (s.load || 0) + Math.abs(diff);
             const f = (diff * stiff) / w;
             A.x += dx * f * wa; A.y += dy * f * wa;
@@ -226,7 +232,6 @@ export function createWorld({ laws, site }) {
       for (const n of this.nodes) {
         if (!n.fixed && n.y < -10) { n.y = -10; n.px = n.x; n.py = n.y; }
       }
-      // The ghost hovers over the deck, or plunges if the bridge gives way.
       if (this.testing) {
         if (this.sticks.some((s) => s.broken)) this.ghost.falling = true;
         if (this.ghost.falling) {

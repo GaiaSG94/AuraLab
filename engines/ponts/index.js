@@ -1,14 +1,16 @@
-// Bridge pack manifest — game rules, physics laws, apparatus, exposed measures.
+// Bridge pack manifest — game rules, physics laws, materials, exposed measures.
 import { chantier } from "./laws/chantier.js";
 import { gravite } from "./laws/gravite.js";
 import { rupture } from "./laws/rupture.js";
 import { chargeFlottante } from "./laws/charge-flottante.js";
+import { poidsPropre } from "./laws/poids-propre.js";
 
 export const pontsLaws = {
   chantier,
   gravite,
   rupture,
   "charge-flottante": chargeFlottante,
+  "poids-propre": poidsPropre,
 };
 
 export const pontsPack = {

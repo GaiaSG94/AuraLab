@@ -1873,68 +1873,316 @@ async function boot(source, buildLab, labManifest, packManifests) {
   return { config, lab };
 }
 
-// ---- engines/chimie/laws/melange-couleurs.js (inlined) ----
-// Law: melange-couleurs — mixed doses blend (blue + yellow -> green); volume adds up.
-const melangeCouleurs = {
-  id: "melange-couleurs",
+// ---- engines/chimie/laws/dilution.js (inlined) ----
+// Law: dilution — computes total solution volume (mL) and molar concentrations (mol/L).
+const dilution = {
+  id: "dilution",
   notice: {
-    label: "Color mixing",
-    formule: "Blue + yellow → green. Volume = sum of doses (1 dose = 100 mL).",
-    sources: "Simplified mixing rule (subtractive synthesis).",
-    limites: "Two colors only; no precipitate or real reaction.",
+    label: "Dilution & volume",
+    formule: "V_tot = sum(doses * V_dose) + V_burette; C_i = n_i / V_tot.",
+    sources: "Conservation of mass and volume for dilute aqueous solutions.",
+    limites: "Assumes additive volumes (valid below 1 M); ignores volume of solids.",
   },
-  defaults: {},
-  apply(world, dt, params, targets, active) {
+  defaults: { doseMl: 25, molarity: 0.1 },
+  apply(world, dt, params) {
     const d = world.doses();
-    world.mixed = d.bleu > 0 && d.jaune > 0;
-    world.volume = (d.bleu + d.jaune + d.acide) * 100;
+    const dm = params.doseMl || 25;
+    const m = params.molarity || 0.1;
+    // BBT indicator comes in 5 mL dropper doses; reagent solutions are 25 mL each.
+    const reagentVol = (d.hcl + d.ch3cooh + d.naoh + d.nh3 + d.cuso4 + d.nahco3 + d.agno3) * dm;
+    const bbtVol = d.bbt * 5;
+    const buretteVol = world.buretteMl || 0; // NaOH 0.1 M added drop-by-drop
+    const totalMl = reagentVol + bbtVol + buretteVol;
+    world.volume = Math.min(500, totalMl);
+    const volL = Math.max(0.001, totalMl / 1000);
+    // Stored as millimoles (mmol) so stoichiometry stays exact before dividing by V.
+    world.mmol = {
+      hcl: d.hcl * dm * m,
+      ch3cooh: d.ch3cooh * dm * m,
+      naoh: (d.naoh * dm + buretteVol) * m,
+      nh3: d.nh3 * dm * m,
+      cuso4: d.cuso4 * dm * m,
+      nahco3: d.nahco3 * dm * m,
+      agno3: d.agno3 * dm * m,
+      bbt: d.bbt,
+    };
+    world.volL = volL;
   },
 };
 
-// ---- engines/chimie/laws/reaction-acide.js (inlined) ----
-// Law: reaction-acide — acid in the mix fizzes, heats and drops the pH.
-const reactionAcide = {
-  id: "reaction-acide",
+// ---- engines/chimie/laws/equilibre-acido-basique.js (inlined) ----
+// Law: equilibre-acido-basique — real aqueous pH via charge balance (bisection on pH in [0, 14]).
+// Handles strong acid (HCl), weak acid (CH3COOH, pKa 4.76), strong base (NaOH),
+// weak base (NH3, pKb 4.75), and leftover bicarbonate (pKa1 6.35, pKa2 10.33).
+const KW = 1e-14;
+const KA_AC = Math.pow(10, -4.76);
+const KA_NH4 = Math.pow(10, -9.25);
+const KA_C1 = Math.pow(10, -6.35);
+const KA_C2 = Math.pow(10, -10.33);
+
+function chargeBalance(ph, c) {
+  const h = Math.pow(10, -ph);
+  const oh = KW / h;
+  const acMinus = c.ac * (KA_AC / (h + KA_AC));
+  const nh4Plus = c.nh3 * (h / (h + KA_NH4));
+  const denomC = h * h + KA_C1 * h + KA_C1 * KA_C2;
+  const hco3Minus = c.bic * ((KA_C1 * h) / denomC);
+  const co32Minus = c.bic * ((KA_C1 * KA_C2) / denomC);
+  // Strong spectator ions: Na+ (from NaOH and NaHCO3) minus Cl- (from HCl) + 2*Cu2+ - 2*Cu2+ neutral
+  return h + c.na + nh4Plus - oh - c.cl - acMinus - hco3Minus - 2 * co32Minus;
+}
+
+const equilibreAcidoBasique = {
+  id: "equilibre-acido-basique",
   notice: {
-    label: "Acid reaction",
-    formule: "Acid + mix → bubbles; +3 °C/s per acid dose; pH → 2.5.",
-    sources: "Simplified school model (acid + base → gas + heat).",
-    limites: "No stoichiometry; binary pH (7 or 2.5).",
+    label: "Acid-base equilibrium",
+    formule: "Solves [H+] + [Na+] + [NH4+] = [OH-] + [Cl-] + [CH3COO-] + [HCO3-] + 2[CO3^2-] (bisection).",
+    sources: "Brønsted-Lowry equilibria (pKa CH3COOH=4.76, NH4+=9.25, H2CO3=6.35/10.33).",
+    limites: "Activity coefficients = 1; temperature fixed at 25 °C for Kw.",
   },
   defaults: {},
+  apply(world) {
+    if (world.volume <= 0 || !world.mmol) {
+      world.ph = 7;
+      world.eqPoint = false;
+      return;
+    }
+    const v = world.volL || 0.025;
+    const m = world.mmol;
+    // Bicarbonate consumes strong/weak acid to form CO2 (tracked in degagement-gazeux too).
+    const hTotal = m.hcl + m.ch3cooh;
+    const bicReacted = Math.min(m.nahco3, hTotal);
+    const bicLeft = Math.max(0, m.nahco3 - bicReacted);
+    // OH- consumed by Cu(OH)2 precipitation removes free OH- from the pH balance.
+    const ohUsedByCu = Math.min(m.naoh, 2 * m.cuso4);
+    const naohFree = Math.max(0, m.naoh - ohUsedByCu);
+
+    const conc = {
+      na: (naohFree + m.nahco3 - bicReacted * 0) / v / 1000,
+      cl: m.hcl / v / 1000,
+      ac: m.ch3cooh / v / 1000,
+      nh3: m.nh3 / v / 1000,
+      bic: bicLeft / v / 1000,
+    };
+    // Subtract reacted bicarbonate H+ equivalence via effective Cl- / Ac consumption:
+    // Each reacted HCO3- released CO2(g), neutralizing 1 H+ without leaving H2CO3.
+    const effectiveCl = Math.max(0, m.hcl - bicReacted) / v / 1000;
+    const bicUsedOnAc = Math.max(0, bicReacted - m.hcl);
+    conc.cl = effectiveCl;
+    conc.ac = Math.max(0, m.ch3cooh - bicUsedOnAc) / v / 1000;
+    conc.na = (naohFree + bicLeft) / v / 1000;
+
+    let lo = 0;
+    let hi = 14;
+    for (let i = 0; i < 40; i++) {
+      const mid = (lo + hi) * 0.5;
+      if (chargeBalance(mid, conc) > 0) lo = mid;
+      else hi = mid;
+    }
+    const ph = Math.round(((lo + hi) * 0.5) * 100) / 100;
+    world.ph = ph;
+    // Equivalence marker when total acid and base are within 0.25 mmol of each other.
+    const acidEq = m.hcl + m.ch3cooh;
+    const baseEq = m.naoh + m.nh3 + m.nahco3;
+    world.eqPoint = acidEq > 0 && baseEq > 0 && Math.abs(acidEq - baseEq) <= 0.35;
+  },
+};
+
+// ---- engines/chimie/laws/enthalpie-reaction.js (inlined) ----
+// Law: enthalpie-reaction — heat of neutralization (ΔH = -57.3 kJ/mol) + Bunsen burner + cooling.
+const enthalpieReaction = {
+  id: "enthalpie-reaction",
+  notice: {
+    label: "Reaction enthalpy & heating",
+    formule: "ΔT = (n_neut * 57.3 kJ/mol) / (m_water * 4.184 J/g·K) + burner power - Newton cooling.",
+    sources: "Standard enthalpy of neutralization H+ + OH- -> H2O (-57.3 kJ/mol); Newton's cooling law.",
+    limites: "Heat capacity of glass neglected; weak-acid ionization ΔH approximated as strong.",
+  },
+  defaults: { ambient: 20, deltaH: 57.3 },
   apply(world, dt, params, targets, active) {
-    const d = world.doses();
-    if (d.acide > 0 && d.bleu + d.jaune > 0) {
-      world.fizz = 1;
-      world.temp = Math.min(100, world.temp + 3 * d.acide * dt);
-      world.ph = 2.5;
+    const amb = params.ambient || 20;
+    if (world.mmol && world.volume > 0) {
+      const acid = world.mmol.hcl + world.mmol.ch3cooh;
+      const base = world.mmol.naoh + world.mmol.nh3;
+      const neutMmol = Math.min(acid, base);
+      const prev = world._neutMmol || 0;
+      const dMmol = Math.max(0, neutMmol - prev);
+      if (dMmol > 0) {
+        // 1 mmol reacting releases 57.3 J; water Cp = 4.184 J/(g·K), mass ~ volume (g).
+        const energyJ = dMmol * (params.deltaH || 57.3);
+        const massG = Math.max(20, world.volume);
+        world.temp = Math.min(100, world.temp + energyJ / (massG * 4.184));
+      }
+      world._neutMmol = neutMmol;
+    } else {
+      world._neutMmol = 0;
+    }
+    const b = world.material.bruleur;
+    if (b && active("material", "bruleur") && b.strength > 0) {
+      world.heating = true;
+      world.temp = Math.min(100, world.temp + (b.strength / 100) * 20 * dt);
+    } else {
+      world.heating = false;
+    }
+    world.temp += (amb - world.temp) * Math.min(1, 0.12 * dt);
+    world.temp = Math.max(0, Math.min(100, world.temp));
+  },
+};
+
+// ---- engines/chimie/laws/precipitation.js (inlined) ----
+// Law: precipitation — forms insoluble Cu(OH)2 (blue) and AgCl (white); computes mass in g.
+// Excess NH3 dissolves Cu(OH)2 into the deep-blue [Cu(NH3)4]2+ complex.
+const M_CUOH2 = 97.56;
+const M_AGCL = 143.32;
+
+const precipitation = {
+  id: "precipitation",
+  notice: {
+    label: "Precipitation",
+    formule: "Cu2+ + 2 OH- -> Cu(OH)2↓ (blue, 97.6 g/mol); Ag+ + Cl- -> AgCl↓ (white, 143.3 g/mol); excess NH3 complexes Cu2+.",
+    sources: "Qualitative inorganic analysis (solubility products Ksp << 10^-10).",
+    limites: "Instantaneous precipitation; no crystal growth kinetics.",
+  },
+  defaults: {},
+  apply(world) {
+    if (!world.mmol || world.volume <= 0) {
+      world.precipite = 0;
+      world.precipiteColor = null;
+      world.cuComplex = false;
+      return;
+    }
+    const m = world.mmol;
+    // Complexation: 4 NH3 per Cu2+ keeps Cu2+ soluble as deep-blue [Cu(NH3)4]2+.
+    const cuComplexed = Math.min(m.cuso4, m.nh3 / 4);
+    const cuFree = Math.max(0, m.cuso4 - cuComplexed);
+    world.cuComplex = cuComplexed > 0.05;
+
+    // Cu2+ + 2 OH- -> Cu(OH)2 (also triggered weakly by NH3 if below 4:1 ratio).
+    const ohAvail = m.naoh + Math.max(0, m.nh3 - cuComplexed * 4) * 0.25;
+    const cuOh2Mmol = Math.min(cuFree, ohAvail / 2);
+
+    // Ag+ + Cl- -> AgCl
+    const agClMmol = Math.min(m.agno3, m.hcl);
+
+    const massCu = (cuOh2Mmol / 1000) * M_CUOH2;
+    const massAg = (agClMmol / 1000) * M_AGCL;
+    const total = Math.round((massCu + massAg) * 1000) / 1000;
+    world.precipite = total;
+    if (total <= 0.001) {
+      world.precipiteColor = null;
+    } else if (massCu >= massAg) {
+      world.precipiteColor = "#0ea5e9"; // vivid Cu(OH)2 sky-blue floc
+    } else {
+      world.precipiteColor = "#f1f5f9"; // milky white AgCl curds
     }
   },
 };
 
-// ---- engines/chimie/laws/chauffage.js (inlined) ----
-// Law: chauffage — the bunsen burner heats toward boiling; cooling is always on.
-const chauffage = {
-  id: "chauffage",
+// ---- engines/chimie/laws/degagement-gazeux.js (inlined) ----
+// Law: degagement-gazeux — NaHCO3 + H+ -> CO2↑ + H2O + Na+; drives fizzing and manometer pressure.
+const degagementGazeux = {
+  id: "degagement-gazeux",
   notice: {
-    label: "Heating",
-    formule: "Burner on: +22 °C/s at full power; drifts back to 19 °C otherwise. Boils at 100 °C.",
-    sources: "First-order thermal model (simplified Newton cooling).",
-    limites: "Losses not modelled; one heated body.",
+    label: "Gas evolution (CO2)",
+    formule: "HCO3- + H+ -> CO2↑ + H2O; ΔP = n_CO2 * R * T / V_headspace (kPa).",
+    sources: "Ideal gas law (R = 8.314 J/mol·K) applied to flask headspace (500 mL - V_liq).",
+    limites: "CO2 solubility in water neglected; slow venting models a loose stopper.",
+  },
+  defaults: { pAtm: 101.3 },
+  apply(world, dt, params) {
+    const pAtm = params.pAtm || 101.3;
+    if (!world.mmol || world.volume <= 0) {
+      world.pression = pAtm;
+      world._co2Mmol = 0;
+      world.gasFizz = 0;
+      return;
+    }
+    const m = world.mmol;
+    const hTotal = m.hcl + m.ch3cooh;
+    const co2Mmol = Math.min(m.nahco3, hTotal);
+    const prev = world._co2Mmol || 0;
+    const dCo2 = Math.max(0, co2Mmol - prev);
+    world._co2Mmol = co2Mmol;
+
+    if (dCo2 > 0) {
+      // Ideal gas pressure surge in remaining flask headspace (min 80 mL).
+      const headL = Math.max(0.08, (500 - world.volume) / 1000);
+      const nMol = dCo2 / 1000;
+      const T = 273.15 + (world.temp || 20);
+      const dP = (nMol * 8.314 * T) / headL; // kPa
+      world.pression = Math.min(260, (world.pression || pAtm) + dP);
+      world.gasFizz = Math.min(1, (world.gasFizz || 0) + 0.8);
+    }
+    // Gradual decay of active effervescence and slow venting back toward pAtm.
+    world.gasFizz = Math.max(0, (world.gasFizz || 0) - 0.35 * dt);
+    world.pression = pAtm + ((world.pression || pAtm) - pAtm) * Math.exp(-0.25 * dt);
+    world.pression = Math.round(world.pression * 10) / 10;
+    if (world.gasFizz > 0.05) world.fizz = 1;
+  },
+};
+
+// ---- engines/chimie/laws/indicateur-colore.js (inlined) ----
+// Law: indicateur-colore — determines the optical tint of the flask solution.
+// Bromothymol blue (BBT): yellow (pH < 6.0) -> green (6.0-7.6) -> blue (pH > 7.6).
+// Otherwise reflects copper(II) aqua ion (cyan) or [Cu(NH3)4]2+ complex (deep royal blue).
+const indicateurColore = {
+  id: "indicateur-colore",
+  notice: {
+    label: "Color indicator (BBT & ions)",
+    formule: "BBT: yellow pH<6.0, green 6.0-7.6, blue pH>7.6. Cu2+ aqua: cyan; [Cu(NH3)4]2+: royal blue.",
+    sources: "Bromothymol blue pKa = 7.1; ligand-field splitting of [Cu(NH3)4(H2O)2]2+.",
+    limites: "No Beer-Lambert absorbance curve; binary complex dominance.",
   },
   defaults: {},
-  apply(world, dt, params, targets, active) {
-    const b = world.material.bruleur;
-    if (b && active("material", "bruleur") && b.strength > 0) {
-      world.heating = true;
-      world.temp = Math.min(100, world.temp + (b.strength / 100) * 22 * dt);
+  apply(world) {
+    if (!world.mmol || world.volume <= 0) {
+      world.liquidHex = "#d8eef5";
+      return;
+    }
+    const m = world.mmol;
+    if (m.bbt > 0) {
+      const ph = world.ph;
+      if (ph < 6.0) world.liquidHex = "#eab308"; // acidic yellow
+      else if (ph <= 7.6) world.liquidHex = "#16a34a"; // neutral green
+      else world.liquidHex = "#2563eb"; // basic blue
+      return;
+    }
+    if (world.cuComplex) {
+      world.liquidHex = "#1e3a8a"; // deep royal blue [Cu(NH3)4]2+
+      return;
+    }
+    if (m.cuso4 > 0.05) {
+      world.liquidHex = "#38bdf8"; // Cu2+ sky-cyan
+      return;
+    }
+    world.liquidHex = "#cfe9f2"; // clear aqueous solution
+  },
+};
+
+// ---- engines/chimie/laws/ebullition.js (inlined) ----
+// Law: ebullition — boiling at 100 °C triggers thermal bubbles and slow steam loss.
+const ebullition = {
+  id: "ebullition",
+  notice: {
+    label: "Boiling",
+    formule: "When T >= 99.5 °C, bubbles form throughout the liquid and steam escapes.",
+    sources: "Water normal boiling point at 101.3 kPa (boiling-point elevation neglected).",
+    limites: "No pressure-dependent boiling point; volume loss capped.",
+  },
+  defaults: { boilingPoint: 99.5 },
+  apply(world, dt, params) {
+    if (world.volume > 0 && world.temp >= (params.boilingPoint || 99.5)) {
+      world.fizz = 1;
+      world.boiling = true;
+    } else {
+      world.boiling = false;
     }
   },
 };
 
 // ---- engines/chimie/world.js (inlined) ----
-// Chemistry world: doses in one flask (level, color, fizz, heat).
-// Reads live config refs (sliders edit counts/strength in place); rebind() refreshes refs.
+// Chemistry world: stoichiometric aqueous chemistry in a 500 mL Erlenmeyer.
+// Pure simulation state (no DOM, no Three.js): runs identically in browser and Node.
 function createWorld({ substances, material, laws }) {
   const byId = (arr) => {
     const o = {};
@@ -1946,165 +2194,103 @@ function createWorld({ substances, material, laws }) {
     material: byId(material),
     laws: laws || [],
     t: 0,
-    temp: 19,
+    temp: 20,
     ph: 7,
     volume: 0,
+    volL: 0.025,
+    buretteMl: 0,
+    precipite: 0,
+    precipiteColor: null,
+    pression: 101.3,
     fizz: 0,
+    gasFizz: 0,
     heating: false,
-    mixed: false,
+    boiling: false,
+    eqPoint: false,
+    cuComplex: false,
+    liquidHex: "#cfe9f2",
+    mmol: null,
+    _neutMmol: 0,
+    _co2Mmol: 0,
     W: 800,
     H: 600,
     doses() {
       const g = this.groups;
       return {
-        bleu: (g.bleu && g.bleu.count) || 0,
-        jaune: (g.jaune && g.jaune.count) || 0,
-        acide: (g.acide && g.acide.count) || 0,
+        hcl: (g.hcl && g.hcl.count) || 0,
+        ch3cooh: (g.ch3cooh && g.ch3cooh.count) || 0,
+        naoh: (g.naoh && g.naoh.count) || 0,
+        nh3: (g.nh3 && g.nh3.count) || 0,
+        cuso4: (g.cuso4 && g.cuso4.count) || 0,
+        nahco3: (g.nahco3 && g.nahco3.count) || 0,
+        agno3: (g.agno3 && g.agno3.count) || 0,
+        bbt: (g.bbt && g.bbt.count) || 0,
       };
     },
-    rebind(substances, mat) {
-      this.groups = byId(substances);
+    rebind(subs, mat) {
+      this.groups = byId(subs);
       this.material = byId(mat);
     },
     reset() {
-      this.t = 0; this.temp = 19; this.ph = 7; this.volume = 0;
-      this.fizz = 0; this.heating = false; this.mixed = false;
+      this.t = 0;
+      this.temp = 20;
+      this.ph = 7;
+      this.volume = 0;
+      this.volL = 0.025;
+      this.buretteMl = 0;
+      this.precipite = 0;
+      this.precipiteColor = null;
+      this.pression = 101.3;
+      this.fizz = 0;
+      this.gasFizz = 0;
+      this.heating = false;
+      this.boiling = false;
+      this.eqPoint = false;
+      this.cuComplex = false;
+      this.liquidHex = "#cfe9f2";
+      this.mmol = null;
+      this._neutMmol = 0;
+      this._co2Mmol = 0;
     },
     setSize(w, h) { this.W = w; this.H = h; },
     step(dt, isActive) {
       this.t += dt;
-      this.fizz = 0; this.heating = false; this.mixed = false; this.ph = 7; this.volume = 0;
+      this.fizz = 0;
+      this.heating = false;
+      this.boiling = false;
+      if (this.material.burette) {
+        this.buretteMl = Math.max(0, Math.min(50, this.material.burette.strength || 0));
+      }
       for (const l of this.laws) {
         if (isActive("laws", l.id)) l.mod.apply(this, dt, l.params, l.targetIds, isActive);
       }
-      this.temp += (19 - this.temp) * Math.min(1, 0.25 * dt);
-      if (this.temp >= 99.5) this.fizz = 1;
-      this.temp = Math.max(0, Math.min(100, this.temp));
     },
     measures() {
       const out = {
         temp: Math.round(this.temp * 10) / 10,
         ph: this.ph,
-        volume: this.volume,
+        volume: Math.round(this.volume),
+        precipite: this.precipite,
+        pression: this.pression,
       };
       for (const id of Object.keys(this.groups)) out[`counts.${id}`] = this.groups[id].count || 0;
       return out;
     },
-    draw(ctx, W, H) {
-      const ink = "#e8e6e1";
-      const benchY = H * 0.68;
-      // Wooden bench.
-      const wood = ctx.createLinearGradient(0, benchY, 0, H);
-      wood.addColorStop(0, "#5b4a33"); wood.addColorStop(1, "#3f3423");
-      ctx.fillStyle = wood;
-      ctx.fillRect(0, benchY, W, H - benchY);
-      // Flask geometry (fractions of the smallest side).
-      const s = Math.min(W, H);
-      const fx = W * 0.36;
-      const baseY = benchY - 6;
-      const topW = s * 0.11, botW = s * 0.21, fh = s * 0.4, neckH = s * 0.1;
-      const topY = baseY - fh;
-      const flask = () => {
-        ctx.beginPath();
-        ctx.moveTo(fx - topW, topY);
-        ctx.lineTo(fx + topW, topY);
-        ctx.lineTo(fx + botW, baseY);
-        ctx.lineTo(fx - botW, baseY);
-        ctx.closePath();
-      };
-      // Liquid (clipped to the flask).
-      const d = this.doses();
-      const frac = Math.min(1, this.volume / 500);
-      let color = null;
-      if (d.bleu + d.jaune + d.acide > 0) {
-        if (d.bleu > 0 && d.jaune > 0) color = d.acide > 0 ? "#65a30d" : "#16a34a";
-        else if (d.bleu > 0) color = "#2563eb";
-        else if (d.jaune > 0) color = "#facc15";
-        else color = "#fb923c";
-      }
-      if (color && frac > 0) {
-        ctx.save();
-        flask(); ctx.clip();
-        ctx.fillStyle = color;
-        ctx.globalAlpha = 0.9;
-        ctx.fillRect(fx - botW - 2, baseY - fh * frac, botW * 2 + 4, fh * frac + 2);
-        ctx.globalAlpha = 1;
-        ctx.restore();
-      }
-      // Bubbles.
-      if (this.fizz && frac > 0) {
-        const liqTop = baseY - fh * frac;
-        ctx.fillStyle = "#ffffff";
-        for (let i = 0; i < 14; i++) {
-          const px = fx + (((i * 53) % 60) - 30) / 60 * botW * 1.3;
-          const py = baseY - 4 - ((this.t * (36 + i * 5) + i * 97) % Math.max(8, fh * frac - 6));
-          if (py < liqTop + 2) continue;
-          ctx.globalAlpha = 0.85;
-          ctx.beginPath();
-          ctx.arc(px, py, 1.6 + (i % 3), 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.globalAlpha = 1;
-      }
-      // Flask glass + neck.
-      ctx.strokeStyle = "#e8e6e1"; ctx.lineWidth = Math.max(2, s * 0.008);
-      flask(); ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(fx - topW, topY); ctx.lineTo(fx - topW, topY - neckH);
-      ctx.moveTo(fx + topW, topY); ctx.lineTo(fx + topW, topY - neckH);
-      ctx.stroke();
-      // Flame.
-      if (this.heating) {
-        const fl = s * 0.05 + Math.sin(this.t * 13) * s * 0.006;
-        ctx.fillStyle = "#f97316";
-        ctx.beginPath();
-        ctx.moveTo(fx, baseY + 8);
-        ctx.quadraticCurveTo(fx - s * 0.03, baseY + 8 + fl, fx, baseY + 14 + fl * 1.6);
-        ctx.quadraticCurveTo(fx + s * 0.03, baseY + 8 + fl, fx, baseY + 8);
-        ctx.fill();
-        ctx.fillStyle = "#fde047";
-        ctx.beginPath(); ctx.arc(fx, baseY + 12, s * 0.012, 0, Math.PI * 2); ctx.fill();
-      }
-      // Vapor above the neck when hot.
-      if (this.temp > 80) {
-        ctx.fillStyle = "#78716c";
-        for (let i = 0; i < 3; i++) {
-          const vy = topY - neckH - 10 - ((this.t * 30 + i * 40) % 90);
-          ctx.globalAlpha = 0.22;
-          ctx.beginPath();
-          ctx.ellipse(fx + Math.sin(this.t * 2 + i) * 8, vy, 12, 7, 0, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.globalAlpha = 1;
-      }
-      // Thermometer.
-      const tx = W * 0.8, ty0 = H * 0.16, ty1 = H * 0.6, tw = Math.max(10, s * 0.03);
-      ctx.fillStyle = "#1a241d"; ctx.strokeStyle = "#e8e6e1"; ctx.lineWidth = 3;
-      ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(tx - tw / 2, ty0, tw, ty1 - ty0, tw / 2);
-      else ctx.rect(tx - tw / 2, ty0, tw, ty1 - ty0);
-      ctx.fill(); ctx.stroke();
-      const fillH = (ty1 - ty0 - 8) * (this.temp / 100);
-      ctx.fillStyle = "#dc2626";
-      ctx.fillRect(tx - tw / 2 + 4, ty1 - 4 - fillH, tw - 8, fillH);
-      ctx.beginPath(); ctx.arc(tx, ty1 + 6, tw * 0.75, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = "#e8e6e1"; ctx.stroke();
-      // Labels.
-      ctx.fillStyle = ink;
-      ctx.font = `${Math.max(12, Math.round(s * 0.032))}px sans-serif`;
-      ctx.fillText("Erlenmeyer 500 mL", Math.max(8, fx - botW - 130), baseY - fh - neckH - 8);
-      ctx.fillText(`${Math.round(this.temp)} °C`, tx + tw, ty0 + 14);
-    },
+    draw() { /* 3D rendering handled by benchview.js */ },
   };
 }
 
 // ---- engines/chimie/index.js (inlined) ----
-// Chemistry pack manifest — mixing laws, glassware apparatus, exposed measures.
+// Chemistry pack manifest — stoichiometric laws, glassware apparatus, 5 exposed measures.
 
 const chimieLaws = {
-  "melange-couleurs": melangeCouleurs,
-  "reaction-acide": reactionAcide,
-  chauffage,
+  dilution,
+  "equilibre-acido-basique": equilibreAcidoBasique,
+  "enthalpie-reaction": enthalpieReaction,
+  precipitation,
+  "degagement-gazeux": degagementGazeux,
+  "indicateur-colore": indicateurColore,
+  ebullition,
 };
 
 const chimiePack = {
@@ -2112,373 +2298,396 @@ const chimiePack = {
   laws: chimieLaws,
   apparatus: {
     recipient: {
-      label: "Flask",
+      label: "Erlenmeyer 500 mL",
       notice: {
-        label: "Erlenmeyer",
-        formule: "Holds up to 500 mL; the level follows the poured volume.",
-        sources: "Glassware declared by the lab.",
-        limites: "One flask; no overflow simulated.",
+        label: "Erlenmeyer 500 mL",
+        formule: "Holds up to 500 mL; liquid height and solid precipitate layer follow reaction stoichiometry.",
+        sources: "Standard borosilicate laboratory glassware.",
+        limites: "Overflow above 500 mL is clamped.",
       },
-      defaults: { x: 0.4, y: 0.62 },
+      defaults: { x: 0.38, y: 0.62 },
     },
     bruleur: {
       label: "Bunsen burner",
       notice: {
         label: "Bunsen burner",
-        formule: "Heats at strength % (0–100) when the box is checked.",
+        formule: "Heats at strength % (0–100) when switched on.",
         sources: "Apparatus declared by the lab.",
-        limites: "Single flame; no air control.",
+        limites: "Single flame; no air-collar adjustment.",
       },
-      defaults: { x: 0.4, y: 0.9, strength: 60 },
+      defaults: { x: 0.38, y: 0.9, strength: 60 },
+    },
+    burette: {
+      label: "Titration burette",
+      notice: {
+        label: "Graduated burette (NaOH 0.1 M)",
+        formule: "Dispenses 1 mL or 5 mL drops of NaOH 0.1 M into the flask for acid-base titration.",
+        sources: "Volumetric titration glassware (0–50 mL).",
+        limites: "Fixed titrant: NaOH 0.1 M.",
+      },
+      defaults: { x: 0.38, y: 0.25, strength: 0 },
     },
   },
   measures: [
     { id: "temp", label: "Temperature", unit: "°C" },
     { id: "ph", label: "pH", unit: "" },
     { id: "volume", label: "Volume", unit: "mL" },
+    { id: "precipite", label: "Precipitate", unit: "g" },
+    { id: "pression", label: "Pressure", unit: "kPa" },
   ],
 };
 
-// ---- engines/chimie/benchview.js (inlined) ----
-// Chemistry bench view (Three.js via global THREE): full-screen 3D glassware on the lab's
-// page colour. Erlenmeyer on a tripod over a Bunsen burner, thermometer dipped in, one slim
-// dropper bottle per substance, and the flask ghost watching. Reads the world every frame.
-// No imports: three.min.js (modular page) or the inlined bundle (standalone) provides THREE.
-function buildBenchView(host, ctx) {
-  const THREE = window.THREE;
-  if (!THREE) throw new Error("THREE missing: load three.min.js first");
-  // Hex colours are sRGB, lighting runs in linear space.
-  if (THREE.ColorManagement && "legacyMode" in THREE.ColorManagement) THREE.ColorManagement.legacyMode = false;
-  const REDUCED = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const V = (x, y, z) => new THREE.Vector3(x, y, z);
-  const world = ctx.world;
-  const page = ctx.config.lab.page || "#6cc95a";
+// ---- engines/chimie/narration.js (inlined) ----
+// Plain-language description of the current flask contents, for the HUD status
+// line. DOM-free so it can be unit-tested headlessly.
+const PH_ZONE = [
+  { max: 3.0, label: "strongly acidic", hex: "#ef4444" },
+  { max: 6.0, label: "acidic", hex: "#f97316" },
+  { max: 8.0, label: "near neutral", hex: "#22c55e" },
+  { max: 11.0, label: "basic", hex: "#3b82f6" },
+  { max: 14.1, label: "strongly basic", hex: "#7c3aed" },
+];
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  if ("outputColorSpace" in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
-  else renderer.outputEncoding = THREE.sRGBEncoding;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.setClearColor(page, 1); // the page colour, also what the glass refracts
-  const canvas = renderer.domElement;
-  canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;touch-action:none;";
-  host.appendChild(canvas);
+function phZone(ph) {
+  return PH_ZONE.find((z) => ph < z.max) || PH_ZONE[PH_ZONE.length - 1];
+}
 
-  const scene = new THREE.Scene();
-  const FOV = 24;
-  const camera = new THREE.PerspectiveCamera(FOV, 16 / 9, 0.1, 200);
-  const DIR = V(0.06, 0.1, 1).normalize();
-
-  // Studio environment for reflections: soft gradient dome + three softboxes.
-  {
-    const pm = new THREE.PMREMGenerator(renderer);
-    const env = new THREE.Scene();
-    const R = 40;
-    const g = new THREE.SphereGeometry(R, 32, 16);
-    const p = g.attributes.position;
-    const col = new Float32Array(p.count * 3);
-    const top = new THREE.Color("#ffffff");
-    const hor = new THREE.Color("#e3f6dd");
-    const bot = new THREE.Color(page).multiplyScalar(0.7);
-    const c = new THREE.Color();
-    for (let i = 0; i < p.count; i++) {
-      const k = p.getY(i) / R;
-      if (k > 0) c.copy(hor).lerp(top, Math.min(1, k * 1.6));
-      else c.copy(hor).lerp(bot, Math.min(1, -k * 2));
-      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
-    }
-    g.setAttribute("color", new THREE.BufferAttribute(col, 3));
-    env.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
-    const panel = (w, h, pos, k) => {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(k, k, k), side: THREE.DoubleSide }));
-      m.position.copy(pos);
-      m.lookAt(0, 0, 0);
-      env.add(m);
-    };
-    panel(16, 5, V(0, 18, 8), 6);
-    panel(5, 14, V(-16, 6, 7), 3.5);
-    panel(5, 14, V(16, 5, -4), 2.4);
-    scene.environment = pm.fromScene(env, 0.02).texture;
-    pm.dispose();
+function describeState(world, present) {
+  if (world.volume <= 0) {
+    return { text: "Empty flask: pour a reagent, or titrate from the burette", colors: [] };
   }
-  const key = new THREE.DirectionalLight(0xffffff, 1.1);
-  key.position.set(-4, 8, 5);
-  key.castShadow = true;
-  key.shadow.mapSize.set(2048, 2048);
-  key.shadow.camera.left = -7; key.shadow.camera.right = 7;
-  key.shadow.camera.top = 7; key.shadow.camera.bottom = -7;
-  key.shadow.camera.near = 1; key.shadow.camera.far = 30;
-  key.shadow.radius = 6;
-  key.shadow.bias = -0.0004;
-  scene.add(key);
-  scene.add(new THREE.HemisphereLight(0xffffff, new THREE.Color(page).getHex(), 0.35));
+  const bits = [];
+  const colors = present.map((s) => s.color);
+  if (world.eqPoint) bits.push("equivalence point reached");
+  const zone = phZone(world.ph);
+  bits.push(`pH ${world.ph.toFixed(2)} (${zone.label})`);
+  if (world.precipite > 0.001) {
+    bits.push(`${world.precipite.toFixed(3)} g of precipitate`);
+  }
+  if (world.cuComplex) bits.push("deep-blue [Cu(NH3)4]2+ complex");
+  if (world.gasFizz > 0.05) bits.push("CO2 bubbling out");
+  if (world.boiling) bits.push("boiling");
+  else if (world.heating) bits.push("heating");
+  if (world.temp > 25) bits.push(`${world.temp.toFixed(1)} °C`);
+  if (world.pression > 105) bits.push(`${world.pression.toFixed(0)} kPa`);
+  return { text: bits.join(" · "), colors };
+}
 
-  const lathe = (pts, seg) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg || 72);
-  const shade = (m, receive) => { m.castShadow = true; m.receiveShadow = !!receive; return m; };
-  const glass = () => new THREE.MeshPhysicalMaterial({
-    color: 0xffffff, metalness: 0, roughness: 0, transmission: 1, thickness: 0.12, ior: 1.48,
-    clearcoat: 0.6, clearcoatRoughness: 0.03, envMapIntensity: 1.0, side: THREE.DoubleSide,
+// ---- engines/chimie/glassware.js (inlined) ----
+// Chemistry glassware factories (Three.js via the global THREE).
+// Pure geometry builders: no scene, no animation loop, no DOM.
+// Every builder returns the meshes the bench view needs to animate.
+
+const FLASK_PROFILE = [
+  [0, 0], [0.9, 0], [0.98, 0.035], [1.0, 0.1], [0.97, 0.2],
+  [0.36, 1.5], [0.3, 1.63], [0.29, 2.3], [0.34, 2.33], [0.36, 2.37],
+  [0.33, 2.4], [0.28, 2.37],
+];
+
+function lathe(THREE, points, segments) {
+  return new THREE.LatheGeometry(points.map(([r, y]) => new THREE.Vector2(r, y)), segments || 72);
+}
+
+function glassMaterial(THREE) {
+  return new THREE.MeshPhysicalMaterial({
+    color: 0xffffff,
+    metalness: 0,
+    roughness: 0,
+    transmission: 1,
+    thickness: 0.12,
+    ior: 1.48,
+    clearcoat: 0.6,
+    clearcoatRoughness: 0.03,
+    envMapIntensity: 1.0,
+    side: THREE.DoubleSide,
   });
-  const metal = (c, rough) => new THREE.MeshStandardMaterial({ color: c, metalness: 0.75, roughness: rough });
-  const rubber = new THREE.MeshStandardMaterial({ color: 0x1f1d24, roughness: 0.6 });
+}
 
-  // ---- Erlenmeyer, liquid, bubbles, steam ----
-  const FLASK = [[0, 0], [0.9, 0], [0.98, 0.035], [1.0, 0.1], [0.97, 0.2], [0.36, 1.5], [0.3, 1.63], [0.29, 2.3], [0.34, 2.33], [0.36, 2.37], [0.33, 2.4], [0.28, 2.37]];
-  const rIn = (y) => (y < 0.2 ? 0.92 : 0.92 - (0.92 - 0.27) * Math.min(1, (y - 0.2) / 1.3));
-  const levelOf = (volume) => {
-    const f = Math.min(1, Math.max(0, volume / 500));
-    return f > 0 ? 0.08 + Math.pow(f, 0.85) * 1.36 : 0;
-  };
-  const flask = new THREE.Group();
-  scene.add(flask);
-  const liquidMat = new THREE.MeshStandardMaterial({ color: 0x0b8f47, roughness: 0.18, emissive: 0x078a40, emissiveIntensity: 0.55 });
-  const liquid = shade(new THREE.Mesh(new THREE.BufferGeometry(), liquidMat));
-  flask.add(liquid);
-  const menMat = new THREE.MeshStandardMaterial({ color: 0x22c06b, roughness: 0.1, emissive: 0x0f9d50, emissiveIntensity: 0.45 });
+function metalMaterial(THREE, color, roughness) {
+  return new THREE.MeshStandardMaterial({ color, metalness: 0.75, roughness });
+}
+
+function shadows(mesh, receive) {
+  mesh.castShadow = true;
+  mesh.receiveShadow = !!receive;
+  return mesh;
+}
+
+// Inner radius of the flask at height y, used to clip the liquid column.
+function flaskInnerRadius(y) {
+  return y < 0.2 ? 0.92 : 0.92 - (0.92 - 0.27) * Math.min(1, (y - 0.2) / 1.3);
+}
+
+function liquidLevelOf(volume, capacity) {
+  const f = Math.min(1, Math.max(0, volume / (capacity || 500)));
+  return f > 0 ? 0.08 + Math.pow(f, 0.85) * 1.36 : 0;
+}
+
+// Erlenmeyer with its liquid column, meniscus disc and a sediment bed for precipitate.
+function buildFlask(THREE) {
+  const group = new THREE.Group();
+  const liquidMat = new THREE.MeshStandardMaterial({
+    color: 0x0b8f47,
+    roughness: 0.18,
+    emissive: 0x078a40,
+    emissiveIntensity: 0.55,
+  });
+  const liquid = shadows(new THREE.Mesh(new THREE.BufferGeometry(), liquidMat));
+  const menMat = new THREE.MeshStandardMaterial({
+    color: 0x22c06b,
+    roughness: 0.1,
+    emissive: 0x0f9d50,
+    emissiveIntensity: 0.45,
+  });
   const men = new THREE.Mesh(new THREE.CircleGeometry(1, 64), menMat);
   men.rotation.x = -Math.PI / 2;
-  flask.add(men);
-  flask.add(new THREE.Mesh(lathe(FLASK), glass()));
-  let level = levelOf(world.volume);
-  let builtLevel = -1;
-  function shapeLiquid(L) {
-    if (Math.abs(L - builtLevel) < 0.002) return;
-    builtLevel = L;
-    const on = L > 0.06;
+  // Sediment: a flattened cone resting on the flask floor, grown by precipitate mass.
+  const sedMat = new THREE.MeshStandardMaterial({ color: 0x0ea5e9, roughness: 0.85 });
+  const sediment = shadows(new THREE.Mesh(new THREE.ConeGeometry(0.82, 1, 40, 1), sedMat));
+  sediment.rotation.x = Math.PI;
+  sediment.position.y = 0.09;
+  sediment.scale.set(1, 0.001, 1);
+  group.add(liquid, men, sediment, new THREE.Mesh(lathe(THREE, FLASK_PROFILE), glassMaterial(THREE)));
+
+  function shape(level) {
+    const on = level > 0.06;
     liquid.visible = on;
     men.visible = on;
+    sediment.visible = on;
     if (!on) return;
+    const top = Math.max(0.21, level);
     liquid.geometry.dispose();
-    liquid.geometry = lathe([[0, 0.05], [0.84, 0.05], [0.91, 0.12], [rIn(0.2), 0.2], [rIn(Math.max(0.21, L)), Math.max(0.21, L)], [0, Math.max(0.21, L)]]);
-    men.scale.setScalar(rIn(L) - 0.01);
-    men.position.y = Math.max(0.21, L) + 0.002;
-  }
-  shapeLiquid(level);
-  const NB = 40;
-  // Bubbles and the ripple sit inside the glass: drawn after it (no depth test) so the
-  // refraction pass does not blur them away.
-  const bubbles = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.05, emissive: 0xe6fff0, emissiveIntensity: 0.55, transparent: true, opacity: 0.85, depthTest: false }), NB);
-  bubbles.count = 0;
-  bubbles.renderOrder = 10;
-  bubbles.frustumCulled = false;
-  flask.add(bubbles);
-  const bubs = [];
-  for (let i = 0; i < NB; i++) bubs.push({ a: Math.random() * 6.28, r: Math.random(), y: Math.random(), v: 0.18 + Math.random() * 0.3, s: 0.03 + Math.random() * 0.035 });
-  const steamMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false });
-  const steam = [];
-  for (let i = 0; i < 6; i++) {
-    const m = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), steamMat.clone());
-    m.visible = false;
-    scene.add(m);
-    steam.push({ m, ph: i / 6 });
+    liquid.geometry = lathe(THREE, [
+      [0, 0.05], [0.84, 0.05], [0.91, 0.12],
+      [flaskInnerRadius(0.2), 0.2], [flaskInnerRadius(top), top], [0, top],
+    ]);
+    men.scale.setScalar(flaskInnerRadius(level) - 0.01);
+    men.position.y = top + 0.002;
   }
 
-  // ---- Thermometer ----
-  const red = new THREE.MeshStandardMaterial({ color: 0xff3b30, roughness: 0.2, emissive: 0xff3b30, emissiveIntensity: 0.25 });
-  const thermo = new THREE.Group();
+  function setSediment(mass, hex) {
+    const h = Math.min(0.42, mass * 0.5);
+    sediment.scale.y = Math.max(0.001, h);
+    sediment.position.y = 0.09 + h / 2;
+    sediment.visible = h > 0.004;
+    if (hex) {
+      sedMat.color.set(hex);
+      sedMat.emissive = sedMat.emissive || new THREE.Color(0x000000);
+    }
+  }
+
+  return { group, liquid, men, sediment, liquidMat, menMat, shape, setSediment };
+}
+
+function buildThermometer(THREE) {
+  const group = new THREE.Group();
+  const red = new THREE.MeshStandardMaterial({
+    color: 0xff3b30,
+    roughness: 0.2,
+    emissive: 0xff3b30,
+    emissiveIntensity: 0.25,
+  });
   const column = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 1, 10), red);
-  const tBulb = new THREE.Mesh(new THREE.SphereGeometry(0.058, 16, 12), red);
-  tBulb.position.y = 0.06;
-  const tTube = new THREE.Mesh(new THREE.CylinderGeometry(0.047, 0.047, 2.6, 20), glass());
-  tTube.position.y = 1.3;
-  thermo.add(column, tBulb, tTube);
-  thermo.position.set(0.12, 0.28, 0.05);
-  thermo.rotation.z = -0.07;
-  scene.add(thermo);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.058, 16, 12), red);
+  bulb.position.y = 0.06;
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.047, 0.047, 2.6, 20), glassMaterial(THREE));
+  tube.position.y = 1.3;
+  group.add(column, bulb, tube);
+  group.position.set(0.12, 0.28, 0.05);
+  group.rotation.z = -0.07;
+  return { group, column };
+}
 
-  // ---- Tripod, gauze, Bunsen burner, flame ----
-  const dark = metal(0x2f3431, 0.4);
-  const ring = shade(new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.032, 10, 64), dark));
-  ring.rotation.x = Math.PI / 2;
-  ring.position.y = -0.035;
-  scene.add(ring);
-  const gauze = shade(new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.012, 1.35), new THREE.MeshStandardMaterial({ color: 0x4a504c, metalness: 0.35, roughness: 0.75 })), true);
-  gauze.position.y = -0.01;
-  scene.add(gauze);
-  for (const a of [Math.PI / 2, (Math.PI * 7) / 6, (Math.PI * 11) / 6]) {
-    const top = V(Math.cos(a), -0.035, Math.sin(a));
-    const bot = V(Math.cos(a) * 1.28, -1.2, Math.sin(a) * 1.28);
-    const d = new THREE.Vector3().subVectors(bot, top);
-    const leg = shade(new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, d.length(), 10), dark));
-    leg.position.copy(top).addScaledVector(d, 0.5);
-    leg.quaternion.setFromUnitVectors(V(0, 1, 0), d.normalize());
-    scene.add(leg);
-  }
-  const steel = metal(0xa7b0ad, 0.28);
-  const burner = new THREE.Group();
-  const base = shade(new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.46, 0.08, 48), dark));
+function buildBurner(THREE) {
+  const dark = metalMaterial(THREE, 0x2f3431, 0.4);
+  const steel = metalMaterial(THREE, 0xa7b0ad, 0.28);
+  const group = new THREE.Group();
+  const base = shadows(new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.46, 0.08, 48), dark));
   base.position.y = -1.16;
-  const pipe = shade(new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.5, 32), steel));
+  const pipe = shadows(new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.5, 32), steel));
   pipe.position.y = -0.87;
-  const collar = shade(new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.09, 32), steel));
+  const collar = shadows(new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.09, 32), steel));
   collar.position.y = -0.98;
-  const valve = shade(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.06, 0.08), steel));
+  const valve = shadows(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.06, 0.08), steel));
   valve.position.set(0.24, -1.08, 0);
-  burner.add(base, pipe, collar, valve);
-  scene.add(burner);
+  group.add(base, pipe, collar, valve);
+
   const flame = new THREE.Group();
-  const outer = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.56, 24, 1, true), new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  const outer = new THREE.Mesh(
+    new THREE.ConeGeometry(0.13, 0.56, 24, 1, true),
+    new THREE.MeshBasicMaterial({
+      color: 0x3b82f6, transparent: true, opacity: 0.55,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    }),
+  );
   outer.position.y = 0.28;
-  const inner = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.3, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0xbfe6ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  const inner = new THREE.Mesh(
+    new THREE.ConeGeometry(0.065, 0.3, 20, 1, true),
+    new THREE.MeshBasicMaterial({
+      color: 0xbfe6ff, transparent: true, opacity: 0.85,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    }),
+  );
   inner.position.y = 0.15;
   flame.add(outer, inner);
   flame.position.y = -0.62;
-  scene.add(flame);
   const glow = new THREE.PointLight(0x5aa9ff, 0.8, 3, 2);
   glow.position.set(0, -0.3, 0);
-  scene.add(glow);
+  return { group, flame, glow, hit: burnerHit(THREE) };
+}
 
-  // ---- Slim dropper bottles, one per substance ----
-  const BOTTLE = [[0, 0], [0.26, 0], [0.3, 0.04], [0.31, 0.12], [0.31, 0.95], [0.28, 1.05], [0.2, 1.13], [0.12, 1.17], [0.11, 1.21], [0.11, 1.31], [0.085, 1.31]];
-  const STOP = new Set(["solution", "mild", "dilute", "weak", "strong", "doux", "douce", "solution"]);
-  const shortName = (label) => {
-    const words = String(label).split(/\s+/).filter((w) => w && !STOP.has(w.toLowerCase()));
-    return (words.sort((a, b) => b.length - a.length)[0] || String(label)).replace(/^./, (c) => c.toUpperCase());
+function burnerHit(THREE) {
+  const hit = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.55, 0.55, 1.25, 12),
+    new THREE.MeshBasicMaterial({ visible: false }),
+  );
+  hit.position.y = -0.7;
+  hit.userData.burner = true;
+  return hit;
+}
+
+// Graduated burette holding the NaOH titrant, with a stopcock and a drain spout.
+function buildBurette(THREE) {
+  const group = new THREE.Group();
+  const glass = glassMaterial(THREE);
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 2.6, 28, 1, true), glass);
+  tube.position.y = 1.3;
+  const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.055, 0.34, 20), glass);
+  tip.position.y = -0.16;
+  const cock = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.16, 16), metalMaterial(THREE, 0x1f1d24, 0.5));
+  cock.rotation.z = Math.PI / 2;
+  cock.position.set(0.13, 0.06, 0);
+  const fillMat = new THREE.MeshStandardMaterial({
+    color: 0xc4b5fd, roughness: 0.15, transparent: true, opacity: 0.85,
+    emissive: 0x7c3aed, emissiveIntensity: 0.18,
+  });
+  const fill = new THREE.Mesh(new THREE.CylinderGeometry(0.066, 0.066, 1, 24), fillMat);
+  fill.position.y = 1.3;
+  group.add(tube, tip, cock, fill);
+  const hit = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.22, 0.22, 2.9, 12),
+    new THREE.MeshBasicMaterial({ visible: false }),
+  );
+  hit.position.y = 1.3;
+  hit.userData.burette = true;
+  group.add(hit);
+
+  // fraction: 0..1 of titrant still in the tube.
+  function setFill(fraction) {
+    const f = Math.max(0, Math.min(1, fraction));
+    fill.scale.y = Math.max(0.001, f);
+    fill.position.y = 2.6 - (2.6 * f) / 2 + 0.02;
+    fill.visible = f > 0.005;
+  }
+  return { group, hit, setFill, fillMat };
+}
+
+// Round manometer with a needle, reading the flask headspace pressure in kPa.
+function buildManometer(THREE) {
+  const group = new THREE.Group();
+  const case_ = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.42, 0.42, 0.1, 40),
+    metalMaterial(THREE, 0xdde3df, 0.35),
+  );
+  case_.rotation.x = Math.PI / 2;
+  const face = new THREE.Mesh(new THREE.CircleGeometry(0.38, 40), new THREE.MeshStandardMaterial({ color: 0xfafaf7, roughness: 0.6 }));
+  face.position.z = 0.056;
+  const needle = new THREE.Mesh(
+    new THREE.BoxGeometry(0.018, 0.3, 0.012),
+    new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.4 }),
+  );
+  needle.position.set(0, 0.12, 0.07);
+  const pivot = new THREE.Mesh(new THREE.SphereGeometry(0.035, 16, 12), metalMaterial(THREE, 0x1f1d24, 0.4));
+  pivot.position.z = 0.07;
+  group.add(case_, face, needle, pivot);
+  const hit = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.45, 0.45, 0.3, 12),
+    new THREE.MeshBasicMaterial({ visible: false }),
+  );
+  hit.rotation.x = Math.PI / 2;
+  group.add(hit);
+  return { group, needle };
+}
+
+// ---- engines/chimie/bench-ghost.js (inlined) ----
+// The flask ghost mascot for the Chemistry bench (Three.js via the global THREE).
+// Open body with a scalloped, swaying hem; eyes that follow the pointer, the
+// falling drop or the flask; moods that rotate, look at the viewer or fly.
+// Pure scene object: the bench view owns the camera and the render loop.
+
+const HEM = 0.42;
+const LOBES = 7;
+const LOBE = 0.17;
+const EYE_Y = 0.62;
+const PROFILE = [
+  [0.8, 0], [0.795, 0.07], [0.79, 0.14], [0.785, 0.21], [0.78, 0.28],
+  [0.78, 0.35], [0.78, HEM], [0.745, 0.716], [0.641, 0.94], [0.468, 1.116],
+  [0.225, 1.25], [0.225, 1.6], [0.35, 1.6], [0.35, 1.75], [0, 1.75],
+];
+const MOODS = { watch: 0.4, audience: 0.25, spin: 0.18, fly: 0.17 };
+
+function buildFlaskGhost(THREE, opts) {
+  const { toScreen, reduced } = opts;
+  const group = new THREE.Group();
+  const eyes = [];
+  const bodyGeo = lathe(THREE, PROFILE, 96);
+  const hemBase = Float32Array.from(bodyGeo.attributes.position.array);
+  const ink = new THREE.MeshStandardMaterial({ color: 0x17141f, roughness: 0.3 });
+  const bodyMat = new THREE.MeshPhysicalMaterial({
+    color: 0xfbf8ff, roughness: 0.35, clearcoat: 0.6, clearcoatRoughness: 0.2, side: THREE.DoubleSide,
+  });
+  group.add(shadows(new THREE.Mesh(bodyGeo, bodyMat)));
+  const cheekMat = new THREE.MeshStandardMaterial({ color: 0xff9a62, roughness: 0.6 });
+  for (const sx of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.085, 16, 12), ink);
+    eye.scale.set(1, 1.3, 0.55);
+    eye.position.set(sx * 0.225, EYE_Y, 0.72);
+    eye.userData.sx = sx;
+    group.add(eye);
+    eyes.push(eye);
+    const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 10), cheekMat);
+    cheek.scale.set(1.2, 0.55, 0.3);
+    cheek.position.set(sx * 0.46, 0.4, 0.62);
+    group.add(cheek);
+  }
+  const smile = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.017, 8, 16, Math.PI), ink);
+  smile.rotation.z = Math.PI;
+  smile.position.set(0, 0.45, 0.77);
+  group.add(smile);
+  group.scale.setScalar(0.85);
+
+  const state = {
+    home: { x: 2.25, y: -1.2 + LOBE * 0.85 + 0.06 },
+    mood: { kind: "watch", start: 0, until: 4, dir: 1, yaw: null, wave: 0 },
+    look: { x: 0, y: 0 },
+    blinkAt: 2.5,
+    t: 0,
+    hop: 0,
+    pointer: { x: 0, y: 0, at: -1e9 },
   };
-  function labelTex(name, color) {
-    const cv = document.createElement("canvas");
-    cv.width = 512; cv.height = 96;
-    const c = cv.getContext("2d");
-    c.fillStyle = "#fbfaf5";
-    c.fillRect(0, 0, 512, 96);
-    c.font = '800 30px Archivo, "Segoe UI", system-ui, sans-serif';
-    c.textBaseline = "middle";
-    const text = name.toUpperCase();
-    const tw = c.measureText(text).width;
-    const x0 = 256 - (tw + 30) / 2;
-    c.fillStyle = color;
-    c.beginPath(); c.arc(x0 + 10, 48, 11, 0, Math.PI * 2); c.fill();
-    c.fillStyle = "#0b2a17";
-    c.fillText(text, x0 + 30, 50);
-    const t = new THREE.CanvasTexture(cv);
-    if ("colorSpace" in t) t.colorSpace = THREE.SRGBColorSpace; else t.encoding = THREE.sRGBEncoding;
-    t.anisotropy = 4;
-    return t;
-  }
-  const doseMax = {};
-  for (const c of ctx.config.controls || []) {
-    const m = /^substances\.([^.]+)\.count$/.exec(c.path);
-    if (m) doseMax[m[1]] = c.max;
-  }
-  const subs = ctx.config.substances;
-  const bottles = subs.map((s, i) => {
-    const g = new THREE.Group();
-    const lm = new THREE.MeshStandardMaterial({ color: s.color, roughness: 0.15, emissive: s.color, emissiveIntensity: 0.18 });
-    const liq = shade(new THREE.Mesh(new THREE.BufferGeometry(), lm));
-    const body = new THREE.Mesh(lathe(BOTTLE, 64), glass());
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.315, 0.315, 0.3, 64, 1, true), new THREE.MeshStandardMaterial({ map: labelTex(shortName(s.label), s.color), roughness: 0.75, side: THREE.DoubleSide }));
-    band.position.y = 0.5;
-    band.rotation.y = Math.PI;
-    const cap = shade(new THREE.Mesh(new THREE.CylinderGeometry(0.125, 0.125, 0.13, 32), rubber));
-    cap.position.y = 1.37;
-    const bulb = shade(new THREE.Mesh(new THREE.SphereGeometry(0.105, 32, 16), rubber));
-    bulb.position.y = 1.53;
-    bulb.scale.y = 1.35;
-    g.add(liq, band, cap, bulb, body);
-    const hit = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.95, 12), new THREE.MeshBasicMaterial({ visible: false }));
-    hit.position.y = 0.8;
-    hit.userData.substance = s.id;
-    g.add(hit);
-    const k = subs.length - 1 - i;
-    g.position.set(-1.95 - k * 1.0, -1.2, [0.25, 0.45, 0.15][i % 3]);
-    scene.add(g);
-    return { id: s.id, s, g, liq, hit, built: -1, color: s.color, max: doseMax[s.id] || 1 };
-  });
-  function shapeBottle(b) {
-    const left = Math.max(0, b.max - (b.s.count || 0));
-    const lv = 0.2 + 0.72 * (left / (b.max || 1));
-    if (Math.abs(lv - b.built) < 0.001) return;
-    b.built = lv;
-    b.liq.geometry.dispose();
-    b.liq.geometry = lathe([[0, 0.04], [0.27, 0.04], [0.28, 0.1], [0.28, lv], [0, lv]], 48);
-  }
-  bottles.forEach(shapeBottle);
-  const burnerHit = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 1.25, 12), new THREE.MeshBasicMaterial({ visible: false }));
-  burnerHit.position.y = -0.7;
-  burnerHit.userData.burner = true;
-  scene.add(burnerHit);
+  group.position.set(state.home.x, state.home.y, -0.1);
 
-  // ---- The flask ghost of the logo, watching the flask ----
-  // Open body (no flat bottom): the hem below HEM is pushed into scallops that sway.
-  const ghost = new THREE.Group();
-  const HEM = 0.42;
-  const LOBES = 7;
-  const LOBE = 0.17;
-  const ghostEyes = [];
-  let hemGeo = null;
-  let hemBase = null;
-  {
-    const prof = [[0.8, 0], [0.795, 0.07], [0.79, 0.14], [0.785, 0.21], [0.78, 0.28], [0.78, 0.35], [0.78, HEM], [0.745, 0.716], [0.641, 0.94], [0.468, 1.116], [0.225, 1.25], [0.225, 1.6], [0.35, 1.6], [0.35, 1.75], [0, 1.75]];
-    const ink = new THREE.MeshStandardMaterial({ color: 0x17141f, roughness: 0.3 });
-    hemGeo = lathe(prof, 96);
-    hemBase = Float32Array.from(hemGeo.attributes.position.array);
-    const bodyMat = new THREE.MeshPhysicalMaterial({ color: 0xfbf8ff, roughness: 0.35, clearcoat: 0.6, clearcoatRoughness: 0.2, side: THREE.DoubleSide });
-    ghost.add(shade(new THREE.Mesh(hemGeo, bodyMat)));
-    const eyeG = new THREE.SphereGeometry(0.085, 16, 12);
-    const chG = new THREE.SphereGeometry(0.1, 16, 10);
-    const cheek = new THREE.MeshStandardMaterial({ color: 0xff9a62, roughness: 0.6 });
-    for (const sx of [-1, 1]) {
-      const e = new THREE.Mesh(eyeG, ink);
-      e.scale.set(1, 1.3, 0.55);
-      e.position.set(sx * 0.225, 0.62, 0.72);
-      e.userData.sx = sx;
-      ghost.add(e);
-      ghostEyes.push(e);
-      const ch = new THREE.Mesh(chG, cheek);
-      ch.scale.set(1.2, 0.55, 0.3);
-      ch.position.set(sx * 0.46, 0.4, 0.62);
-      ghost.add(ch);
+  waveHem(THREE, bodyGeo, hemBase, 0);
+
+  function pickMood(t, rnd) {
+    const m = state.mood;
+    const roll = rnd();
+    let acc = 0;
+    let kind = "watch";
+    for (const [name, share] of Object.entries(MOODS)) {
+      acc += share;
+      if (roll < acc) { kind = name; break; }
     }
-    const smile = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.017, 8, 16, Math.PI), ink);
-    smile.rotation.z = Math.PI;
-    smile.position.set(0, 0.45, 0.77);
-    ghost.add(smile);
+    if (kind === m.kind && kind !== "watch") kind = "watch";
+    const len = { watch: 3.5 + rnd() * 3, audience: 2.5 + rnd() * 2, spin: 1.8, fly: 3.4 }[kind];
+    m.kind = kind;
+    m.start = t;
+    m.until = t + len;
+    m.dir = rnd() < 0.5 ? -1 : 1;
   }
-  ghost.scale.setScalar(0.85);
-  const GHOST_Y = -1.2 + LOBE * 0.85 + 0.06; // floats: the scallop tips stay clear of the bench
-  ghost.position.set(2.25, GHOST_Y, -0.1);
-  scene.add(ghost);
-  let hop = 0;
-  const mood = { kind: "watch", start: 0, until: 4, dir: 1, yaw: null, wave: 0 };
-  // Wavy hem: each vertex below HEM drops by a scallop that fades out going up.
-  function waveHem(phase) {
-    const p = hemGeo.attributes.position.array;
-    for (let i = 0; i < p.length; i += 3) {
-      const y0 = hemBase[i + 1];
-      if (y0 >= HEM) continue;
-      const x = hemBase[i];
-      const z = hemBase[i + 2];
-      const a = Math.atan2(x, z);
-      const k = 1 - y0 / HEM;
-      const lobe = 0.5 + 0.5 * Math.cos(LOBES * a + phase);
-      const sway = 1 + 0.06 * k * Math.sin(LOBES * a + phase * 1.7);
-      p[i] = x * sway;
-      p[i + 1] = y0 - LOBE * lobe * k * k;
-      p[i + 2] = z * sway;
-    }
-    hemGeo.attributes.position.needsUpdate = true;
-    hemGeo.computeVertexNormals();
-  }
-  waveHem(0);
-  // Eyes: follow the pointer, otherwise the falling drop or the flask; blink now and then.
-  const look = { x: 0, y: 0 };
-  let lastPtr = -1e9;
-  let ptrX = 0;
-  let ptrY = 0;
-  window.addEventListener("pointermove", (e) => {
-    const r = host.getBoundingClientRect();
-    ptrX = e.clientX - r.left;
-    ptrY = e.clientY - r.top;
-    lastPtr = performance.now();
-  });
-  let blinkAt = 2.5;
-  const EYE_Y = 0.62;
-  const bodyR = (y) => 0.78 - ((y - HEM) / (0.716 - HEM)) * (0.78 - 0.745);
-  function moveEyes(dt, target) {
-    const head = toScreen(ghost.position.x, ghost.position.y + EYE_Y * 0.85, ghost.position.z);
+
+  function aim(dt, target) {
+    const head = toScreen(group.position.x, group.position.y + EYE_Y * 0.85, group.position.z);
     let dx = target.x - head.x;
     let dy = target.y - head.y;
     const len = Math.hypot(dx, dy);
@@ -2486,283 +2695,86 @@ function buildBenchView(host, ctx) {
     dx *= k;
     dy *= k;
     const ease = Math.min(1, dt * 9);
-    look.x += (dx - look.x) * ease;
-    look.y += (dy - look.y) * ease;
-    const blinking = t > blinkAt && t < blinkAt + 0.13;
-    if (t > blinkAt + 0.13) blinkAt = t + 2.4 + Math.random() * 3.2;
-    ghostEyes.forEach((e) => {
-      const x = e.userData.sx * 0.225 + look.x * 0.05;
-      const y = EYE_Y - look.y * 0.045;
-      const r = bodyR(y);
-      e.position.set(x, y, Math.sqrt(Math.max(0, r * r - x * x)) + 0.005);
-      e.rotation.y = Math.asin(Math.max(-1, Math.min(1, x / r)));
-      e.scale.y = blinking ? 0.15 : 1.3;
-    });
-  }
-
-  // ---- Drops poured from the bottles, ripple on the liquid ----
-  const drops = [];
-  const dropGeo = new THREE.SphereGeometry(0.075, 20, 14);
-  const ripple = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.008, 6, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthTest: false }));
-  ripple.renderOrder = 11;
-  ripple.rotation.x = Math.PI / 2;
-  ripple.visible = false;
-  scene.add(ripple);
-  let rippleT = 1;
-  function pour(id) {
-    const s = subs.find((x) => x.id === id);
-    if (!s) return;
-    const m = new THREE.Mesh(dropGeo, new THREE.MeshStandardMaterial({ color: s.color, roughness: 0.1, emissive: s.color, emissiveIntensity: 0.2 }));
-    m.scale.y = 1.35;
-    m.position.set(0, 3.7, 0);
-    scene.add(m);
-    drops.push({ m, t: 0 });
-    hop = 1;
-  }
-
-  // ---- Ground: only the shadows show on the page colour ----
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.ShadowMaterial({ opacity: 0.2 }));
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -1.2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-
-  // ---- Framing: fit the scene into the area the HUD leaves free ----
-  const left = bottles.length ? bottles[0].g.position.x - 0.45 : -2.4;
-  const box = { x0: Math.min(-2.4, left), x1: 3.0, y0: -1.72, y1: 2.95 }; // y0 leaves room for the bottle labels
-  const center = V((box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2, 0);
-  const tanH = Math.tan(((FOV / 2) * Math.PI) / 180);
-  function resize() {
-    const r = host.getBoundingClientRect();
-    if (!r.width || !r.height) return;
-    const W = r.width;
-    const H = r.height;
-    const ins = (ctx.insets && ctx.insets()) || { top: 80, right: 24, bottom: 96, left: 24 };
-    const freeW = Math.max(160, W - ins.left - ins.right);
-    const freeH = Math.max(140, H - ins.top - ins.bottom);
-    const dH = ((box.y1 - box.y0) / 2 / tanH) * (H / freeH);
-    const dW = ((box.x1 - box.x0) / 2 / (tanH * (W / H))) * (W / freeW);
-    const d = Math.max(dH, dW) * 1.05;
-    camera.position.copy(center).addScaledVector(DIR, d);
-    camera.lookAt(center);
-    // Shift the picture so the scene centre lands in the middle of the free area.
-    const dx = W / 2 - (ins.left + freeW / 2);
-    const dy = H / 2 - (ins.top + freeH / 2);
-    const fw = W + 2 * Math.abs(dx);
-    const fh = H + 2 * Math.abs(dy);
-    camera.fov = (2 * Math.atan(tanH * (fh / H)) * 180) / Math.PI;
-    camera.aspect = fw / fh;
-    camera.setViewOffset(fw, fh, Math.abs(dx) + dx, Math.abs(dy) + dy, W, H);
-    camera.updateProjectionMatrix();
-    camera.updateMatrixWorld();
-    // Labels on the bottles face the camera.
-    bottles.forEach((b) => { b.g.rotation.y = Math.atan2(camera.position.x - b.g.position.x, camera.position.z - b.g.position.z); });
-    renderer.setSize(W, H, false);
-    if (ctx.onFrame) ctx.onFrame();
-  }
-  if ("ResizeObserver" in window) new ResizeObserver(resize).observe(host);
-  else window.addEventListener("resize", resize);
-
-  // Screen position (CSS px inside the host) of a world point, for the HUD labels.
-  const tmp = new THREE.Vector3();
-  function toScreen(x, y, z) {
-    const r = host.getBoundingClientRect();
-    tmp.set(x, y, z).project(camera);
-    return { x: ((tmp.x + 1) / 2) * r.width, y: ((1 - tmp.y) / 2) * r.height };
-  }
-  const anchors = {
-    neck: () => toScreen(-0.3, 1.9, 0),
-    bottle: (id) => {
-      const b = bottles.find((x) => x.id === id);
-      return b ? toScreen(b.g.position.x, -1.2, b.g.position.z) : null;
-    },
-  };
-
-  // ---- Picking: click a bottle to pour, click the burner to light it ----
-  const ray = new THREE.Raycaster();
-  const ptr = new THREE.Vector2();
-  const hits = [...bottles.map((b) => b.hit), burnerHit];
-  let hover = null;
-  function pick(e) {
-    const r = canvas.getBoundingClientRect();
-    ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-    ray.setFromCamera(ptr, camera);
-    const h = ray.intersectObjects(hits, false)[0];
-    return h ? h.object.userData : null;
-  }
-  canvas.addEventListener("pointermove", (e) => {
-    hover = pick(e);
-    canvas.style.cursor = hover ? "pointer" : "default";
-  });
-  canvas.addEventListener("pointerleave", () => { hover = null; });
-  canvas.addEventListener("click", (e) => {
-    const h = pick(e);
-    if (!h) return;
-    if (h.substance) ctx.addDose(h.substance);
-    else if (h.burner) ctx.toggleBurner();
-  });
-
-  // ---- Per-frame update ----
-  const tint = new THREE.Color();
-  const target = new THREE.Color();
-  const m4 = new THREE.Matrix4();
-  const q = new THREE.Quaternion();
-  const sc = new THREE.Vector3();
-  const pv = new THREE.Vector3();
-  let t = 0;
-  function liquidColor() {
-    const d = world.doses();
-    if (d.bleu > 0 && d.jaune > 0) return d.acide > 0 ? "#5a9a0c" : "#0b8f47";
-    if (d.bleu > 0) return "#1d4ed8";
-    if (d.jaune > 0) return "#eab308";
-    if (d.acide > 0) return "#ea580c";
-    return "#0b8f47";
-  }
-  tint.set(liquidColor());
-  function render(dt) {
-    const step = REDUCED ? 0 : dt;
-    t += step;
-    // Level and colour glide to the world's values.
-    const goal = levelOf(world.volume);
-    level += (goal - level) * (REDUCED ? 1 : Math.min(1, dt * 4));
-    shapeLiquid(level);
-    target.set(liquidColor());
-    tint.lerp(target, REDUCED ? 1 : Math.min(1, dt * 3));
-    liquidMat.color.copy(tint).multiplyScalar(0.8);
-    liquidMat.emissive.copy(tint).multiplyScalar(0.95);
-    menMat.color.copy(tint).lerp(new THREE.Color(0xffffff), 0.12);
-    menMat.emissive.copy(tint).multiplyScalar(0.8);
-    // Bubbles: many when it fizzes or boils, a few when it is hot.
-    const n = liquid.visible ? (world.fizz ? NB : world.heating && world.temp > 55 ? 12 : 0) : 0;
-    bubbles.count = n;
-    for (let i = 0; i < n; i++) {
-      const b = bubs[i];
-      b.y += b.v * step;
-      const top = Math.max(0.12, level - 0.04);
-      if (b.y > 1) b.y = 0.05;
-      const y = 0.1 + b.y * (top - 0.1);
-      const rr = rIn(y) * 0.78 * b.r;
-      bubbles.setMatrixAt(i, m4.compose(pv.set(Math.cos(b.a) * rr, y, Math.sin(b.a) * rr), q, sc.setScalar(b.s)));
+    state.look.x += (dx - state.look.x) * ease;
+    state.look.y += (dy - state.look.y) * ease;
+    const t = state.t;
+    const blinking = t > state.blinkAt && t < state.blinkAt + 0.13;
+    if (t > state.blinkAt + 0.13) state.blinkAt = t + 2.4 + Math.random() * 3.2;
+    for (const eye of eyes) {
+      const x = eye.userData.sx * 0.225 + state.look.x * 0.05;
+      const y = EYE_Y - state.look.y * 0.045;
+      const r = bodyRadiusAt(y);
+      eye.position.set(x, y, Math.sqrt(Math.max(0, r * r - x * x)) + 0.005);
+      eye.rotation.y = Math.asin(Math.max(-1, Math.min(1, x / r)));
+      eye.scale.y = blinking ? 0.15 : 1.3;
     }
-    bubbles.instanceMatrix.needsUpdate = true;
-    // Steam above the neck when hot.
-    const hot = Math.max(0, Math.min(1, (world.temp - 75) / 20));
-    steam.forEach((p) => {
-      const k = (t * 0.35 + p.ph) % 1;
-      p.m.visible = hot > 0.01;
-      p.m.position.set(Math.sin(k * 6 + p.ph * 9) * 0.12, 2.5 + k * 0.85, 0);
-      p.m.scale.setScalar(0.5 + k * 1.2);
-      p.m.material.opacity = hot * 0.35 * Math.sin(k * Math.PI);
-    });
-    // Thermometer column.
-    const colH = 0.12 + (Math.max(0, Math.min(100, world.temp)) / 100) * 2.3;
-    column.scale.y = colH;
-    column.position.y = colH / 2 + 0.08;
-    // Flame follows the burner state and power.
-    const bru = world.material.bruleur;
-    const lit = !!(bru && ctx.isActive("material", "bruleur") && bru.strength > 0);
-    flame.visible = lit;
-    glow.visible = lit;
-    if (lit) {
-      const p = 0.45 + (bru.strength / 100) * 0.75;
-      const f = REDUCED ? 1 : 1 + Math.sin(t * 31) * 0.06 + Math.sin(t * 17) * 0.05;
-      flame.scale.set(p / Math.sqrt(f), p * f, p / Math.sqrt(f));
-      glow.intensity = 0.4 + p * 0.6;
-    }
-    // Bottles: remaining liquid, hover lift.
-    bottles.forEach((b) => {
-      shapeBottle(b);
-      const up = hover && hover.substance === b.id ? 0.06 : 0;
-      b.g.position.y += (-1.2 + up - b.g.position.y) * Math.min(1, dt * 12 || 1);
-    });
-    // Drops fall into the neck; a ripple spreads where they land.
-    for (let i = drops.length - 1; i >= 0; i--) {
-      const dr = drops[i];
-      dr.t += REDUCED ? 1 : dt;
-      const k = Math.min(1, dr.t / 0.55);
-      const land = Math.max(0.12, level);
-      dr.m.position.y = 3.7 - (3.7 - land) * k * k;
-      if (k >= 1) {
-        scene.remove(dr.m);
-        dr.m.material.dispose();
-        drops.splice(i, 1);
-        rippleT = 0;
-      }
-    }
-    if (rippleT < 1) {
-      rippleT += REDUCED ? 1 : dt / 0.6;
-      ripple.visible = rippleT < 1 && liquid.visible;
-      ripple.position.y = level + 0.01;
-      ripple.scale.setScalar(1 + rippleT * 3.5);
-      ripple.material.opacity = 0.8 * (1 - rippleT);
-    } else ripple.visible = false;
-    // Ghost: gentle bob, a hop when something is poured, eyes on the flask.
-    hop = Math.max(0, hop - dt * 2.2);
-    const bob = REDUCED ? 0 : Math.abs(Math.sin(t * 2.2)) * 0.05;
-    // Mood: watch the experiment, look at the viewer, turn around, or fly up and land.
-    if (!REDUCED && t >= mood.until) {
-      const r = Math.random();
-      const prev = mood.kind;
-      let kind = r < 0.4 ? "watch" : r < 0.65 ? "audience" : r < 0.83 ? "spin" : "fly";
-      if (kind === prev && kind !== "watch") kind = "watch";
-      const len = { watch: 3.5 + Math.random() * 3, audience: 2.5 + Math.random() * 2, spin: 1.8, fly: 3.4 }[kind];
-      mood.kind = kind;
-      mood.start = t;
-      mood.until = t + len;
-      mood.dir = Math.random() < 0.5 ? -1 : 1;
-    }
-    const mk = Math.min(1, (t - mood.start) / Math.max(0.01, mood.until - mood.start));
+  }
+
+  // One frame: bob, hop, mood, hem sway, eye target.
+  function update(dt, focus, camera) {
+    if (camera) state.camera = camera;
+    const step = reduced ? 0 : dt;
+    state.t += step;
+    state.hop = Math.max(0, state.hop - dt * 2.2);
+    if (!reduced && state.t >= state.mood.until) pickMood(state.t, Math.random);
+    const m = state.mood;
+    const k = Math.min(1, (state.t - m.start) / Math.max(0.01, m.until - m.start));
     const smooth = (x) => x * x * (3 - 2 * x);
-    const lift = mood.kind === "fly" ? Math.sin(Math.PI * smooth(mk)) * 0.9 : 0;
-    const spin = mood.kind === "spin" ? mood.dir * Math.PI * 2 * smooth(mk) : 0;
-    const camYaw = Math.atan2(camera.position.x - ghost.position.x, camera.position.z - ghost.position.z);
-    const yawGoal = camYaw - (mood.kind === "audience" ? 0.05 : mood.kind === "fly" ? 0.2 : 0.38);
-    if (mood.yaw === null) mood.yaw = yawGoal;
-    mood.yaw += (yawGoal - mood.yaw) * Math.min(1, (REDUCED ? 1 : dt) * 3);
-    ghost.position.y = GHOST_Y + bob + lift + Math.sin(hop * Math.PI) * 0.35;
-    ghost.position.x = 2.25 + (mood.kind === "fly" ? Math.sin(mk * Math.PI * 2) * 0.12 : 0);
-    ghost.rotation.y = mood.yaw + spin;
-    ghost.rotation.z = mood.kind === "fly" ? Math.sin(mk * Math.PI * 3) * 0.08 : 0;
-    if (!REDUCED) {
-      mood.wave += dt * (mood.kind === "fly" ? 5.5 : 2.4);
-      waveHem(mood.wave);
+    const lift = m.kind === "fly" ? Math.sin(Math.PI * smooth(k)) * 0.9 : 0;
+    const spin = m.kind === "spin" ? m.dir * Math.PI * 2 * smooth(k) : 0;
+    const camYaw = state.camera
+      ? Math.atan2(state.camera.position.x - group.position.x, state.camera.position.z - group.position.z)
+      : 0;
+    const yawGoal = camYaw - (m.kind === "audience" ? 0.05 : m.kind === "fly" ? 0.2 : 0.38);
+    if (m.yaw === null) m.yaw = yawGoal;
+    m.yaw += (yawGoal - m.yaw) * Math.min(1, (reduced ? 1 : dt) * 3);
+    const bob = reduced ? 0 : Math.abs(Math.sin(state.t * 2.2)) * 0.05;
+    group.position.y = state.home.y + bob + lift + Math.sin(state.hop * Math.PI) * 0.35;
+    group.position.x = state.home.x + (m.kind === "fly" ? Math.sin(k * Math.PI * 2) * 0.12 : 0);
+    group.rotation.y = m.yaw + spin;
+    group.rotation.z = m.kind === "fly" ? Math.sin(k * Math.PI * 3) * 0.08 : 0;
+    if (!reduced) {
+      m.wave += dt * (m.kind === "fly" ? 5.5 : 2.4);
+      waveHem(THREE, bodyGeo, hemBase, m.wave);
     }
-    let goal2;
-    const headPt = () => toScreen(ghost.position.x, ghost.position.y + EYE_Y * 0.85, ghost.position.z);
-    if (performance.now() - lastPtr < 2500) goal2 = { x: ptrX, y: ptrY };
-    else if (mood.kind === "audience" || mood.kind === "spin") goal2 = headPt();
-    else if (mood.kind === "fly") {
-      const h = headPt();
-      goal2 = { x: h.x, y: h.y + 120 }; // looks down at the bench below
-    } else if (drops.length) {
-      const m = drops[drops.length - 1].m.position;
-      goal2 = toScreen(m.x, m.y, m.z);
-    } else goal2 = toScreen(-0.3 + (REDUCED ? 0 : Math.sin(t * 0.5) * 0.6), 0.6, 0);
-    moveEyes(REDUCED ? 1 : dt, goal2);
-    renderer.render(scene, camera);
+    aim(reduced ? 1 : dt, focus);
   }
 
-  return { render, pour, resize, anchors, toScreen, shortName };
+  return {
+    group,
+    update,
+    hop: () => { state.hop = 1; },
+    lookAtPointer: (x, y) => { state.pointer = { x, y, at: performance.now() }; },
+    pointerTarget: () => state.pointer,
+  };
 }
 
-// ---- engines/chimie/hud.js (inlined) ----
-// Chemistry HUD (design C4 "blown glass"): frosted-glass panels floating on the page colour
-// over the 3D bench. Top: brand, steps as tabs, home. Right: measures (Lab) or the Laws,
-// Knobs and Notebook sheets. Under each bottle: its dose pill. Bottom: time + status + Measure.
+function bodyRadiusAt(y) {
+  return 0.78 - ((y - HEM) / (0.716 - HEM)) * (0.78 - 0.745);
+}
 
-const CH_ICONS = {
-  back: '<path d="M15 6l-6 6 6 6"/>',
-  pause: '<path d="M9 5.5v13M15 5.5v13" stroke-width="2.8"/>',
-  play: '<path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/>',
-  empty: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5v4h4"/>',
-  step: '<path d="M6 5v14M10 12h9M15 8l4 4-4 4"/>',
-  plus: '<path d="M12 5v14M5 12h14"/>',
-  x: '<path d="M6 6l12 12M18 6L6 18"/>',
-  next: '<path d="M9 6l6 6-6 6"/>',
-};
-const chIcon = (k) => `<svg class="ch-i" viewBox="0 0 24 24" aria-hidden="true">${CH_ICONS[k]}</svg>`;
-const chEsc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+// Push the vertices below HEM into scallops that sway with `phase`.
+function waveHem(THREE, geometry, base, phase) {
+  const p = geometry.attributes.position.array;
+  for (let i = 0; i < p.length; i += 3) {
+    const y0 = base[i + 1];
+    if (y0 >= HEM) continue;
+    const x = base[i];
+    const z = base[i + 2];
+    const a = Math.atan2(x, z);
+    const k = 1 - y0 / HEM;
+    const lobe = 0.5 + 0.5 * Math.cos(LOBES * a + phase);
+    const sway = 1 + 0.06 * k * Math.sin(LOBES * a + phase * 1.7);
+    p[i] = x * sway;
+    p[i + 1] = y0 - LOBE * lobe * k * k;
+    p[i + 2] = z * sway;
+  }
+  geometry.attributes.position.needsUpdate = true;
+  geometry.computeVertexNormals();
+}
 
+// ---- engines/chimie/hud-css.js (inlined) ----
+// Chemistry HUD stylesheet (design C4 "blown glass"): frosted-glass panels on the page colour.
 const CH_CSS = `
 .ch-root{position:absolute;inset:0;pointer-events:none;color:#0b2a17;font-family:"Archivo","Segoe UI",system-ui,sans-serif;font-size:13px;line-height:1.35;z-index:5;-webkit-font-smoothing:antialiased}
 .ch-root *{box-sizing:border-box}
@@ -2898,7 +2910,546 @@ const CH_CSS = `
   .ch-widgets .ch-phl,.ch-widgets .ch-spark,.ch-widgets .of{display:none}
 }
 @media (prefers-reduced-motion: reduce){.ch-root *{transition:none!important}}
+
+.ch-bur{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:2px}
+.ch-bur button{height:30px;padding:0 12px;border-radius:999px;font:700 12px "Archivo",sans-serif;border:1.5px solid #0b2a17}
+.ch-bur button:hover{background:rgba(255,255,255,.6)}
+.ch-bur button.ink{background:#0b2a17;color:#fff}
+.ch-bur small{font:600 11px "JetBrains Mono",ui-monospace,monospace;color:rgba(11,42,23,.6);flex:1;text-align:right}
+.ch-bl button.minus{background:rgba(255,255,255,.75);color:#0b2a17}
+.ch-eq{align-items:center;gap:5px;font-weight:800;font-size:11px;background:#16a34a;color:#fff;border-radius:999px;padding:3px 9px}
 `;
+
+// ---- engines/chimie/benchview.js (inlined) ----
+// Chemistry bench view (Three.js via the global THREE): full-screen 3D glassware
+// on the lab's page colour. Erlenmeyer on a tripod over a Bunsen burner, graduated
+// burette for titration, thermometer dipped in, manometer for the CO2 headspace,
+// one slim dropper bottle per reagent, and the flask ghost watching.
+// Geometry lives in glassware.js, the mascot in bench-ghost.js.
+
+const BOTTLE_PROFILE = [
+  [0, 0], [0.26, 0], [0.3, 0.04], [0.31, 0.12], [0.31, 0.95],
+  [0.28, 1.05], [0.2, 1.13], [0.12, 1.17], [0.11, 1.21], [0.11, 1.31], [0.085, 1.31],
+];
+const STOP_WORDS = new Set(["solution", "mild", "dilute", "weak", "strong", "sodium", "0.1"]);
+const FOV = 24;
+const BUBBLES = 40;
+
+function buildBenchView(host, ctx) {
+  const THREE = window.THREE;
+  if (!THREE) throw new Error("THREE missing: load three.min.js first");
+  if (THREE.ColorManagement && "legacyMode" in THREE.ColorManagement) THREE.ColorManagement.legacyMode = false;
+  const REDUCED = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const world = ctx.world;
+  const page = ctx.config.lab.page || "#6cc95a";
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  if ("outputColorSpace" in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
+  else renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.setClearColor(page, 1);
+  const canvas = renderer.domElement;
+  canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;touch-action:none;";
+  host.appendChild(canvas);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(FOV, 16 / 9, 0.1, 200);
+  const DIR = V(0.06, 0.1, 1).normalize();
+  // Declared before any toScreen() call: function declarations hoist, but this
+  // const does not, and the ghost looks at the flask during construction.
+  const tmp = new THREE.Vector3();
+  buildEnvironment(THREE, renderer, scene, page);
+  const key = new THREE.DirectionalLight(0xffffff, 1.1);
+  key.position.set(-4, 8, 5);
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.camera.left = -8; key.shadow.camera.right = 8;
+  key.shadow.camera.top = 8; key.shadow.camera.bottom = -8;
+  key.shadow.camera.near = 1; key.shadow.camera.far = 30;
+  key.shadow.radius = 6;
+  key.shadow.bias = -0.0004;
+  scene.add(key);
+  scene.add(new THREE.HemisphereLight(0xffffff, new THREE.Color(page).getHex(), 0.35));
+
+  const flask = buildFlask(THREE);
+  scene.add(flask.group);
+  let level = liquidLevelOf(world.volume, 500);
+  flask.shape(level);
+
+  const thermometer = buildThermometer(THREE);
+  scene.add(thermometer.group);
+
+  const burner = buildBurner(THREE);
+  scene.add(burner.group, burner.flame, burner.glow, burner.hit);
+  scene.add(tripod(THREE));
+
+  const burette = buildBurette(THREE);
+  burette.group.scale.setScalar(0.62);
+  burette.group.position.set(0, 2.42, -0.28);
+  scene.add(burette.group);
+
+  const manometer = buildManometer(THREE);
+  manometer.group.scale.setScalar(0.78);
+  manometer.group.position.set(1.62, -0.55, 0.62);
+  scene.add(manometer.group);
+
+  const bottles = buildBottles(THREE, scene, ctx.config.substances, ctx.config.controls || []);
+  const ghost = buildFlaskGhost(THREE, { toScreen, reduced: REDUCED });
+  scene.add(ghost.group);
+  ghost.update(0, toScreen(-0.3, 0.6, 0));
+
+  const effects = buildEffects(THREE, scene, flask);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.ShadowMaterial({ opacity: 0.2 }));
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -1.2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  const box = { x0: -4.95, x1: 3.0, y0: -1.72, y1: 4.2 };
+  const center = V((box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2, 0);
+  const tanH = Math.tan(((FOV / 2) * Math.PI) / 180);
+
+  // Screen position (CSS px inside the host) of a world point, for HUD labels.
+  function toScreen(x, y, z) {
+    const r = host.getBoundingClientRect();
+    tmp.set(x, y, z).project(camera);
+    return { x: ((tmp.x + 1) / 2) * r.width, y: ((1 - tmp.y) / 2) * r.height };
+  }
+
+  // Fit the scene into the area the HUD leaves free, then shift it to the centre.
+  function resize() {
+    const r = host.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const W = r.width;
+    const H = r.height;
+    const ins = (ctx.insets && ctx.insets()) || { top: 80, right: 24, bottom: 96, left: 24 };
+    const freeW = Math.max(160, W - ins.left - ins.right);
+    const freeH = Math.max(140, H - ins.top - ins.bottom);
+    const dH = ((box.y1 - box.y0) / 2 / tanH) * (H / freeH);
+    const dW = ((box.x1 - box.x0) / 2 / (tanH * (W / H))) * (W / freeW);
+    const d = Math.max(dH, dW) * 1.05;
+    camera.position.copy(center).addScaledVector(DIR, d);
+    camera.lookAt(center);
+    const dx = W / 2 - (ins.left + freeW / 2);
+    const dy = H / 2 - (ins.top + freeH / 2);
+    const fw = W + 2 * Math.abs(dx);
+    const fh = H + 2 * Math.abs(dy);
+    camera.fov = (2 * Math.atan(tanH * (fh / H)) * 180) / Math.PI;
+    camera.aspect = fw / fh;
+    camera.setViewOffset(fw, fh, Math.abs(dx) + dx, Math.abs(dy) + dy, W, H);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld();
+    bottles.forEach((b) => {
+      b.g.rotation.y = Math.atan2(camera.position.x - b.g.position.x, camera.position.z - b.g.position.z);
+    });
+    manometer.group.rotation.y = Math.atan2(camera.position.x - manometer.group.position.x, camera.position.z - manometer.group.position.z);
+    renderer.setSize(W, H, false);
+    if (ctx.onFrame) ctx.onFrame();
+  }
+
+  resize();
+  if ("ResizeObserver" in window) new ResizeObserver(resize).observe(host);
+  else window.addEventListener("resize", resize);
+
+  let hoverId = null;
+  const hits = [...bottles.map((b) => b.hit), burner.hit, burette.hit];
+  wirePicking(canvas, camera, hits, ctx, ghost, (id) => { hoverId = id; });
+
+  let t = 0;
+  function render(dt) {
+    const step = REDUCED ? 0 : dt;
+    t += step;
+    updateLiquid(flask, world, level, dt, REDUCED, (l) => { level = l; });
+    updateBubbles(effects, world, level, step);
+    updateSteam(effects, world, t, REDUCED);
+    updateThermometer(thermometer, world);
+    updateBurner(burner, world, ctx, t, REDUCED);
+    burette.setFill(1 - Math.min(1, (world.buretteMl || 0) / 50));
+    manometer.needle.rotation.z = Math.PI * 0.5 - ((world.pression - 90) / 170) * 2.4;
+    bottles.forEach((b) => { b.hover = hoverId === b.id; shapeBottle(b, dt); });
+    updateDrops(effects, scene, level, dt, REDUCED);
+    ghost.update(step || 0.0001, ghostFocus(ghost, effects, toScreen), camera);
+    renderer.render(scene, camera);
+  }
+
+  return {
+    render,
+    pour(id) { effects.pour(id, bottles); ghost.hop(); },
+    dispense(ml) { effects.dispense(ml, burette); ghost.hop(); },
+    resize,
+    toScreen,
+    shortName,
+    setHover: (id) => { hoverId = id; },
+    anchors: {
+      neck: () => toScreen(-0.3, 1.9, 0),
+      bottle: (id) => {
+        const b = bottles.find((x) => x.id === id);
+        return b ? toScreen(b.g.position.x, -1.2, b.g.position.z) : null;
+      },
+      burette: () => toScreen(0.32, 2.9, -0.28),
+    },
+  };
+}
+
+// --- scene furniture -------------------------------------------------------
+
+function buildEnvironment(THREE, renderer, scene, page) {
+  const pm = new THREE.PMREMGenerator(renderer);
+  const env = new THREE.Scene();
+  const R = 40;
+  const g = new THREE.SphereGeometry(R, 32, 16);
+  const p = g.attributes.position;
+  const col = new Float32Array(p.count * 3);
+  const top = new THREE.Color("#ffffff");
+  const hor = new THREE.Color("#e3f6dd");
+  const bot = new THREE.Color(page).multiplyScalar(0.7);
+  const c = new THREE.Color();
+  for (let i = 0; i < p.count; i++) {
+    const k = p.getY(i) / R;
+    if (k > 0) c.copy(hor).lerp(top, Math.min(1, k * 1.6));
+    else c.copy(hor).lerp(bot, Math.min(1, -k * 2));
+    col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+  }
+  g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  env.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+  const panel = (w, h, pos, k) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(k, k, k), side: THREE.DoubleSide }));
+    m.position.copy(pos);
+    m.lookAt(0, 0, 0);
+    env.add(m);
+  };
+  panel(16, 5, new THREE.Vector3(0, 18, 8), 6);
+  panel(5, 14, new THREE.Vector3(-16, 6, 7), 3.5);
+  panel(5, 14, new THREE.Vector3(16, 5, -4), 2.4);
+  scene.environment = pm.fromScene(env, 0.02).texture;
+  pm.dispose();
+}
+
+function tripod(THREE) {
+  const group = new THREE.Group();
+  const dark = metalMaterial(THREE, 0x2f3431, 0.4);
+  const ring = shadows(new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.032, 10, 64), dark));
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = -0.035;
+  const gauze = shadows(
+    new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.012, 1.35), metalMaterial(THREE, 0x4a504c, 0.75)),
+    true,
+  );
+  gauze.position.y = -0.01;
+  group.add(ring, gauze);
+  for (const a of [Math.PI / 2, (Math.PI * 7) / 6, (Math.PI * 11) / 6]) {
+    const top = new THREE.Vector3(Math.cos(a), -0.035, Math.sin(a));
+    const bot = new THREE.Vector3(Math.cos(a) * 1.28, -1.2, Math.sin(a) * 1.28);
+    const d = new THREE.Vector3().subVectors(bot, top);
+    const leg = shadows(new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, d.length(), 10), dark));
+    leg.position.copy(top).addScaledVector(d, 0.5);
+    leg.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+    group.add(leg);
+  }
+  return group;
+}
+
+function shortName(label) {
+  const words = String(label).split(/\s+/).filter((w) => w && !STOP_WORDS.has(w.toLowerCase()));
+  return (words.sort((a, b) => b.length - a.length)[0] || String(label)).replace(/^./, (c) => c.toUpperCase());
+}
+
+function labelTexture(THREE, name, color) {
+  const cv = document.createElement("canvas");
+  cv.width = 512; cv.height = 96;
+  const c = cv.getContext("2d");
+  c.fillStyle = "#fbfaf5";
+  c.fillRect(0, 0, 512, 96);
+  c.font = '800 30px Archivo, "Segoe UI", system-ui, sans-serif';
+  c.textBaseline = "middle";
+  const text = name.toUpperCase();
+  const tw = c.measureText(text).width;
+  const x0 = 256 - (tw + 30) / 2;
+  c.fillStyle = color;
+  c.beginPath(); c.arc(x0 + 10, 48, 11, 0, Math.PI * 2); c.fill();
+  c.fillStyle = "#0b2a17";
+  c.fillText(text, x0 + 30, 50);
+  const t = new THREE.CanvasTexture(cv);
+  if ("colorSpace" in t) t.colorSpace = THREE.SRGBColorSpace;
+  else t.encoding = THREE.sRGBEncoding;
+  t.anisotropy = 4;
+  return t;
+}
+
+// Eight reagents in two rows of four on the left of the bench.
+function buildBottles(THREE, scene, substances, controls) {
+  const doseMax = {};
+  for (const c of controls) {
+    const m = /^substances\.([^.]+)\.count$/.exec(c.path);
+    if (m) doseMax[m[1]] = c.max;
+  }
+  const glass = glassMaterial(THREE);
+  const rubber = new THREE.MeshStandardMaterial({ color: 0x1f1d24, roughness: 0.6 });
+  return substances.map((s, i) => {
+    const g = new THREE.Group();
+    const lm = new THREE.MeshStandardMaterial({ color: s.color, roughness: 0.15, emissive: s.color, emissiveIntensity: 0.18 });
+    const liq = shadows(new THREE.Mesh(new THREE.BufferGeometry(), lm));
+    const body = new THREE.Mesh(lathe(THREE, BOTTLE_PROFILE, 64), glass);
+    const band = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.315, 0.315, 0.3, 64, 1, true),
+      new THREE.MeshStandardMaterial({ map: labelTexture(THREE, shortName(s.label), s.color), roughness: 0.75, side: THREE.DoubleSide }),
+    );
+    band.position.y = 0.5;
+    band.rotation.y = Math.PI;
+    const cap = shadows(new THREE.Mesh(new THREE.CylinderGeometry(0.125, 0.125, 0.13, 32), rubber));
+    cap.position.y = 1.37;
+    const bulb = shadows(new THREE.Mesh(new THREE.SphereGeometry(0.105, 32, 16), rubber));
+    bulb.position.y = 1.53;
+    bulb.scale.y = 1.35;
+    g.add(liq, band, cap, bulb, body);
+    const hit = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.42, 0.42, 1.95, 12),
+      new THREE.MeshBasicMaterial({ visible: false }),
+    );
+    hit.position.y = 0.8;
+    hit.userData.substance = s.id;
+    g.add(hit);
+    const col = i % 4;
+    const row = Math.floor(i / 4);
+    g.position.set(-1.75 - col * 0.92, -1.2, row === 0 ? 0.62 : -0.62);
+    g.scale.setScalar(0.92);
+    scene.add(g);
+    return { id: s.id, s, g, liq, hit, built: -1, color: s.color, max: doseMax[s.id] || 1 };
+  });
+}
+
+function shapeBottle(b, dt) {
+  const left = Math.max(0, b.max - (b.s.count || 0));
+  const lv = 0.2 + 0.72 * (left / (b.max || 1));
+  if (Math.abs(lv - b.built) > 0.001) {
+    b.built = lv;
+    b.liq.geometry.dispose();
+    b.liq.geometry = lathe(window.THREE, [[0, 0.04], [0.27, 0.04], [0.28, 0.1], [0.28, lv], [0, lv]], 48);
+  }
+  const goal = -1.2 + (b.hover ? 0.06 : 0);
+  b.g.position.y += (goal - b.g.position.y) * Math.min(1, (dt || 0) * 12);
+}
+
+// --- per-frame updates -----------------------------------------------------
+
+function updateLiquid(flask, world, level, dt, reduced, commit) {
+  const goal = liquidLevelOf(world.volume, 500);
+  const next = level + (goal - level) * (reduced ? 1 : Math.min(1, dt * 4));
+  commit(next);
+  flask.shape(next);
+  const THREE = window.THREE;
+  const tint = new THREE.Color(world.liquidHex || "#cfe9f2");
+  flask.liquidMat.color.copy(tint).multiplyScalar(0.85);
+  flask.liquidMat.emissive.copy(tint).multiplyScalar(0.5);
+  flask.menMat.color.copy(tint).lerp(new THREE.Color(0xffffff), 0.12);
+  flask.menMat.emissive.copy(tint).multiplyScalar(0.45);
+  flask.setSediment(world.precipite || 0, world.precipiteColor);
+}
+
+function buildEffects(THREE, scene, flask) {
+  const bubbles = new THREE.InstancedMesh(
+    new THREE.SphereGeometry(1, 12, 8),
+    new THREE.MeshStandardMaterial({
+      color: 0xffffff, roughness: 0.05, emissive: 0xe6fff0,
+      emissiveIntensity: 0.55, transparent: true, opacity: 0.85, depthTest: false,
+    }),
+    BUBBLES,
+  );
+  bubbles.count = 0;
+  bubbles.renderOrder = 10;
+  bubbles.frustumCulled = false;
+  flask.group.add(bubbles);
+  const bubs = [];
+  for (let i = 0; i < BUBBLES; i++) {
+    bubs.push({ a: Math.random() * 6.28, r: Math.random(), y: Math.random(), v: 0.18 + Math.random() * 0.3, s: 0.03 + Math.random() * 0.035 });
+  }
+  const steamMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false });
+  const steam = [];
+  for (let i = 0; i < 6; i++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), steamMat.clone());
+    m.visible = false;
+    scene.add(m);
+    steam.push({ m, ph: i / 6 });
+  }
+  const ripple = new THREE.Mesh(
+    new THREE.TorusGeometry(0.1, 0.008, 6, 48),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthTest: false }),
+  );
+  ripple.renderOrder = 11;
+  ripple.rotation.x = Math.PI / 2;
+  ripple.visible = false;
+  scene.add(ripple);
+  const drops = [];
+  return {
+    bubbles, bubs, steam, ripple, drops, rippleT: 1,
+    dropGeo: new THREE.SphereGeometry(0.075, 20, 14),
+    pour(id, bottles) {
+      const b = bottles.find((x) => x.id === id);
+      if (!b) return;
+      const m = new THREE.Mesh(this.dropGeo, new THREE.MeshStandardMaterial({
+        color: b.color, roughness: 0.1, emissive: b.color, emissiveIntensity: 0.2,
+      }));
+      m.scale.y = 1.35;
+      m.position.set(b.g.position.x * 0.35, 3.9, 0);
+      scene.add(m);
+      drops.push({ m, t: 0, x: m.position.x });
+    },
+    dispense(ml, burette) {
+      for (let i = 0; i < Math.min(6, Math.max(1, Math.round(ml / 2))); i++) {
+        const m = new THREE.Mesh(this.dropGeo, new THREE.MeshStandardMaterial({
+          color: 0xc4b5fd, roughness: 0.1, emissive: 0x7c3aed, emissiveIntensity: 0.25,
+        }));
+        m.scale.setScalar(0.5);
+        m.position.set(0, 2.3, -0.28);
+        scene.add(m);
+        drops.push({ m, t: 0.18 * i, x: 0 });
+      }
+      burette.group.position.y = 2.42;
+    },
+  };
+}
+
+function updateBubbles(fx, world, level, step) {
+  const THREE = window.THREE;
+  const vigorous = world.gasFizz > 0.05 || world.boiling;
+  const n = world.volume > 0 && world.fizz ? BUBBLES : vigorous ? 18 : world.heating && world.temp > 55 ? 12 : 0;
+  fx.bubbles.count = n;
+  const m4 = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const sc = new THREE.Vector3();
+  const pv = new THREE.Vector3();
+  for (let i = 0; i < n; i++) {
+    const b = fx.bubs[i];
+    b.y += b.v * step * (1 + world.gasFizz);
+    if (b.y > 1) b.y = 0.05;
+    const top = Math.max(0.12, level - 0.04);
+    const y = 0.1 + b.y * (top - 0.1);
+    const rr = flaskInnerRadius(y) * 0.78 * b.r;
+    fx.bubbles.setMatrixAt(i, m4.compose(pv.set(Math.cos(b.a) * rr, y, Math.sin(b.a) * rr), q, sc.setScalar(b.s)));
+  }
+  fx.bubbles.instanceMatrix.needsUpdate = true;
+}
+
+function updateSteam(fx, world, t, reduced) {
+  const hot = Math.max(0, Math.min(1, (world.temp - 75) / 20));
+  for (const p of fx.steam) {
+    const k = ((reduced ? 0.3 : t) * 0.35 + p.ph) % 1;
+    p.m.visible = hot > 0.01;
+    p.m.position.set(Math.sin(k * 6 + p.ph * 9) * 0.12, 2.5 + k * 0.85, 0);
+    p.m.scale.setScalar(0.5 + k * 1.2);
+    p.m.material.opacity = hot * 0.35 * Math.sin(k * Math.PI);
+  }
+}
+
+function updateThermometer(th, world) {
+  const h = 0.12 + (Math.max(0, Math.min(100, world.temp)) / 100) * 2.3;
+  th.column.scale.y = h;
+  th.column.position.y = h / 2 + 0.08;
+}
+
+function updateBurner(burner, world, ctx, t, reduced) {
+  const b = world.material.bruleur;
+  const lit = !!(b && ctx.isActive("material", "bruleur") && b.strength > 0);
+  burner.flame.visible = lit;
+  burner.glow.visible = lit;
+  if (!lit) return;
+  const p = 0.45 + (b.strength / 100) * 0.75;
+  const f = reduced ? 1 : 1 + Math.sin(t * 31) * 0.06 + Math.sin(t * 17) * 0.05;
+  burner.flame.scale.set(p / Math.sqrt(f), p * f, p / Math.sqrt(f));
+  burner.glow.intensity = 0.4 + p * 0.6;
+}
+
+function updateDrops(fx, scene, level, dt, reduced) {
+  for (let i = fx.drops.length - 1; i >= 0; i--) {
+    const d = fx.drops[i];
+    d.t += reduced ? 1 : dt;
+    const k = Math.min(1, Math.max(0, d.t / 0.55));
+    const land = Math.max(0.12, level);
+    d.m.position.y = 3.9 - (3.9 - land) * k * k;
+    d.m.position.x = d.x * (1 - k);
+    if (k >= 1) {
+      scene.remove(d.m);
+      d.m.material.dispose();
+      fx.drops.splice(i, 1);
+      fx.rippleT = 0;
+    }
+  }
+  if (fx.rippleT < 1) {
+    fx.rippleT += reduced ? 1 : dt / 0.6;
+    fx.ripple.visible = fx.rippleT < 1 && level > 0.06;
+    fx.ripple.position.y = level + 0.01;
+    fx.ripple.scale.setScalar(1 + fx.rippleT * 3.5);
+    fx.ripple.material.opacity = 0.8 * (1 - fx.rippleT);
+  } else {
+    fx.ripple.visible = false;
+  }
+}
+
+function ghostFocus(ghost, fx, toScreen) {
+  const ptr = ghost.pointerTarget();
+  if (performance.now() - ptr.at < 2500) return { x: ptr.x, y: ptr.y };
+  if (fx.drops.length) {
+    const m = fx.drops[fx.drops.length - 1].m.position;
+    return toScreen(m.x, m.y, m.z);
+  }
+  return toScreen(-0.3, 0.6, 0);
+}
+
+// --- camera, picking -------------------------------------------------------
+
+function wirePicking(canvas, camera, hits, ctx, ghost, onHover) {
+  const THREE = window.THREE;
+  const ray = new THREE.Raycaster();
+  const ptr = new THREE.Vector2();
+  let hover = null;
+  function pick(e) {
+    const r = canvas.getBoundingClientRect();
+    ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ptr, camera);
+    const h = ray.intersectObjects(hits, false)[0];
+    return h ? h.object.userData : null;
+  }
+  canvas.addEventListener("pointermove", (e) => {
+    hover = pick(e);
+    canvas.style.cursor = hover ? "pointer" : "default";
+    onHover(hover && hover.substance ? hover.substance : null);
+    const r = canvas.getBoundingClientRect();
+    ghost.lookAtPointer(e.clientX - r.left, e.clientY - r.top);
+  });
+  canvas.addEventListener("pointerleave", () => { hover = null; onHover(null); });
+  canvas.addEventListener("click", (e) => {
+    const h = pick(e) || hover;
+    if (!h) return;
+    if (h.substance) ctx.addDose(h.substance);
+    else if (h.burner) ctx.toggleBurner();
+    else if (h.burette) ctx.dispense(e.shiftKey ? 5 : 1);
+  });
+}
+
+// ---- engines/chimie/hud.js (inlined) ----
+// Chemistry HUD (design C4 "blown glass"): frosted-glass panels floating on the page colour
+// over the 3D bench. Top: brand, steps as tabs, home. Right: measures (Lab) or the Laws,
+// Knobs and Notebook sheets. Under each bottle: its dose pill. Bottom: time + status + Measure.
+
+const CH_ICONS = {
+  back: '<path d="M15 6l-6 6 6 6"/>',
+  pause: '<path d="M9 5.5v13M15 5.5v13" stroke-width="2.8"/>',
+  play: '<path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/>',
+  empty: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5v4h4"/>',
+  step: '<path d="M6 5v14M10 12h9M15 8l4 4-4 4"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  next: '<path d="M9 6l6 6-6 6"/>',
+};
+const chIcon = (k) => `<svg class="ch-i" viewBox="0 0 24 24" aria-hidden="true">${CH_ICONS[k]}</svg>`;
+const chEsc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+
 
 function buildChemHud(host, ctx, view) {
   if (!document.getElementById("ch-style")) {
@@ -2969,12 +3520,15 @@ function buildChemHud(host, ctx, view) {
         `<p class="ch-num ch-big"><span class="v">0</span>${unit}</p>` +
         '<svg class="ch-spark" viewBox="0 0 200 50" preserveAspectRatio="none" aria-hidden="true"><path class="area" fill="#ff5a3d" fill-opacity=".16"/><path class="line" fill="none" stroke="#ff5a3d" stroke-width="2.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>';
     } else if (m.source === "ph") {
-      card.innerHTML = `<div class="ch-wh"><p class="ch-cap">${chEsc(m.label)}</p><span class="ch-mut lab"></span></div>` +
+      card.innerHTML = `<div class="ch-wh"><p class="ch-cap">${chEsc(m.label)}</p><span class="ch-eq" hidden>equivalence</span><span class="ch-mut lab"></span></div>` +
         `<p class="ch-num ch-mid"><span class="v">0</span>${unit}</p>` +
         '<div class="ch-phb"><u></u></div><div class="ch-phl"><span>acid</span><span>basic</span></div>';
     } else if (m.source === "volume") {
       card.innerHTML = `<div class="ch-wh"><p class="ch-cap">${chEsc(m.label)}</p><span class="ch-mut of">of 500 ${chEsc(m.unit || "")}</span></div>` +
         `<p class="ch-num ch-mid"><span class="v">0</span>${unit}</p><div class="ch-vb"><i></i></div>`;
+    } else if (m.source === "precipite") {
+      card.innerHTML = `<div class="ch-wh"><p class="ch-cap">${chEsc(m.label)}</p><span class="ch-mut sw" hidden></span></div>` +
+        `<p class="ch-num ch-mid"><span class="v">0</span>${unit}</p>`;
     } else {
       card.innerHTML = `<p class="ch-cap">${chEsc(m.label)}</p><p class="ch-num ch-mid"><span class="v">0</span>${unit}</p>`;
     }
@@ -3017,7 +3571,7 @@ function buildChemHud(host, ctx, view) {
     });
   }
 
-  // Knobs sheet: config sliders + the burner switch.
+  // Knobs sheet: config sliders + the burner switch + the burette buttons.
   const sliders = [];
   let burnerBox = null;
   if (steps.some((s) => s.id === "knobs")) {
@@ -3030,6 +3584,23 @@ function buildChemHud(host, ctx, view) {
       burnerBox = row.querySelector("input");
       burnerBox.addEventListener("change", () => ctx.setBurner(burnerBox.checked));
       s.appendChild(row);
+    }
+    if (state.material.burette) {
+      const b = document.createElement("div");
+      b.className = "ch-bur";
+      b.innerHTML =
+        '<button type="button" class="ink" data-ml="1">+1 mL</button>' +
+        '<button type="button" data-ml="5">+5 mL</button>' +
+        '<button type="button" data-ml="drain">Drain</button>' +
+        '<small>NaOH 0.1 M</small>';
+      b.querySelectorAll("button").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const ml = btn.dataset.ml;
+          if (ml === "drain") ctx.drainBurette();
+          else ctx.dispense(Number(ml));
+        });
+      });
+      s.appendChild(b);
     }
     config.controls.forEach((c, i) => {
       const w = document.createElement("div");
@@ -3177,12 +3748,13 @@ function buildChemHud(host, ctx, view) {
 
   // Dose pill under each bottle; flask tag at the neck.
   const pills = config.substances.map((s) => {
-    const el = add(`<div class="ch-gx ch-pill ch-bl"><span></span><small></small><button type="button">${chIcon("plus")}</button></div>`);
+    const el = add(`<div class="ch-gx ch-pill ch-bl"><span></span><small></small><button type="button" class="minus" aria-label="Take one dose back">&#8722;</button><button type="button">${chIcon("plus")}</button></div>`);
     el.style.setProperty("--c", s.color);
     el.querySelector("span").textContent = view.shortName(s.label);
-    const btn = el.querySelector("button");
+    const btn = el.querySelector("button:not(.minus)");
     btn.setAttribute("aria-label", `Pour one dose of ${s.label}`);
     btn.addEventListener("click", () => ctx.addDose(s.id));
+    el.querySelector("button.minus").addEventListener("click", () => ctx.removeDose(s.id));
     return { s, el, count: el.querySelector("small"), btn, last: "" };
   });
   const flaskMat = config.material.find((m) => m.kind === "recipient");
@@ -3263,7 +3835,10 @@ function buildChemHud(host, ctx, view) {
   let lastSpark = "";
   let lastPlay = null;
   let lastBadge = -1;
-  const fmt = (v, src) => (src === "volume" ? String(Math.round(v)) : (Math.round(v * 10) / 10).toFixed(1));
+  const fmt = (v, src) =>
+    src === "volume" ? String(Math.round(v)) :
+    src === "precipite" ? v.toFixed(3) :
+    (Math.round(v * 10) / 10).toFixed(1);
   function refresh() {
     const vals = ctx.metricValues();
     for (const c of cards) {
@@ -3275,8 +3850,17 @@ function buildChemHud(host, ctx, view) {
       if (c.m.source === "ph") {
         c.card.querySelector(".ch-phb u").style.left = `${Math.max(0, Math.min(100, (v / 14) * 100)).toFixed(1)}%`;
         c.card.querySelector(".lab").textContent = v < 6.5 ? "acid" : v > 7.5 ? "basic" : "neutral";
+        c.card.querySelector(".ch-eq").hidden = !ctx.world.eqPoint;
       } else if (c.m.source === "volume") {
         c.card.querySelector(".ch-vb i").style.width = `${Math.min(100, (v / 500) * 100).toFixed(1)}%`;
+      } else if (c.m.source === "precipite") {
+        const sw = c.card.querySelector(".sw");
+        const hex = ctx.world.precipiteColor;
+        sw.hidden = !(hex && v > 0);
+        if (hex) {
+          sw.textContent = hex === "#0ea5e9" ? "Cu(OH)2" : "AgCl";
+          sw.style.color = hex === "#f1f5f9" ? "#475569" : hex;
+        }
       }
     }
     // Temperature trend chip + sparkline.
@@ -3360,16 +3944,19 @@ function buildChemHud(host, ctx, view) {
 
 // ---- app-chimie/game.js (inlined) ----
 // Chemistry Lab (design C4 "blown glass"): full-screen 3D bench + glass HUD, booted headless.
-// lab.js stays the shell wiring used by the validator / MCP server; this is what the page runs.
+// lab.js stays the shell wiring used by the validator / MCP server / tests; this is what the page runs.
 
-const gameManifest = { measures: [{ id: "temp" }, { id: "ph" }, { id: "volume" }] };
+const gameManifest = {
+  measures: [{ id: "temp" }, { id: "ph" }, { id: "volume" }, { id: "precipite" }, { id: "pression" }],
+};
+
+const BURETTE_MAX = 50;
 
 async function startGame(source) {
   const boot = await bootHeadless(source, [chimiePack], gameManifest);
   const { config, catalog, clock, isActive, setActive } = boot;
   const host = document.getElementById("game");
   host.innerHTML = "";
-  // Full-screen host in both builds (the standalone page has no #game rule of its own).
   host.style.cssText = "position:fixed;inset:0;overflow:hidden;";
   document.documentElement.style.setProperty("--page", config.lab.page);
 
@@ -3380,30 +3967,21 @@ async function startGame(source) {
   };
   const laws = config.laws.map((entry, i) => {
     const mod = catalog.laws[entry.law];
-    return { id: `${entry.law}#${i}`, mod, targetIds: entry.targets || null, params: { ...mod.defaults, ...(entry.params || {}) } };
+    return {
+      id: `${entry.law}#${i}`,
+      mod,
+      targetIds: entry.targets || null,
+      params: { ...mod.defaults, ...(entry.params || {}) },
+    };
   });
   const world = createWorld({ substances: config.substances, material: config.material, laws });
-  // Same state shape as lab.js: control paths (substances.x.count, material.x.strength) edit it live.
-  const state = { substances: byId(config.substances), material: byId(config.material), laws: laws.map((l) => l.params), bench: config.bench };
-
-  const bookKey = `labkit.${config.lab.id}.notebook`;
-  let book = { notes: [], snapshots: [] };
-  try {
-    const raw = JSON.parse(localStorage.getItem(bookKey) || "null");
-    if (raw && typeof raw === "object") {
-      book = { notes: Array.isArray(raw.notes) ? raw.notes : [], snapshots: Array.isArray(raw.snapshots) ? raw.snapshots : [] };
-    }
-  } catch {
-    /* unreadable notebook: start a fresh one */
-  }
-  const saveBook = () => {
-    try {
-      localStorage.setItem(bookKey, JSON.stringify(book));
-    } catch {
-      /* private mode: notebook works for the session only */
-    }
+  const state = {
+    substances: byId(config.substances),
+    material: byId(config.material),
+    laws: laws.map((l) => l.params),
+    bench: config.bench,
   };
-  const shortOf = (s) => (view ? view.shortName(s.label) : s.label);
+  const book = loadNotebook(config.lab.id);
   let flashMsg = "";
   let flashUntil = 0;
 
@@ -3411,9 +3989,8 @@ async function startGame(source) {
     config, catalog, clock, isActive, setActive, world, state,
     tab: "lab",
     history: [],
-    // Recompute what follows from the doses (volume, colour, pH) without advancing time.
     touch() { world.step(0, isActive); },
-    flash(msg) { flashMsg = msg; flashUntil = performance.now() + 2200; },
+    flash(msg) { flashMsg = msg; flashUntil = performance.now() + 2400; },
     doseMax(id) {
       const c = config.controls.find((x) => x.path === `substances.${id}.count`);
       return c ? c.max : 3;
@@ -3430,6 +4007,30 @@ async function startGame(source) {
       view.pour(id);
       ctx.touch();
     },
+    removeDose(id) {
+      const s = state.substances[id];
+      if (!s || (s.count || 0) <= 0) return;
+      s.count -= 1;
+      ctx.touch();
+    },
+    // Titration: the burette dispenses NaOH 0.1 M in 1 mL or 5 mL steps.
+    dispense(ml) {
+      const b = state.material.burette;
+      if (!b) return;
+      const next = Math.min(BURETTE_MAX, (b.strength || 0) + ml);
+      if (next === b.strength) {
+        ctx.flash("Burette empty: reset the flask to refill it");
+        return;
+      }
+      b.strength = next;
+      view.dispense(ml);
+      ctx.touch();
+    },
+    drainBurette() {
+      const b = state.material.burette;
+      if (b) b.strength = 0;
+      ctx.touch();
+    },
     setBurner(on) {
       setActive("material", "bruleur", on);
       const b = state.material.bruleur;
@@ -3444,19 +4045,20 @@ async function startGame(source) {
     togglePause() { clock.running = !clock.running; },
     emptyFlask() {
       config.substances.forEach((s) => { s.count = 0; });
+      ctx.drainBurette();
       world.reset();
       clock.reset();
       ctx.history.length = 0;
       ctx.touch();
-      ctx.history.push(world.temp);
-      ctx.flash("Flask emptied and rinsed");
+      ctx.history.push(world.ph);
+      ctx.flash("Flask emptied, rinsed, burette refilled");
     },
     stepOnce() {
       if (clock.running) return;
       world.step(1 / 60, isActive);
       clock.advance(1 / 60);
-      ctx.history.push(world.temp);
-      if (ctx.history.length > 80) ctx.history.shift();
+      ctx.history.push(world.ph);
+      if (ctx.history.length > 200) ctx.history.shift();
     },
     metricValues() {
       const flat = world.measures();
@@ -3467,20 +4069,13 @@ async function startGame(source) {
     status() {
       if (flashMsg && performance.now() < flashUntil) return { text: flashMsg, colors: [] };
       const present = config.substances.filter((s) => (s.count || 0) > 0);
-      const colors = present.map((s) => s.color);
-      if (!present.length) return { text: "Empty flask: pour a solution", colors };
-      if (world.temp >= 99.5) return { text: "Boiling!", colors };
-      if (world.fizz) return { text: "Acid reaction: bubbles, heat, pH falls", colors };
-      const d = world.doses();
-      let text = d.bleu > 0 && d.jaune > 0 ? "Blue + yellow → green" : `${present.map((s) => shortOf(s)).join(" + ")} in the flask`;
-      if (world.heating) text += " · heating";
-      return { text, colors };
+      return describeState(world, present);
     },
-    notebook() { return book; },
-    addNote(text) { book.notes.push({ t: clock.t, text }); saveBook(); },
-    deleteNote(i) { book.notes.splice(i, 1); saveBook(); },
+    notebook() { return book.data; },
+    addNote(text) { book.data.notes.push({ t: clock.t, text }); book.save(); },
+    deleteNote(i) { book.data.notes.splice(i, 1); book.save(); },
     record() {
-      book.snapshots.push({
+      book.data.snapshots.push({
         t: clock.t,
         metrics: ctx.metricValues(),
         params: {
@@ -3489,21 +4084,22 @@ async function startGame(source) {
           laws: JSON.parse(JSON.stringify(config.laws)),
         },
       });
-      saveBook();
+      book.save();
       ctx.flash("Measures saved to the notebook");
     },
-    deleteSnapshot(i) { book.snapshots.splice(i, 1); saveBook(); },
-    // Restore copies values into the live objects so the knobs, world and view keep their refs.
+    deleteSnapshot(i) { book.data.snapshots.splice(i, 1); book.save(); },
     restore(i) {
-      const sn = book.snapshots[i];
+      const sn = book.data.snapshots[i];
       if (!sn || !sn.params) return;
-      (sn.params.substances || []).forEach((p) => { if (state.substances[p.id]) state.substances[p.id].count = p.count; });
+      (sn.params.substances || []).forEach((p) => {
+        if (state.substances[p.id]) state.substances[p.id].count = p.count;
+      });
       (sn.params.material || []).forEach((p) => {
         const m = state.material[p.id];
         if (m && typeof p.strength === "number") m.strength = p.strength;
       });
       ctx.touch();
-      ctx.flash("Recorded doses restored");
+      ctx.flash("Recorded doses and burette restored");
     },
     insets: () => (hud ? hud.insets() : null),
     onFrame: () => { if (hud) hud.layout(); },
@@ -3514,11 +4110,49 @@ async function startGame(source) {
   hud = buildChemHud(host, ctx, view);
   view.resize();
   ctx.touch();
-  ctx.history.push(world.temp);
+  ctx.history.push(world.ph);
   const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (reduced) clock.running = false;
 
-  let acc = 0; // fixed-step accumulator: the chemistry must not depend on frame rate
+  const loop = makeLoop(clock, world, ctx, view, hud, isActive);
+  requestAnimationFrame(loop.frame);
+  return { ctx, view, hud };
+}
+
+function shortOf(s) {
+  const words = String(s.label).split(/\s+/).filter((w) => w && !/^(0\.1|solution|m)$/i.test(w));
+  return words.sort((a, b) => b.length - a.length)[0] || s.label;
+}
+
+function loadNotebook(labId) {
+  const key = `labkit.${labId}.notebook`;
+  let data = { notes: [], snapshots: [] };
+  try {
+    const raw = JSON.parse(localStorage.getItem(key) || "null");
+    if (raw && typeof raw === "object") {
+      data = {
+        notes: Array.isArray(raw.notes) ? raw.notes : [],
+        snapshots: Array.isArray(raw.snapshots) ? raw.snapshots : [],
+      };
+    }
+  } catch {
+    /* unreadable notebook: start a fresh one */
+  }
+  return {
+    data,
+    save() {
+      try {
+        localStorage.setItem(key, JSON.stringify(data));
+      } catch {
+        /* private mode: notebook works for the session only */
+      }
+    },
+  };
+}
+
+// Fixed-step accumulator: the chemistry must not depend on the frame rate.
+function makeLoop(clock, world, ctx, view, hud, isActive) {
+  let acc = 0;
   let hist = 0;
   let last = performance.now();
   function frame(now) {
@@ -3540,25 +4174,24 @@ async function startGame(source) {
       if (n === 4) acc = 0;
       while (hist >= 0.25) {
         hist -= 0.25;
-        ctx.history.push(world.temp);
-        if (ctx.history.length > 80) ctx.history.shift();
+        ctx.history.push(world.ph);
+        if (ctx.history.length > 200) ctx.history.shift();
       }
     }
     view.render(dt);
     hud.refresh();
   }
-  requestAnimationFrame(frame);
-  return { ctx, view, hud };
+  return { frame };
 }
 
 startGame({
   "lab": {
     "id": "chimie",
     "title": "Chemistry Lab",
-    "subtitle": "Pour, mix and heat in real 3D glassware.",
+    "subtitle": "Real aqueous chemistry: acids, bases, precipitates, gas, titration.",
     "accent": "#a8e05f",
     "page": "#6cc95a",
-    "note": "Same kit as Bridge Lab. Only this lab differs: substances, material, laws and instruments.",
+    "note": "Pour real reagents, watch the pH meter, the balance and the manometer. Titrate with the burette.",
     "lang": "en"
   },
   "bench": {
@@ -3568,39 +4201,54 @@ startGame({
   },
   "bounds": "wrap",
   "substances": [
-    { "id": "bleu", "label": "Blue solution", "count": 1, "color": "#2563eb", "radius": 3, "mass": 1, "speed": 0 },
-    { "id": "jaune", "label": "Yellow solution", "count": 1, "color": "#facc15", "radius": 3, "mass": 1, "speed": 0 },
-    { "id": "acide", "label": "Mild acid", "count": 0, "color": "#f97316", "radius": 3, "mass": 1, "speed": 0 }
+    { "id": "hcl", "label": "Hydrochloric acid 0.1 M", "count": 0, "color": "#f59e0b", "radius": 3, "mass": 1, "speed": 0 },
+    { "id": "ch3cooh", "label": "Acetic acid 0.1 M", "count": 0, "color": "#84cc16", "radius": 3, "mass": 1, "speed": 0 },
+    { "id": "naoh", "label": "Sodium hydroxide 0.1 M", "count": 0, "color": "#a855f7", "radius": 3, "mass": 1, "speed": 0 },
+    { "id": "nh3", "label": "Ammonia 0.1 M", "count": 0, "color": "#ec4899", "radius": 3, "mass": 1, "speed": 0 },
+    { "id": "cuso4", "label": "Copper(II) sulfate 0.1 M", "count": 0, "color": "#38bdf8", "radius": 3, "mass": 1, "speed": 0 },
+    { "id": "nahco3", "label": "Sodium bicarbonate 0.1 M", "count": 0, "color": "#fde68a", "radius": 3, "mass": 1, "speed": 0 },
+    { "id": "agno3", "label": "Silver nitrate 0.1 M", "count": 0, "color": "#e2e8f0", "radius": 3, "mass": 1, "speed": 0 },
+    { "id": "bbt", "label": "Bromothymol blue (5 mL)", "count": 0, "color": "#22c55e", "radius": 3, "mass": 1, "speed": 0 }
   ],
   "material": [
     { "id": "erlenmeyer", "kind": "recipient", "label": "Erlenmeyer 500 mL", "x": 0.38, "y": 0.62 },
-    { "id": "bruleur", "kind": "bruleur", "label": "Bunsen burner", "x": 0.38, "y": 0.9, "strength": 60 }
+    { "id": "bruleur", "kind": "bruleur", "label": "Bunsen burner", "x": 0.38, "y": 0.9, "strength": 0 },
+    { "id": "burette", "kind": "burette", "label": "NaOH burette", "x": 0.38, "y": 0.25, "strength": 0 }
   ],
   "laws": [
-    { "law": "melange-couleurs" },
-    { "law": "reaction-acide" },
-    { "law": "chauffage" }
+    { "law": "dilution", "params": { "doseMl": 25, "molarity": 0.1 } },
+    { "law": "equilibre-acido-basique" },
+    { "law": "enthalpie-reaction", "params": { "ambient": 20, "deltaH": 57.3 } },
+    { "law": "precipitation" },
+    { "law": "degagement-gazeux", "params": { "pAtm": 101.3 } },
+    { "law": "indicateur-colore" },
+    { "law": "ebullition", "params": { "boilingPoint": 99.5 } }
   ],
   "metrics": [
     { "id": "temperature", "label": "Temperature", "unit": "°C", "source": "temp", "color": "#dc2626" },
-    { "id": "ph", "label": "pH", "unit": "", "source": "ph", "color": "#16a34a" },
-    { "id": "volume", "label": "Volume", "unit": "mL", "source": "volume", "color": "#2563eb" }
+    { "id": "ph", "label": "pH", "unit": "", "source": "ph", "color": "#7c3aed" },
+    { "id": "volume", "label": "Volume", "unit": "mL", "source": "volume", "color": "#2563eb" },
+    { "id": "precipite", "label": "Precipitate", "unit": "g", "source": "precipite", "color": "#0ea5e9" },
+    { "id": "pression", "label": "Pressure", "unit": "kPa", "source": "pression", "color": "#f97316" }
   ],
   "instruments": [
-    { "type": "chips", "metrics": ["temperature", "ph", "volume"] },
-    { "type": "curve", "metrics": ["temperature"] }
+    { "type": "chips", "metrics": ["temperature", "ph", "volume", "precipite", "pression"] },
+    { "type": "curve", "title": "pH titration curve", "metrics": ["ph"], "samples": 200 }
   ],
   "controls": [
-    { "path": "substances.bleu.count", "label": "Blue doses", "min": 0, "max": 2, "step": 1 },
-    { "path": "substances.jaune.count", "label": "Yellow doses", "min": 0, "max": 2, "step": 1 },
-    { "path": "substances.acide.count", "label": "Acid doses", "min": 0, "max": 1, "step": 1 },
-    { "path": "material.bruleur.strength", "label": "Burner power", "min": 0, "max": 100, "step": 5 }
+    { "path": "material.bruleur.strength", "label": "Burner power", "min": 0, "max": 100, "step": 5 },
+    { "path": "material.burette.strength", "label": "Burette (mL NaOH added)", "min": 0, "max": 50, "step": 1 }
   ],
   "notebook": {
     "enabled": true,
     "prompts": [
-      "Blue + yellow: what color do you get?",
-      "What does the acid change: bubbles, heat, pH?"
+      "Titrate 25 mL of HCl with the NaOH burette: where is the equivalence point on the pH curve?",
+      "Mix CuSO4 with NaOH: what blue solid falls out, and how many grams?",
+      "Add NH3 on top of that precipitate: why does it dissolve back into a deep blue solution?",
+      "Mix NaHCO3 with HCl: watch the manometer climb. How much CO2 escapes?",
+      "Titrate CH3COOH instead of HCl: why is the pH jump smaller at equivalence?",
+      "Drop bromothymol blue in, then push the pH past 7.6: what color wins?",
+      "Which mixture warms up the most: strong acid + strong base, or weak acid + strong base?"
     ]
   }
 }

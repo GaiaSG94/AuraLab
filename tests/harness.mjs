@@ -97,26 +97,25 @@ export class Suite {
   }
 
   // Property: `generate(rng)` builds a case, `property(value)` must never throw.
+  // The property may be async; the run is queued and awaited by `settle()`.
   property(name, generate, property, options = {}) {
     const runs = options.runs || 40;
     const seed = options.seed || 1;
-    const rng = mulberry32(seed);
-    for (let i = 0; i < runs; i++) {
-      const value = generate(rng, i);
-      try {
-        property(value);
-      } catch (err) {
-        const minimal = minimize(value, property);
-        this.results.push({
-          name,
-          ok: false,
-          error: err.message,
-          counterexample: minimal,
-        });
-        return this;
+    const run = async () => {
+      const rng = mulberry32(seed);
+      for (let i = 0; i < runs; i++) {
+        const value = generate(rng, i);
+        try {
+          await property(value);
+        } catch (err) {
+          const minimal = await minimize(value, property);
+          this.results.push({ name, ok: false, error: err.message, counterexample: minimal });
+          return;
+        }
       }
-    }
-    this.results.push({ name, ok: true, runs });
+      this.results.push({ name, ok: true, runs });
+    };
+    this.pending.push(run());
     return this;
   }
 
@@ -140,14 +139,14 @@ export class Suite {
 }
 
 // Try to find the smallest failing value (greedy shrinking).
-function minimize(value, property) {
+async function minimize(value, property) {
   let current = value;
   let improved = true;
   while (improved) {
     improved = false;
     for (const candidate of shrink(current)) {
       try {
-        property(candidate);
+        await property(candidate);
       } catch {
         current = candidate;
         improved = true;

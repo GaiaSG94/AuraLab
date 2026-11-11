@@ -1,7 +1,16 @@
-// Chemistry Lab wiring: chemistry world + catalog laws declared in config.json.
+// Chemistry Lab wiring (DOM-free): stoichiometric world + 7 laws + 8 reagents.
+// game.js (the 3D page) uses this same contract; tests and the MCP server use it headlessly.
 import { createWorld } from "../engines/chimie/world.js";
 
-export const labManifest = { measures: [{ id: "temp" }, { id: "ph" }, { id: "volume" }] };
+export const labManifest = {
+  measures: [
+    { id: "temp" },
+    { id: "ph" },
+    { id: "volume" },
+    { id: "precipite" },
+    { id: "pression" },
+  ],
+};
 
 function byId(arr) {
   const o = {};
@@ -33,6 +42,7 @@ export function buildLab(api, config) {
       laws: laws.map((l) => l.params),
       bench: config.bench,
     },
+    world,
     step: (dt, isActive) => world.step(dt, isActive),
     draw: (ctx, W, H, isActive, hexToRgb) => world.draw(ctx, W, H, isActive, hexToRgb),
     reset: () => world.reset(),

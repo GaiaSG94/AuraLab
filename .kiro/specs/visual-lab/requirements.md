@@ -73,6 +73,14 @@ measurement contract.
 - REQ-33: A new law SHALL require only a new module file plus one registration
   line; the `add-element` prompt SHALL scaffold it.
 
+## Lab depth
+
+- REQ-50: The chemistry engine SHALL model real aqueous chemistry: molar dilution, charge-balance pH (strong and weak acids and bases), heat of neutralisation, insoluble precipitates with their mass in grams, CO2 gas evolution with the headspace pressure, and a colour indicator (bromothymol blue).
+- REQ-51: The chemistry lab SHALL expose five instruments worth of measurements (temperature, pH, volume, precipitate mass, pressure) and a titration burette.
+- REQ-52: The bridge engine SHALL draw members from a structural catalogue of at least six materials, each with its own cost, maximum span, stiffness, strength and self-weight, and each belonging to a mechanical family (tension only, compression only, or both).
+- REQ-53: A bridge site SHALL gate its material palette, so progression is visible in the dock.
+- REQ-54: The bridge dock SHALL show every allowed material with its cost and span, and the placement preview SHALL turn red when the span exceeds the material limit.
+
 ## Distribution and correctness
 
 - REQ-40: WHEN the sources change THEN `dist/` SHALL be rebuildable by
@@ -81,3 +89,22 @@ measurement contract.
   finite, whatever the slider values.
 - REQ-42: WHEN a requirement above states an invariant THEN the repository
   SHALL ship a property test named after its REQ number, and CI SHALL run it.
+
+## Lab depth (the two 3D labs)
+
+- REQ-43: The chemistry lab SHALL model real aqueous stoichiometry: molar
+  dilution, charge-balance pH over strong and weak acids and bases, heat of
+  neutralization, insoluble precipitates with a mass in grams, CO2 evolution
+  with a headspace pressure, and a pH indicator colour.
+- REQ-44: WHEN a reagent combination is simulated THEN pH SHALL stay within
+  [0, 14], temperature within [0, 100] degrees C, and every measure SHALL stay
+  finite, for any combination of doses and any burette volume.
+- REQ-45: The bridge lab SHALL offer at least six structural materials, each
+  with its own cost, maximum span, stiffness, strength and self-weight, and
+  each belonging to a family (beam: tension and compression; cable: tension
+  only; arch/pier: compression only).
+- REQ-46: WHEN a member is longer than its material allows, or would exceed the
+  site budget, or is not in the site palette THEN the placement SHALL be refused
+  with a message naming the reason.
+- REQ-47: WHEN a member snaps THEN it SHALL stay visible as a broken stub and the
+  test SHALL end as a collapse.

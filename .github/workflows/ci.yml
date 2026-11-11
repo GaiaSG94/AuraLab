@@ -66,6 +66,8 @@ jobs:
           node-version: "24"
       - name: Construire les labos autonomes
         run: node scripts/build-standalone.mjs
+      - name: Le bundle généré se parse (les imports ESM sont retirés)
+        run: node scripts/check-dist.mjs
       - name: Vérifier que dist/ est à jour
         run: |
           if ! git diff --exit-code -- dist/; then
