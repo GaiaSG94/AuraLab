@@ -41,7 +41,7 @@ export function ladderFor(level, rules = LEVEL_RULES) {
 export function paletteFor(level, rules = LEVEL_RULES) {
   const count = Math.min(
     MATERIAL_IDS.length,
-    rules.unlocks.start + Math.floor((level - rules.unlocks.start) / rules.unlocks.every) + 1,
+    rules.unlocks.start + Math.floor((level - 1) / rules.unlocks.every),
   );
   const n = Math.max(1, Math.min(MATERIAL_IDS.length, count));
   return UNLOCK_ORDER.slice(0, n).filter((id) => MATERIAL_IDS.includes(id));
@@ -68,6 +68,13 @@ export function levelSpec(level, purse, rules = LEVEL_RULES) {
     ladder,
     reward: rewardFor(n, rules),
   };
+}
+
+// Bank a cleared level: what the design left in the purse plus the reward.
+// The caller must gate this on a pending flag, or a replayed level pays twice.
+export function bankPurse(purse, spent, reward) {
+  const left = Math.max(0, Math.round(purse) - Math.max(0, Math.round(spent)));
+  return left + Math.max(0, Math.round(reward));
 }
 
 // Difficulty must never decrease: wider gap, more ghosts, heavier last ghost.

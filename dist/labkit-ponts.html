@@ -2538,7 +2538,7 @@ function ladderFor(level, rules = LEVEL_RULES) {
 function paletteFor(level, rules = LEVEL_RULES) {
   const count = Math.min(
     MATERIAL_IDS.length,
-    rules.unlocks.start + Math.floor((level - rules.unlocks.start) / rules.unlocks.every) + 1,
+    rules.unlocks.start + Math.floor((level - 1) / rules.unlocks.every),
   );
   const n = Math.max(1, Math.min(MATERIAL_IDS.length, count));
   return UNLOCK_ORDER.slice(0, n).filter((id) => MATERIAL_IDS.includes(id));
@@ -2565,6 +2565,13 @@ function levelSpec(level, purse, rules = LEVEL_RULES) {
     ladder,
     reward: rewardFor(n, rules),
   };
+}
+
+// Bank a cleared level: what the design left in the purse plus the reward.
+// The caller must gate this on a pending flag, or a replayed level pays twice.
+function bankPurse(purse, spent, reward) {
+  const left = Math.max(0, Math.round(purse) - Math.max(0, Math.round(spent)));
+  return left + Math.max(0, Math.round(reward));
 }
 
 // Difficulty must never decrease: wider gap, more ghosts, heavier last ghost.
@@ -3816,6 +3823,7 @@ function buildHud(host, ctx) {
     '<div class="ph-brand"><span class="ph-logo"></span><b></b></div>' +
     '<div class="ph-gx ph-level"><div class="ph-lv" role="status" aria-label="Current level"><b>Level 1</b><small></small></div>' +
     `<button type="button" class="ph-next" title="Open the next level (N)"><span class="ph-nl">Next level</span>${phIcon("chev")}</button>` +
+    "</div>" +
     '<div class="ph-tr"><span class="ph-gx ph-score" title="Purse: what you may spend on this level">Purse <b>0</b></span>' +
     `<a class="ph-gx ph-home">${phIcon("back")}all labs</a></div>` +
     '<nav class="ph-gx ph-dock" aria-label="Materials and tools">' +
@@ -4413,7 +4421,7 @@ async function startGame(source) {
     // the player asks for it, so the cleared bridge stays on screen.
     levelCleared(reward) {
       if (pending) return;
-      save.purse = Math.max(0, save.purse - active().world.spent()) + reward;
+      save.purse = bankPurse(save.purse, active().world.spent(), reward);
       save.level += 1;
       delete save.designs[activeId];
       persist();
