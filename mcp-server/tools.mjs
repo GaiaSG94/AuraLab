@@ -6,12 +6,12 @@ import { buildLawSource, registerLaw } from "../scripts/add-element.mjs";
 import {
   packs,
   root,
-  listLabFolders,
+  listLabs as listLabFolders,
   knownForLab,
   readConfig,
   packOf,
   validateConfig,
-} from "./catalog.mjs";
+} from "../scripts/lab-registry.mjs";
 
 export const TOOLS = [
   {

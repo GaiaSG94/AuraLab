@@ -7,26 +7,8 @@
 // Each property names the EARS requirement it checks
 // (.kiro/specs/visual-lab/requirements.md).
 import { validateConfig } from "../core/validate.js";
-import { builtinInstruments } from "../core/catalog.js";
-import { particlePack } from "../engines/particles/index.js";
-import { chimiePack } from "../engines/chimie/index.js";
-import { pontsPack } from "../engines/ponts/index.js";
+import { known, packs } from "./labs.mjs";
 import { Suite } from "./harness.mjs";
-
-const packs = [particlePack, chimiePack, pontsPack];
-
-export const known = {
-  laws: {},
-  apparatus: packs.flatMap((p) => Object.keys(p.apparatus)),
-  instruments: Object.keys(builtinInstruments),
-  measures: packs.flatMap((p) => p.measures.map((m) => m.id)),
-  surfaces: ["stage", "webgl"],
-};
-packs.forEach((pack) => {
-  Object.keys(pack.laws).forEach((id) => {
-    known.laws[id] = { defaults: pack.laws[id].defaults || {} };
-  });
-});
 
 export function baseConfig() {
   return {

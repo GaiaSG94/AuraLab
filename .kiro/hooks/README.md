@@ -35,6 +35,11 @@ Any failure exits **2**, which blocks the tool call and returns the reason to
 the agent. The same three gates run in CI, so a change that cannot be
 committed locally cannot be merged either.
 
+Note the side effect: step 3 **rebuilds `dist/`** before comparing it with
+git, exactly like the CI `build` job does. If the sources changed and `dist/`
+was not rebuilt, the hook rebuilds it and then blocks, telling the agent to
+commit the result. The guard therefore takes a few seconds per ship command.
+
 The `Stop` hook reports the same failures once per session (it writes a
 marker in the temp dir), so it cannot loop forever.
 
