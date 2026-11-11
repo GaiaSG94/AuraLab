@@ -2633,18 +2633,27 @@ function buildFlaskGhost(THREE, opts) {
   const bodyGeo = lathe(THREE, PROFILE, 96);
   const hemBase = Float32Array.from(bodyGeo.attributes.position.array);
   const ink = new THREE.MeshStandardMaterial({ color: 0x17141f, roughness: 0.3 });
+  const scleraMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25 });
   const bodyMat = new THREE.MeshPhysicalMaterial({
     color: 0xfbf8ff, roughness: 0.35, clearcoat: 0.6, clearcoatRoughness: 0.2, side: THREE.DoubleSide,
   });
   group.add(shadows(new THREE.Mesh(bodyGeo, bodyMat)));
   const cheekMat = new THREE.MeshStandardMaterial({ color: 0xff9a62, roughness: 0.6 });
+  const sockets = new Map();
   for (const sx of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.085, 16, 12), ink);
-    eye.scale.set(1, 1.3, 0.55);
-    eye.position.set(sx * 0.225, EYE_Y, 0.72);
+    // White sclera first, then the pupil on top of it: both protrude from the
+    // head so the eyes read as eyes instead of sinking into the body shell.
+    const sclera = new THREE.Mesh(new THREE.SphereGeometry(0.15, 20, 14), scleraMat);
+    sclera.scale.set(1, 1.2, 0.5);
+    sclera.position.set(sx * 0.23, EYE_Y, 0.66);
+    group.add(sclera);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.1, 20, 14), ink);
+    eye.scale.set(1, 1.3, 0.8);
+    eye.position.set(sx * 0.225, EYE_Y, 0.74);
     eye.userData.sx = sx;
     group.add(eye);
     eyes.push(eye);
+    sockets.set(eye, sclera);
     const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 10), cheekMat);
     cheek.scale.set(1.2, 0.55, 0.3);
     cheek.position.set(sx * 0.46, 0.4, 0.62);
@@ -2701,12 +2710,23 @@ function buildFlaskGhost(THREE, opts) {
     const blinking = t > state.blinkAt && t < state.blinkAt + 0.13;
     if (t > state.blinkAt + 0.13) state.blinkAt = t + 2.4 + Math.random() * 3.2;
     for (const eye of eyes) {
-      const x = eye.userData.sx * 0.225 + state.look.x * 0.05;
+      const sx = eye.userData.sx;
+      const x = sx * 0.225 + state.look.x * 0.05;
       const y = EYE_Y - state.look.y * 0.045;
       const r = bodyRadiusAt(y);
-      eye.position.set(x, y, Math.sqrt(Math.max(0, r * r - x * x)) + 0.005);
+      // Centre the pupil ON the body surface, not inside it: the sphere then
+      // reads as an eye protruding from the head instead of a hidden blob.
+      const z = Math.sqrt(Math.max(0, r * r - x * x)) + 0.02;
+      eye.position.set(x, y, z);
       eye.rotation.y = Math.asin(Math.max(-1, Math.min(1, x / r)));
       eye.scale.y = blinking ? 0.15 : 1.3;
+      // The white socket rides with its pupil so the eye never slides off it.
+      const socket = sockets.get(eye);
+      if (socket) {
+        socket.position.set(sx * 0.23 + state.look.x * 0.02, y, z - 0.05);
+        socket.rotation.y = eye.rotation.y;
+        socket.scale.y = blinking ? 0.15 : 1.2;
+      }
     }
   }
 
@@ -2863,18 +2883,6 @@ const CH_CSS = `
 .ch-pager[hidden]{display:none}
 .ch-pager button{font:700 12px "Archivo",sans-serif;color:#0b2a17;padding:4px 10px;border-radius:999px;border:1.5px solid rgba(11,42,23,.25)!important}
 .ch-pager button:disabled{opacity:.35;cursor:default}
-.ch-bl{position:absolute;left:-400px;top:-400px;transform:translate(-50%,0);display:flex;align-items:center;gap:7px;padding:5px 5px 5px 11px;white-space:nowrap;font-weight:700;font-size:12.5px}
-.ch-bl small{font:600 11px "JetBrains Mono",ui-monospace,monospace;color:rgba(11,42,23,.6)}
-.ch-bl button{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:#0b2a17;color:#fff}
-.ch-bl button .ch-i{width:13px;height:13px;stroke-width:2.6}
-.ch-bl button:disabled{opacity:.3;cursor:default}
-.ch-bl::before{content:"";display:none;width:10px;height:10px;border-radius:50%;background:var(--c);flex:none;box-shadow:inset 0 -2px 3px rgba(0,0,0,.2)}
-.ch-root.compact .ch-bl{padding-left:9px}
-.ch-root.compact .ch-bl::before{display:block}
-.ch-root.compact .ch-bl>span{display:none}
-.ch-root.tiny .ch-bl{padding:3px;gap:0}
-.ch-root.tiny .ch-bl::before,.ch-root.tiny .ch-bl>span,.ch-root.tiny .ch-bl small{display:none}
-.ch-root.tiny .ch-bl button{box-shadow:0 0 0 3px var(--c)}
 .ch-tag{position:absolute;left:-400px;top:-400px;transform:translate(-100%,-50%);display:flex;flex-direction:row-reverse;align-items:center;font-weight:700;font-size:12px;white-space:nowrap;pointer-events:none}
 .ch-tag i{width:22px;height:1.5px;background:#0b2a17;position:relative;flex:none}
 .ch-tag i::before{content:"";position:absolute;right:-4px;top:-3px;width:7px;height:7px;border-radius:50%;background:#0b2a17}
@@ -2891,6 +2899,7 @@ const CH_CSS = `
 .ch-stat span{overflow:hidden;text-overflow:ellipsis}
 .ch-measure{height:42px;border-radius:999px;padding:0 18px 0 14px;display:flex;align-items:center;gap:7px;font-weight:700;font-size:13.5px;white-space:nowrap;background:#0b2a17;color:#fff;flex:none}
 .ch-measure i{width:8px;height:8px;border-radius:50%;background:#ff5a3d}
+@media (max-width:1100px){.ch-left{width:220px;left:14px;top:78px}}
 @media (max-width:900px){
   .ch-tabs{top:70px}
   .ch-side{left:16px;right:16px;top:auto;bottom:88px;width:auto;height:150px}
@@ -2902,6 +2911,7 @@ const CH_CSS = `
   .ch-home{right:16px}.ch-brand{left:16px}
 }
 @media (max-width:640px){
+  .ch-left{display:none}
   .ch-brand b{font-size:24px}
   .ch-tabs button{padding:0 12px;font-size:12.5px}
   .ch-home span{display:none}
@@ -2916,9 +2926,234 @@ const CH_CSS = `
 .ch-bur button:hover{background:rgba(255,255,255,.6)}
 .ch-bur button.ink{background:#0b2a17;color:#fff}
 .ch-bur small{font:600 11px "JetBrains Mono",ui-monospace,monospace;color:rgba(11,42,23,.6);flex:1;text-align:right}
-.ch-bl button.minus{background:rgba(255,255,255,.75);color:#0b2a17}
 .ch-eq{align-items:center;gap:5px;font-weight:800;font-size:11px;background:#16a34a;color:#fff;border-radius:999px;padding:3px 9px}
+.ch-left{position:absolute;left:24px;top:84px;bottom:96px;width:268px;padding:14px 16px;display:flex;flex-direction:column;gap:14px;overflow:auto;overscroll-behavior:contain}
+.ch-left>*{flex-shrink:0}
+.ch-lsec{display:flex;flex-direction:column;gap:7px}
+.ch-lsec h3{margin:0;font:700 10.5px/1.3 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;color:rgba(11,42,23,.6);display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.ch-lsec h3 small{font-weight:600;letter-spacing:0;text-transform:none;opacity:.8}
+.ch-sub{display:flex;align-items:center;gap:7px;min-height:30px}
+.ch-sub .dot{width:11px;height:11px;border-radius:50%;background:var(--c);flex:none;box-shadow:inset 0 -2px 3px rgba(0,0,0,.25)}
+.ch-sub .nm{flex:1;min-width:0;font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ch-sub .ct{font:700 11px "JetBrains Mono",ui-monospace,monospace;color:rgba(11,42,23,.7);flex:none}
+.ch-sub .sq{width:24px;height:24px;border-radius:8px;display:grid;place-items:center;font:700 15px/1 "Archivo",sans-serif;border:1.5px solid rgba(11,42,23,.3);flex:none}
+.ch-sub .sq:hover:not(:disabled){background:rgba(255,255,255,.65)}
+.ch-sub .sq.plus{background:#0b2a17;color:#fff;border-color:#0b2a17}
+.ch-sub .sq:disabled{opacity:.3;cursor:default}
+.ch-ins{display:flex;align-items:baseline;gap:8px;min-height:26px;border-bottom:1px solid rgba(11,42,23,.08);padding-bottom:4px}
+.ch-ins:last-child{border-bottom:0}
+.ch-ins .cap{flex:1;min-width:0;font-weight:600;font-size:11.5px;color:rgba(11,42,23,.78);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ch-ins .val b{font:700 17px "JetBrains Mono",ui-monospace,monospace;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.ch-ins .val small{font:600 10px "JetBrains Mono",ui-monospace,monospace;color:rgba(11,42,23,.6);margin-left:3px}
+.ch-ins .tag{font:700 9.5px "JetBrains Mono",ui-monospace,monospace;border-radius:999px;padding:2px 7px;white-space:nowrap;background:rgba(11,42,23,.12);color:#0b2a17}
+.ch-ins .tag[hidden]{display:none}
+.ch-ins .tag.acid{background:#ef4444;color:#fff}
+.ch-ins .tag.neutral{background:#22c55e;color:#fff}
+.ch-ins .tag.base{background:#7c3aed;color:#fff}
+.ch-ins .tag.solid{background:#0ea5e9;color:#fff}
+.ch-ins .tag.gas{background:#f97316;color:#fff}
+.ch-ins .tag.hot{background:#b91c1c;color:#fff}
+.ch-law{display:flex;align-items:center;gap:8px;min-height:28px}
+.ch-law .nm{flex:1;min-width:0;font-weight:600;font-size:12px}
 `;
+
+// ---- engines/chimie/hud-shared.js (inlined) ----
+// Chemistry HUD shared helpers: icon set and escaping.
+// Kept in one module so the HUD and its left column never drift apart.
+
+const CH_ICONS = {
+  back: '<path d="M15 6l-6 6 6 6"/>',
+  pause: '<path d="M9 5.5v13M15 5.5v13" stroke-width="2.8"/>',
+  play: '<path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/>',
+  empty: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5v4h4"/>',
+  step: '<path d="M6 5v14M10 12h9M15 8l4 4-4 4"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  next: '<path d="M9 6l6 6-6 6"/>',
+};
+
+const chIcon = (k) => `<svg class="ch-i" viewBox="0 0 24 24" aria-hidden="true">${CH_ICONS[k]}</svg>`;
+
+const chEsc = (s) =>
+  String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+// ---- engines/chimie/hud-left.js (inlined) ----
+// Chemistry HUD left column: the bench list.
+// Substances (with dose controls), instruments (live measures) and laws
+// (switches + notices) all live here, so the 3D bench keeps the right half
+// of the screen to itself.
+
+function buildLeftColumn({ add, config, ctx }) {
+  const col = add('<aside class="ch-left ch-gx"></aside>');
+
+  const substances = buildSubstances(col, config, ctx);
+  const instruments = buildInstruments(col, config, ctx);
+  const laws = buildLaws(col, config, ctx);
+
+  function refresh() {
+    substances.refresh();
+    instruments.refresh();
+    laws.refresh();
+  }
+
+  return { element: col, refresh };
+}
+
+// --- substances: one row per reagent, with its dose controls ---------------
+
+function buildSubstances(col, config, ctx) {
+  const card = section(col, "Substances", "click a flask or use −/+");
+  const rows = config.substances.map((s) => {
+    const row = document.createElement("div");
+    row.className = "ch-sub";
+    row.style.setProperty("--c", s.color);
+    row.innerHTML =
+      '<span class="dot" aria-hidden="true"></span>' +
+      '<span class="nm"></span>' +
+      '<span class="ct">×0</span>' +
+      '<button type="button" class="sq minus" aria-label="Take one dose back">&#8722;</button>' +
+      '<button type="button" class="sq plus" aria-label="Pour one dose">+</button>';
+    row.querySelector(".nm").textContent = s.label;
+    row.querySelector(".nm").title = s.label;
+    const minus = row.querySelector(".minus");
+    const plus = row.querySelector(".plus");
+    plus.addEventListener("click", () => ctx.addDose(s.id));
+    minus.addEventListener("click", () => ctx.removeDose(s.id));
+    card.appendChild(row);
+    return { s, row, ct: row.querySelector(".ct"), plus, minus, last: "" };
+  });
+
+  return {
+    refresh() {
+      for (const r of rows) {
+        const n = r.s.count || 0;
+        const max = ctx.doseMax(r.s.id);
+        const key = `${n}/${max}`;
+        if (key === r.last) continue;
+        r.last = key;
+        r.ct.textContent = `×${n}`;
+        r.plus.disabled = n >= max;
+        r.minus.disabled = n <= 0;
+      }
+    },
+  };
+}
+
+// --- instruments: one live readout per declared metric ---------------------
+
+function buildInstruments(col, config, ctx) {
+  const card = section(col, "Instruments", "live");
+  const rows = config.metrics.map((m) => {
+    const row = document.createElement("div");
+    row.className = "ch-ins";
+    row.innerHTML =
+      `<span class="cap">${chEsc(m.label)}</span>` +
+      `<span class="val"><b>0</b>${m.unit ? `<small>${chEsc(m.unit)}</small>` : ""}</span>` +
+      '<span class="tag" hidden></span>';
+    card.appendChild(row);
+    return {
+      m,
+      b: row.querySelector("b"),
+      tag: row.querySelector(".tag"),
+      last: "",
+    };
+  });
+
+  const fmt = (v, src) =>
+    src === "volume" ? String(Math.round(v)) :
+    src === "precipite" ? v.toFixed(3) :
+    (Math.round(v * 10) / 10).toFixed(1);
+
+  return {
+    refresh() {
+      const vals = ctx.metricValues();
+      for (const r of rows) {
+        const v = vals[r.m.id] || 0;
+        const txt = fmt(v, r.m.source);
+        if (txt === r.last) continue;
+        r.last = txt;
+        r.b.textContent = txt;
+        if (r.m.source === "ph") {
+          r.tag.hidden = false;
+          r.tag.textContent = v < 6 ? "acid" : v > 8 ? "basic" : "neutral";
+          r.tag.className = `tag ${v < 6 ? "acid" : v > 8 ? "base" : "neutral"}`;
+        } else if (r.m.source === "precipite") {
+          const hex = ctx.world.precipiteColor;
+          r.tag.hidden = !(hex && v > 0);
+          r.tag.textContent = hex === "#0ea5e9" ? "Cu(OH)2" : "AgCl";
+          r.tag.className = "tag solid";
+        } else if (r.m.source === "pression") {
+          r.tag.hidden = v <= 105;
+          r.tag.textContent = "CO2";
+          r.tag.className = "tag gas";
+        } else if (r.m.source === "temp") {
+          r.tag.hidden = !ctx.world.boiling;
+          r.tag.textContent = "boiling";
+          r.tag.className = "tag hot";
+        }
+      }
+    },
+  };
+}
+
+// --- laws: one switch per law, with its notice -----------------------------
+
+function buildLaws(col, config, ctx) {
+  const card = section(col, "Laws", `${config.laws.length} active`);
+  const boxes = config.laws.map((l, i) => {
+    const mod = ctx.catalog.laws[l.law];
+    const label = mod ? mod.notice.label : l.law;
+    const key = `${l.law}#${i}`;
+    const row = document.createElement("div");
+    row.className = "ch-law";
+    row.innerHTML =
+      `<label class="ch-sw"><input type="checkbox" aria-label="Enable ${chEsc(label)}"><span></span></label>` +
+      `<span class="nm">${chEsc(label)}</span>`;
+    const box = row.querySelector("input");
+    box.checked = ctx.isActive("laws", key);
+    box.addEventListener("change", () => {
+      ctx.setActive("laws", key, box.checked);
+      ctx.touch();
+    });
+    card.appendChild(row);
+    if (mod && mod.notice) {
+      const ib = document.createElement("button");
+      ib.type = "button";
+      ib.className = "ch-ib";
+      ib.textContent = "i";
+      ib.setAttribute("aria-label", `About ${label}`);
+      ib.setAttribute("aria-expanded", "false");
+      row.appendChild(ib);
+      const nb = document.createElement("div");
+      nb.className = "ch-notice";
+      nb.innerHTML =
+        `<b>${chEsc(label)}</b><br>Rule: ${chEsc(mod.notice.formule)}<br>` +
+        `Sources: ${chEsc(mod.notice.sources)}<br>Limits: ${chEsc(mod.notice.limites)}`;
+      ib.addEventListener("click", () => ib.setAttribute("aria-expanded", String(nb.classList.toggle("open"))));
+      card.appendChild(nb);
+    }
+    return box;
+  });
+
+  return {
+    refresh() {
+      boxes.forEach((box, i) => {
+        const key = `${config.laws[i].law}#${i}`;
+        if (box.checked !== ctx.isActive("laws", key)) box.checked = ctx.isActive("laws", key);
+      });
+    },
+  };
+}
+
+function section(parent, title, hint) {
+  const card = document.createElement("section");
+  card.className = "ch-lsec";
+  card.innerHTML =
+    `<h3>${chEsc(title)}${hint ? `<small>${chEsc(hint)}</small>` : ""}</h3>`;
+  parent.appendChild(card);
+  return card;
+}
+
 
 // ---- engines/chimie/benchview.js (inlined) ----
 // Chemistry bench view (Three.js via the global THREE): full-screen 3D glassware
@@ -2995,7 +3230,9 @@ function buildBenchView(host, ctx) {
 
   const manometer = buildManometer(THREE);
   manometer.group.scale.setScalar(0.78);
-  manometer.group.position.set(1.62, -0.55, 0.62);
+  // Behind and left of the flask: keeps it clear of the ghost (x = 2.25) and
+  // clear of the two rows of reagent bottles (x <= -1.75).
+  manometer.group.position.set(-1.05, -0.5, -1.2);
   scene.add(manometer.group);
 
   const bottles = buildBottles(THREE, scene, ctx.config.substances, ctx.config.controls || []);
@@ -3436,18 +3673,7 @@ function wirePicking(canvas, camera, hits, ctx, ghost, onHover) {
 // over the 3D bench. Top: brand, steps as tabs, home. Right: measures (Lab) or the Laws,
 // Knobs and Notebook sheets. Under each bottle: its dose pill. Bottom: time + status + Measure.
 
-const CH_ICONS = {
-  back: '<path d="M15 6l-6 6 6 6"/>',
-  pause: '<path d="M9 5.5v13M15 5.5v13" stroke-width="2.8"/>',
-  play: '<path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/>',
-  empty: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5v4h4"/>',
-  step: '<path d="M6 5v14M10 12h9M15 8l4 4-4 4"/>',
-  plus: '<path d="M12 5v14M5 12h14"/>',
-  x: '<path d="M6 6l12 12M18 6L6 18"/>',
-  next: '<path d="M9 6l6 6-6 6"/>',
-};
-const chIcon = (k) => `<svg class="ch-i" viewBox="0 0 24 24" aria-hidden="true">${CH_ICONS[k]}</svg>`;
-const chEsc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
 
 
 
@@ -3475,7 +3701,6 @@ function buildChemHud(host, ctx, view) {
   brand.querySelector("b").textContent = String(config.lab.title || "lab").toLowerCase();
   if (window.AuraGhost) window.AuraGhost.mount(brand.querySelector(".ch-logo"), "white");
   const steps = [{ id: "lab", label: "Lab" }];
-  if (config.laws.length > 0) steps.push({ id: "laws", label: "Laws" });
   if (config.controls.length > 0) steps.push({ id: "knobs", label: "Knobs" });
   if (config.notebook.enabled) steps.push({ id: "notebook", label: "Notebook" });
   const tabs = add('<nav class="ch-gx ch-pill ch-tabs" role="tablist" aria-label="Lab steps"></nav>');
@@ -3535,41 +3760,6 @@ function buildChemHud(host, ctx, view) {
     widgets.appendChild(card);
     return { m, card, v: card.querySelector(".v"), last: "" };
   });
-
-  // Laws sheet.
-  if (steps.some((s) => s.id === "laws")) {
-    const s = sheet("laws");
-    s.insertAdjacentHTML("beforeend", '<h3>Laws</h3><p class="ch-mut" style="white-space:normal">Switch a law off to see what it does.</p>');
-    config.laws.forEach((l, i) => {
-      const mod = ctx.catalog.laws[l.law];
-      const label = mod ? mod.notice.label : l.law;
-      const key = `${l.law}#${i}`;
-      const row = document.createElement("div");
-      row.className = "ch-row";
-      row.innerHTML = `<label class="ch-sw"><input type="checkbox" aria-label="Enable ${chEsc(label)}"><span></span></label><span class="nm">${chEsc(label)}</span>`;
-      const box = row.querySelector("input");
-      box.checked = ctx.isActive("laws", key);
-      box.addEventListener("change", () => {
-        ctx.setActive("laws", key, box.checked);
-        ctx.touch();
-      });
-      s.appendChild(row);
-      if (mod && mod.notice) {
-        const ib = document.createElement("button");
-        ib.type = "button";
-        ib.className = "ch-ib";
-        ib.textContent = "i";
-        ib.setAttribute("aria-label", `About ${label}`);
-        ib.setAttribute("aria-expanded", "false");
-        row.appendChild(ib);
-        const nb = document.createElement("div");
-        nb.className = "ch-notice";
-        nb.innerHTML = `<b>${chEsc(label)}</b><br>Rule: ${chEsc(mod.notice.formule)}<br>Sources: ${chEsc(mod.notice.sources)}<br>Limits: ${chEsc(mod.notice.limites)}`;
-        ib.addEventListener("click", () => ib.setAttribute("aria-expanded", String(nb.classList.toggle("open"))));
-        s.appendChild(nb);
-      }
-    });
-  }
 
   // Knobs sheet: config sliders + the burner switch + the burette buttons.
   const sliders = [];
@@ -3746,17 +3936,8 @@ function buildChemHud(host, ctx, view) {
   }
   select("lab");
 
-  // Dose pill under each bottle; flask tag at the neck.
-  const pills = config.substances.map((s) => {
-    const el = add(`<div class="ch-gx ch-pill ch-bl"><span></span><small></small><button type="button" class="minus" aria-label="Take one dose back">&#8722;</button><button type="button">${chIcon("plus")}</button></div>`);
-    el.style.setProperty("--c", s.color);
-    el.querySelector("span").textContent = view.shortName(s.label);
-    const btn = el.querySelector("button:not(.minus)");
-    btn.setAttribute("aria-label", `Pour one dose of ${s.label}`);
-    btn.addEventListener("click", () => ctx.addDose(s.id));
-    el.querySelector("button.minus").addEventListener("click", () => ctx.removeDose(s.id));
-    return { s, el, count: el.querySelector("small"), btn, last: "" };
-  });
+  // Left column: substances, instruments and laws (the bench list).
+  const left = buildLeftColumn({ add, config, ctx });
   const flaskMat = config.material.find((m) => m.kind === "recipient");
   const tag = add('<div class="ch-tag"><i></i><span class="ch-gx ch-pill"></span></div>');
   tag.querySelector("span").textContent = flaskMat ? flaskMat.label.replace(/\s+(\d+\s*mL)$/i, " · $1") : "Flask";
@@ -3805,27 +3986,12 @@ function buildChemHud(host, ctx, view) {
     const right = sideOnRight ? r.right - sb.left + 16 : 16;
     // An open sheet grows over the scene on small screens: frame for the 150px strip only.
     const bottom = r.bottom - Math.min(bb.top, sideOnRight ? bb.top : Math.max(sb.top, sb.bottom - 150)) + 10;
-    return { top, right, bottom, left: r.width > 900 ? 24 : 16 };
+    const lb = left.element.getBoundingClientRect();
+    const leftInset = lb.width > 0 && lb.left - r.left < r.width / 2 ? lb.right - r.left + 16 : 16;
+    return { top, right, bottom, left: Math.max(r.width > 900 ? 24 : 16, leftInset) };
   }
-  // Place the pills and the tag on their 3D anchors (after every camera fit).
+  // Place the flask tag on its 3D anchor (after every camera fit).
   function layout() {
-    const xs = [];
-    for (const p of pills) {
-      const a = view.anchors.bottle(p.s.id) || { x: -400, y: -400 };
-      xs.push(a.x);
-      p.el.style.left = `${a.x.toFixed(1)}px`;
-      p.el.style.top = `${(a.y + 10).toFixed(1)}px`;
-    }
-    // Bottles close together on screen: drop the names, then the counts, so pills never touch.
-    const fits = () => pills.every((p, i) => i === 0 || Math.abs(xs[i] - xs[i - 1]) >= (pills[i - 1].el.offsetWidth + p.el.offsetWidth) / 2 + 6);
-    root.classList.remove("compact", "tiny");
-    if (!fits()) {
-      root.classList.add("compact");
-      if (!fits()) {
-        root.classList.remove("compact");
-        root.classList.add("tiny");
-      }
-    }
     const n = view.anchors.neck();
     tag.style.left = `${n.x.toFixed(1)}px`;
     tag.style.top = `${n.y.toFixed(1)}px`;
@@ -3884,17 +4050,8 @@ function buildChemHud(host, ctx, view) {
         tc.card.querySelector(".area").setAttribute("d", `M${pts.join("L")}V50H0Z`);
       }
     }
-    // Dose pills.
-    for (const p of pills) {
-      const n = p.s.count || 0;
-      const max = ctx.doseMax(p.s.id);
-      const key = `${n}/${max}`;
-      if (key === p.last) continue;
-      p.last = key;
-      p.count.textContent = `×${n}`;
-      p.btn.disabled = n >= max;
-    }
-    // Knobs follow changes made elsewhere (pills, keys, restore).
+    left.refresh();
+    // Knobs follow changes made elsewhere (the left column, keys, restore).
     for (const sl of sliders) {
       const v = ctx.getControl(sl.c.path);
       if (v === sl.last) continue;

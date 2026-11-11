@@ -1,31 +1,20 @@
 // Bridge materials — the kit's structural catalogue.
 // Three families with real mechanics:
-//   beams   carry tension AND compression (wood, steel)
-//   cables  carry tension ONLY, and go slack (steel cable, rope)
+//   beams   carry tension AND compression (bamboo, wood, glulam, steel, truss)
+//   cables  carry tension ONLY, and go slack (rope, chain, steel cable)
 //   arches  carry compression ONLY, and buckle (arch, concrete pier)
 // DOM-free: importable in browsers and in Node.
 
 export const MATERIALS = {
-  bois: {
-    id: "bois", label: "Wood beam", kind: "beam",
-    cost: 10, maxLen: 6.5, stiff: 1.0, strength: 1.0, weight: 1.0,
-    color: 0xb8875a,
+  corde: {
+    id: "corde", label: "Rope", kind: "cable",
+    cost: 3, maxLen: 8, stiff: 0.15, strength: 0.6, weight: 0.1,
+    color: 0xd9c6a5,
     notice: {
-      label: "Wood beam",
-      formule: "Carries tension and compression. Cheap, short, bends under load.",
-      sources: "Timber construction (allowable stress ~10 MPa).",
-      limites: "No rot, no grain direction.",
-    },
-  },
-  acier: {
-    id: "acier", label: "Steel beam", kind: "beam",
-    cost: 25, maxLen: 9, stiff: 1.7, strength: 2.4, weight: 1.7,
-    color: 0x9fb3c8,
-    notice: {
-      label: "Steel beam",
-      formule: "Carries tension and compression, 1.7x stiffer and 2.4x stronger than wood, but heavy and dear.",
-      sources: "Structural steel S275 (E = 210 GPa).",
-      limites: "No buckling curve; constant cross-section.",
+      label: "Rope",
+      formule: "Tension only, very stretchy and weak. The cheapest member, for light spans only.",
+      sources: "Hemp rope (working load ~1/6 of breaking load).",
+      limites: "Creep and knots not modelled.",
     },
   },
   cable: {
@@ -39,26 +28,59 @@ export const MATERIALS = {
       limites: "Cannot push; no sag curve modelled.",
     },
   },
-  corde: {
-    id: "corde", label: "Rope", kind: "cable",
-    cost: 3, maxLen: 8, stiff: 0.15, strength: 0.6, weight: 0.1,
-    color: 0xd9c6a5,
+  bambou: {
+    id: "bambou", label: "Bamboo", kind: "beam",
+    cost: 6, maxLen: 5.5, stiff: 0.8, strength: 0.85, weight: 0.5,
+    color: 0xa3c46a,
     notice: {
-      label: "Rope",
-      formule: "Tension only, very stretchy and weak. Cheapest member, for light spans only.",
-      sources: "Hemp rope (working load ~1/6 of breaking load).",
-      limites: "Creep and knots not modelled.",
+      label: "Bamboo",
+      formule: "Carries tension and compression. Light and cheap, but short and weaker than timber.",
+      sources: "Bamboo construction (Guadua, E ≈ 20 GPa along the fibre).",
+      limites: "No splitting, no node lashing, no moisture effects.",
     },
   },
-  arche: {
-    id: "arche", label: "Arch", kind: "arch",
-    cost: 40, maxLen: 7.5, stiff: 1.3, strength: 3.2, weight: 2.4,
-    color: 0xd98d5f,
+  chaine: {
+    id: "chaine", label: "Chain", kind: "cable",
+    cost: 9, maxLen: 10, stiff: 0.35, strength: 2.0, weight: 0.8,
+    color: 0x6b7280,
     notice: {
-      label: "Arch",
-      formule: "Compression only: buckles when stretched. Very strong under its own curve, heavy.",
-      sources: "Masonry and reinforced-concrete arches (thrust line).",
-      limites: "Idealised as a straight member; no thrust-line geometry.",
+      label: "Chain",
+      formule: "Tension only, heavier than a cable but twice as strong. The classic suspension link.",
+      sources: "Eyebar and chain suspension bridges (Menai, 1826).",
+      limites: "Links idealised as one member; no pin friction.",
+    },
+  },
+  bois: {
+    id: "bois", label: "Wood beam", kind: "beam",
+    cost: 10, maxLen: 6.5, stiff: 1.0, strength: 1.0, weight: 1.0,
+    color: 0xb8875a,
+    notice: {
+      label: "Wood beam",
+      formule: "Carries tension and compression. Cheap, short, bends under load.",
+      sources: "Timber construction (allowable stress ~10 MPa).",
+      limites: "No rot, no grain direction.",
+    },
+  },
+  lamelle: {
+    id: "lamelle", label: "Glulam", kind: "beam",
+    cost: 18, maxLen: 9, stiff: 1.35, strength: 1.6, weight: 0.9,
+    color: 0xd6a35c,
+    notice: {
+      label: "Glulam beam",
+      formule: "Laminated timber: longer and stiffer than a solid beam, and lighter than steel.",
+      sources: "Glued-laminated timber (GL24h), used for long-span roofs and bridges.",
+      limites: "No delamination, no humidity swelling.",
+    },
+  },
+  acier: {
+    id: "acier", label: "Steel beam", kind: "beam",
+    cost: 25, maxLen: 9, stiff: 1.7, strength: 2.4, weight: 1.7,
+    color: 0x9fb3c8,
+    notice: {
+      label: "Steel beam",
+      formule: "Carries tension and compression, 1.7x stiffer and 2.4x stronger than wood, but heavy and dear.",
+      sources: "Structural steel S275 (E = 210 GPa).",
+      limites: "No buckling curve; constant cross-section.",
     },
   },
   pilier: {
@@ -72,6 +94,28 @@ export const MATERIALS = {
       limites: "No rebar detailing; no foundation settlement.",
     },
   },
+  treillis: {
+    id: "treillis", label: "Steel truss", kind: "beam",
+    cost: 35, maxLen: 12, stiff: 1.5, strength: 3.0, weight: 1.1,
+    color: 0x7f95ad,
+    notice: {
+      label: "Steel truss",
+      formule: "An open lattice: the longest span and a high strength for its weight, at a high price.",
+      sources: "Truss bridges (Howe, Pratt, Warren) — triangles keep members axially loaded.",
+      limites: "Modelled as one member; no internal bracing or gusset failure.",
+    },
+  },
+  arche: {
+    id: "arche", label: "Arch", kind: "arch",
+    cost: 40, maxLen: 7.5, stiff: 1.3, strength: 3.2, weight: 2.4,
+    color: 0xd98d5f,
+    notice: {
+      label: "Arch",
+      formule: "Compression only: buckles when stretched. Very strong under its own curve, heavy.",
+      sources: "Masonry and reinforced-concrete arches (thrust line).",
+      limites: "Idealised as a straight member; no thrust-line geometry.",
+    },
+  },
 };
 
 export const KINDS = {
@@ -80,7 +124,15 @@ export const KINDS = {
   arch: { tension: false, compression: true },
 };
 
-export const MATERIAL_IDS = Object.keys(MATERIALS);
+export const KIND_LABEL = {
+  beam: "tension + compression",
+  cable: "pulls only",
+  arch: "pushes only",
+};
+
+export const MATERIAL_IDS = Object.keys(MATERIALS).sort(
+  (a, b) => MATERIALS[a].cost - MATERIALS[b].cost,
+);
 
 export function getMaterial(id) {
   return MATERIALS[id] || null;

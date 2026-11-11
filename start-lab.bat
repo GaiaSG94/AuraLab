@@ -1,9 +1,9 @@
 @echo off
-REM Double-click to serve the AuraLab labs. KEEP THIS WINDOW OPEN while browsing.
-title AuraLab server - leave this window open
+REM Double-click to serve the LabKit labs. KEEP THIS WINDOW OPEN while browsing.
+title LabKit server - leave this window open
 cd /d "%~dp0"
 echo.
-echo  == AuraLab ==
+echo  == LabKit ==
 echo  Folder: %CD%
 where python >nul 2>nul
 if errorlevel 1 (
@@ -17,8 +17,11 @@ if errorlevel 1 (
 )
 echo  Python OK. Starting server - leave this window OPEN.
 echo.
-echo    Space: http://localhost:8080/app-space/
-echo    Eco:   http://localhost:8080/app-eco/
+echo    Portal:     http://localhost:8080/
+echo    Space:      http://localhost:8080/app-space/
+echo    Eco:        http://localhost:8080/app-eco/
+echo    Chemistry:  http://localhost:8080/app-chimie/
+echo    Bridge:     http://localhost:8080/app-ponts/
 echo.
 python -m http.server 8080
 echo.

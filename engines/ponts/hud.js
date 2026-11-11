@@ -2,13 +2,17 @@
 // Top: brand, sites, score, home. Left: tool dock. Right: sensors card (laws, ghost, log).
 // Bottom: budget ring, hint, repair, Test. Same ctx contract as the game expects.
 import "../../core/ghost.js"; // side effect: window.AuraGhost (flask ghost logo)
-import { MATERIALS, materialsForSite } from "./materials.js";
+import { MATERIALS, KIND_LABEL, materialsForSite } from "./materials.js";
 
 const PH_ICONS = {
   beam: '<rect x="3" y="9.5" width="18" height="5" rx="1.5"/><path d="M8 9.5v5M12 9.5v5M16 9.5v5"/>',
   steel: '<rect x="3" y="9" width="18" height="6" rx="1"/><path d="M7 9v6M12 9v6M17 9v6"/><path d="M3 12h18"/>',
   cable: '<path d="M4 18L20 6"/><circle cx="4" cy="18" r="2" fill="currentColor"/><circle cx="20" cy="6" r="2" fill="currentColor"/>',
   rope: '<path d="M4 17c4-1 4-9 8-9s4 8 8 7" stroke-dasharray="2.5 2"/><circle cx="4" cy="17" r="1.6" fill="currentColor"/>',
+  bamboo: '<path d="M6 21V3M18 21V3"/><path d="M4.5 8h3M4.5 14h3M16.5 6h3M16.5 12h3M16.5 18h3"/><path d="M9 8l3-2M15 14l-3 2"/>',
+  glulam: '<rect x="3" y="7" width="18" height="10" rx="1.5"/><path d="M3 10.5h18M3 14h18"/>',
+  truss: '<path d="M3 18h18M3 6h18M4 6l5 12M9 6l5 12M14 6l5 12"/><circle cx="4" cy="6" r="1.2" fill="currentColor"/><circle cx="19" cy="6" r="1.2" fill="currentColor"/>',
+  chain: '<ellipse cx="7" cy="8" rx="3" ry="2.2"/><ellipse cx="12" cy="12" rx="3" ry="2.2"/><ellipse cx="17" cy="16" rx="3" ry="2.2"/>',
   arch: '<path d="M3 19c0-8 4-13 9-13s9 5 9 13"/><path d="M3 19h18"/>',
   pier: '<rect x="8" y="4" width="8" height="16" rx="1"/><path d="M8 9h8M8 14h8"/>',
   erase: '<path d="M8.5 19.5L3.8 14.8a1.8 1.8 0 0 1 0-2.6l8.4-8.4a1.8 1.8 0 0 1 2.6 0l5.4 5.4a1.8 1.8 0 0 1 0 2.6L13 19.5zM8.5 19.5H20M7 11l7 7"/>',
@@ -200,8 +204,10 @@ export function buildHud(host, ctx) {
     siteBtns[s.id] = b;
   }
   // Material dock: one button per material the active site allows.
-  const MAT_ICON = { bois: "beam", acier: "steel", cable: "cable", corde: "rope", arche: "arch", pilier: "pier" };
-  const MAT_HINT = { beam: "tension + compression", cable: "pulls only", arch: "pushes only" };
+  const MAT_ICON = {
+    bambou: "bamboo", bois: "beam", lamelle: "glulam", acier: "steel", treillis: "truss",
+    cable: "cable", chaine: "chain", corde: "rope", arche: "arch", pilier: "pier",
+  };
   const matsEl = $(".ph-mats");
   function renderMaterials() {
     const site = ctx.config.sites.find((s) => s.id === ctx.activeId());
@@ -214,7 +220,7 @@ export function buildHud(host, ctx) {
       b.className = "tool mat";
       b.dataset.tool = id;
       b.setAttribute("aria-pressed", "false");
-      b.title = `${m.label} — cost ${m.cost}, max ${m.maxLen} m, ${MAT_HINT[m.kind]} (${i + 1})`;
+      b.title = `${m.label} — cost ${m.cost}, max ${m.maxLen} m, ${KIND_LABEL[m.kind]} (${i + 1})`;
       b.style.setProperty("--m", `#${m.color.toString(16).padStart(6, "0")}`);
       b.innerHTML = `${phIcon(MAT_ICON[id])}<span>${m.label}</span><small>${m.cost} · ${m.maxLen}m</small>`;
       b.addEventListener("click", () => ctx.setTool(id));

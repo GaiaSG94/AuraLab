@@ -87,18 +87,6 @@ export const CH_CSS = `
 .ch-pager[hidden]{display:none}
 .ch-pager button{font:700 12px "Archivo",sans-serif;color:#0b2a17;padding:4px 10px;border-radius:999px;border:1.5px solid rgba(11,42,23,.25)!important}
 .ch-pager button:disabled{opacity:.35;cursor:default}
-.ch-bl{position:absolute;left:-400px;top:-400px;transform:translate(-50%,0);display:flex;align-items:center;gap:7px;padding:5px 5px 5px 11px;white-space:nowrap;font-weight:700;font-size:12.5px}
-.ch-bl small{font:600 11px "JetBrains Mono",ui-monospace,monospace;color:rgba(11,42,23,.6)}
-.ch-bl button{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:#0b2a17;color:#fff}
-.ch-bl button .ch-i{width:13px;height:13px;stroke-width:2.6}
-.ch-bl button:disabled{opacity:.3;cursor:default}
-.ch-bl::before{content:"";display:none;width:10px;height:10px;border-radius:50%;background:var(--c);flex:none;box-shadow:inset 0 -2px 3px rgba(0,0,0,.2)}
-.ch-root.compact .ch-bl{padding-left:9px}
-.ch-root.compact .ch-bl::before{display:block}
-.ch-root.compact .ch-bl>span{display:none}
-.ch-root.tiny .ch-bl{padding:3px;gap:0}
-.ch-root.tiny .ch-bl::before,.ch-root.tiny .ch-bl>span,.ch-root.tiny .ch-bl small{display:none}
-.ch-root.tiny .ch-bl button{box-shadow:0 0 0 3px var(--c)}
 .ch-tag{position:absolute;left:-400px;top:-400px;transform:translate(-100%,-50%);display:flex;flex-direction:row-reverse;align-items:center;font-weight:700;font-size:12px;white-space:nowrap;pointer-events:none}
 .ch-tag i{width:22px;height:1.5px;background:#0b2a17;position:relative;flex:none}
 .ch-tag i::before{content:"";position:absolute;right:-4px;top:-3px;width:7px;height:7px;border-radius:50%;background:#0b2a17}
@@ -115,6 +103,7 @@ export const CH_CSS = `
 .ch-stat span{overflow:hidden;text-overflow:ellipsis}
 .ch-measure{height:42px;border-radius:999px;padding:0 18px 0 14px;display:flex;align-items:center;gap:7px;font-weight:700;font-size:13.5px;white-space:nowrap;background:#0b2a17;color:#fff;flex:none}
 .ch-measure i{width:8px;height:8px;border-radius:50%;background:#ff5a3d}
+@media (max-width:1100px){.ch-left{width:220px;left:14px;top:78px}}
 @media (max-width:900px){
   .ch-tabs{top:70px}
   .ch-side{left:16px;right:16px;top:auto;bottom:88px;width:auto;height:150px}
@@ -126,6 +115,7 @@ export const CH_CSS = `
   .ch-home{right:16px}.ch-brand{left:16px}
 }
 @media (max-width:640px){
+  .ch-left{display:none}
   .ch-brand b{font-size:24px}
   .ch-tabs button{padding:0 12px;font-size:12.5px}
   .ch-home span{display:none}
@@ -140,6 +130,33 @@ export const CH_CSS = `
 .ch-bur button:hover{background:rgba(255,255,255,.6)}
 .ch-bur button.ink{background:#0b2a17;color:#fff}
 .ch-bur small{font:600 11px "JetBrains Mono",ui-monospace,monospace;color:rgba(11,42,23,.6);flex:1;text-align:right}
-.ch-bl button.minus{background:rgba(255,255,255,.75);color:#0b2a17}
 .ch-eq{align-items:center;gap:5px;font-weight:800;font-size:11px;background:#16a34a;color:#fff;border-radius:999px;padding:3px 9px}
+.ch-left{position:absolute;left:24px;top:84px;bottom:96px;width:268px;padding:14px 16px;display:flex;flex-direction:column;gap:14px;overflow:auto;overscroll-behavior:contain}
+.ch-left>*{flex-shrink:0}
+.ch-lsec{display:flex;flex-direction:column;gap:7px}
+.ch-lsec h3{margin:0;font:700 10.5px/1.3 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;color:rgba(11,42,23,.6);display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.ch-lsec h3 small{font-weight:600;letter-spacing:0;text-transform:none;opacity:.8}
+.ch-sub{display:flex;align-items:center;gap:7px;min-height:30px}
+.ch-sub .dot{width:11px;height:11px;border-radius:50%;background:var(--c);flex:none;box-shadow:inset 0 -2px 3px rgba(0,0,0,.25)}
+.ch-sub .nm{flex:1;min-width:0;font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ch-sub .ct{font:700 11px "JetBrains Mono",ui-monospace,monospace;color:rgba(11,42,23,.7);flex:none}
+.ch-sub .sq{width:24px;height:24px;border-radius:8px;display:grid;place-items:center;font:700 15px/1 "Archivo",sans-serif;border:1.5px solid rgba(11,42,23,.3);flex:none}
+.ch-sub .sq:hover:not(:disabled){background:rgba(255,255,255,.65)}
+.ch-sub .sq.plus{background:#0b2a17;color:#fff;border-color:#0b2a17}
+.ch-sub .sq:disabled{opacity:.3;cursor:default}
+.ch-ins{display:flex;align-items:baseline;gap:8px;min-height:26px;border-bottom:1px solid rgba(11,42,23,.08);padding-bottom:4px}
+.ch-ins:last-child{border-bottom:0}
+.ch-ins .cap{flex:1;min-width:0;font-weight:600;font-size:11.5px;color:rgba(11,42,23,.78);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ch-ins .val b{font:700 17px "JetBrains Mono",ui-monospace,monospace;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.ch-ins .val small{font:600 10px "JetBrains Mono",ui-monospace,monospace;color:rgba(11,42,23,.6);margin-left:3px}
+.ch-ins .tag{font:700 9.5px "JetBrains Mono",ui-monospace,monospace;border-radius:999px;padding:2px 7px;white-space:nowrap;background:rgba(11,42,23,.12);color:#0b2a17}
+.ch-ins .tag[hidden]{display:none}
+.ch-ins .tag.acid{background:#ef4444;color:#fff}
+.ch-ins .tag.neutral{background:#22c55e;color:#fff}
+.ch-ins .tag.base{background:#7c3aed;color:#fff}
+.ch-ins .tag.solid{background:#0ea5e9;color:#fff}
+.ch-ins .tag.gas{background:#f97316;color:#fff}
+.ch-ins .tag.hot{background:#b91c1c;color:#fff}
+.ch-law{display:flex;align-items:center;gap:8px;min-height:28px}
+.ch-law .nm{flex:1;min-width:0;font-weight:600;font-size:12px}
 `;

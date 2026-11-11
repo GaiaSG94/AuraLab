@@ -1876,32 +1876,21 @@ async function boot(source, buildLab, labManifest, packManifests) {
 // ---- engines/ponts/materials.js (inlined) ----
 // Bridge materials — the kit's structural catalogue.
 // Three families with real mechanics:
-//   beams   carry tension AND compression (wood, steel)
-//   cables  carry tension ONLY, and go slack (steel cable, rope)
+//   beams   carry tension AND compression (bamboo, wood, glulam, steel, truss)
+//   cables  carry tension ONLY, and go slack (rope, chain, steel cable)
 //   arches  carry compression ONLY, and buckle (arch, concrete pier)
 // DOM-free: importable in browsers and in Node.
 
 const MATERIALS = {
-  bois: {
-    id: "bois", label: "Wood beam", kind: "beam",
-    cost: 10, maxLen: 6.5, stiff: 1.0, strength: 1.0, weight: 1.0,
-    color: 0xb8875a,
+  corde: {
+    id: "corde", label: "Rope", kind: "cable",
+    cost: 3, maxLen: 8, stiff: 0.15, strength: 0.6, weight: 0.1,
+    color: 0xd9c6a5,
     notice: {
-      label: "Wood beam",
-      formule: "Carries tension and compression. Cheap, short, bends under load.",
-      sources: "Timber construction (allowable stress ~10 MPa).",
-      limites: "No rot, no grain direction.",
-    },
-  },
-  acier: {
-    id: "acier", label: "Steel beam", kind: "beam",
-    cost: 25, maxLen: 9, stiff: 1.7, strength: 2.4, weight: 1.7,
-    color: 0x9fb3c8,
-    notice: {
-      label: "Steel beam",
-      formule: "Carries tension and compression, 1.7x stiffer and 2.4x stronger than wood, but heavy and dear.",
-      sources: "Structural steel S275 (E = 210 GPa).",
-      limites: "No buckling curve; constant cross-section.",
+      label: "Rope",
+      formule: "Tension only, very stretchy and weak. The cheapest member, for light spans only.",
+      sources: "Hemp rope (working load ~1/6 of breaking load).",
+      limites: "Creep and knots not modelled.",
     },
   },
   cable: {
@@ -1915,26 +1904,59 @@ const MATERIALS = {
       limites: "Cannot push; no sag curve modelled.",
     },
   },
-  corde: {
-    id: "corde", label: "Rope", kind: "cable",
-    cost: 3, maxLen: 8, stiff: 0.15, strength: 0.6, weight: 0.1,
-    color: 0xd9c6a5,
+  bambou: {
+    id: "bambou", label: "Bamboo", kind: "beam",
+    cost: 6, maxLen: 5.5, stiff: 0.8, strength: 0.85, weight: 0.5,
+    color: 0xa3c46a,
     notice: {
-      label: "Rope",
-      formule: "Tension only, very stretchy and weak. Cheapest member, for light spans only.",
-      sources: "Hemp rope (working load ~1/6 of breaking load).",
-      limites: "Creep and knots not modelled.",
+      label: "Bamboo",
+      formule: "Carries tension and compression. Light and cheap, but short and weaker than timber.",
+      sources: "Bamboo construction (Guadua, E ≈ 20 GPa along the fibre).",
+      limites: "No splitting, no node lashing, no moisture effects.",
     },
   },
-  arche: {
-    id: "arche", label: "Arch", kind: "arch",
-    cost: 40, maxLen: 7.5, stiff: 1.3, strength: 3.2, weight: 2.4,
-    color: 0xd98d5f,
+  chaine: {
+    id: "chaine", label: "Chain", kind: "cable",
+    cost: 9, maxLen: 10, stiff: 0.35, strength: 2.0, weight: 0.8,
+    color: 0x6b7280,
     notice: {
-      label: "Arch",
-      formule: "Compression only: buckles when stretched. Very strong under its own curve, heavy.",
-      sources: "Masonry and reinforced-concrete arches (thrust line).",
-      limites: "Idealised as a straight member; no thrust-line geometry.",
+      label: "Chain",
+      formule: "Tension only, heavier than a cable but twice as strong. The classic suspension link.",
+      sources: "Eyebar and chain suspension bridges (Menai, 1826).",
+      limites: "Links idealised as one member; no pin friction.",
+    },
+  },
+  bois: {
+    id: "bois", label: "Wood beam", kind: "beam",
+    cost: 10, maxLen: 6.5, stiff: 1.0, strength: 1.0, weight: 1.0,
+    color: 0xb8875a,
+    notice: {
+      label: "Wood beam",
+      formule: "Carries tension and compression. Cheap, short, bends under load.",
+      sources: "Timber construction (allowable stress ~10 MPa).",
+      limites: "No rot, no grain direction.",
+    },
+  },
+  lamelle: {
+    id: "lamelle", label: "Glulam", kind: "beam",
+    cost: 18, maxLen: 9, stiff: 1.35, strength: 1.6, weight: 0.9,
+    color: 0xd6a35c,
+    notice: {
+      label: "Glulam beam",
+      formule: "Laminated timber: longer and stiffer than a solid beam, and lighter than steel.",
+      sources: "Glued-laminated timber (GL24h), used for long-span roofs and bridges.",
+      limites: "No delamination, no humidity swelling.",
+    },
+  },
+  acier: {
+    id: "acier", label: "Steel beam", kind: "beam",
+    cost: 25, maxLen: 9, stiff: 1.7, strength: 2.4, weight: 1.7,
+    color: 0x9fb3c8,
+    notice: {
+      label: "Steel beam",
+      formule: "Carries tension and compression, 1.7x stiffer and 2.4x stronger than wood, but heavy and dear.",
+      sources: "Structural steel S275 (E = 210 GPa).",
+      limites: "No buckling curve; constant cross-section.",
     },
   },
   pilier: {
@@ -1948,6 +1970,28 @@ const MATERIALS = {
       limites: "No rebar detailing; no foundation settlement.",
     },
   },
+  treillis: {
+    id: "treillis", label: "Steel truss", kind: "beam",
+    cost: 35, maxLen: 12, stiff: 1.5, strength: 3.0, weight: 1.1,
+    color: 0x7f95ad,
+    notice: {
+      label: "Steel truss",
+      formule: "An open lattice: the longest span and a high strength for its weight, at a high price.",
+      sources: "Truss bridges (Howe, Pratt, Warren) — triangles keep members axially loaded.",
+      limites: "Modelled as one member; no internal bracing or gusset failure.",
+    },
+  },
+  arche: {
+    id: "arche", label: "Arch", kind: "arch",
+    cost: 40, maxLen: 7.5, stiff: 1.3, strength: 3.2, weight: 2.4,
+    color: 0xd98d5f,
+    notice: {
+      label: "Arch",
+      formule: "Compression only: buckles when stretched. Very strong under its own curve, heavy.",
+      sources: "Masonry and reinforced-concrete arches (thrust line).",
+      limites: "Idealised as a straight member; no thrust-line geometry.",
+    },
+  },
 };
 
 const KINDS = {
@@ -1956,7 +2000,15 @@ const KINDS = {
   arch: { tension: false, compression: true },
 };
 
-const MATERIAL_IDS = Object.keys(MATERIALS);
+const KIND_LABEL = {
+  beam: "tension + compression",
+  cable: "pulls only",
+  arch: "pushes only",
+};
+
+const MATERIAL_IDS = Object.keys(MATERIALS).sort(
+  (a, b) => MATERIALS[a].cost - MATERIALS[b].cost,
+);
 
 function getMaterial(id) {
   return MATERIALS[id] || null;
@@ -2949,15 +3001,23 @@ function buildMapView(host, ctx) {
   const hitGeo = new THREE.SphereGeometry(1.9, 8, 6);
   const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
   hitMat.colorWrite = false;
+  // One cross-section per material: thickness and shape read as the family.
+  const bambooGeo = new THREE.BoxGeometry(1, 0.34, 0.34);
   const beamGeo = new THREE.BoxGeometry(1, 0.45, 0.45);
+  const steelGeo = new THREE.BoxGeometry(1, 0.5, 0.5);
+  const glulamGeo = new THREE.BoxGeometry(1, 0.55, 0.4);
+  const trussGeo = new THREE.BoxGeometry(1, 0.7, 0.42);
   const archGeo = new THREE.BoxGeometry(1, 0.62, 0.62);
   const pierGeo = new THREE.BoxGeometry(1, 0.75, 0.75);
   const cableGeo = new THREE.CylinderGeometry(0.1, 0.1, 1, 8);
+  const chainGeo = new THREE.CylinderGeometry(0.13, 0.13, 1, 6);
   const ropeGeo = new THREE.CylinderGeometry(0.07, 0.07, 1, 6);
-  cableGeo.rotateZ(Math.PI / 2); // along X, like the beams, so placeBeam can stretch it
-  ropeGeo.rotateZ(Math.PI / 2);
-  // Geometry per material: a box reads as a beam, a thin cylinder as a cable.
-  const GEO = { bois: beamGeo, acier: beamGeo, arche: archGeo, pilier: pierGeo, cable: cableGeo, corde: ropeGeo };
+  for (const g of [cableGeo, chainGeo, ropeGeo]) g.rotateZ(Math.PI / 2); // along X, so placeBeam can stretch it
+  const GEO = {
+    bambou: bambooGeo, bois: beamGeo, lamelle: glulamGeo, acier: steelGeo,
+    treillis: trussGeo, arche: archGeo, pilier: pierGeo,
+    cable: cableGeo, chaine: chainGeo, corde: ropeGeo,
+  };
   function geoFor(id) {
     return GEO[id] || beamGeo;
   }
@@ -3311,6 +3371,10 @@ const PH_ICONS = {
   steel: '<rect x="3" y="9" width="18" height="6" rx="1"/><path d="M7 9v6M12 9v6M17 9v6"/><path d="M3 12h18"/>',
   cable: '<path d="M4 18L20 6"/><circle cx="4" cy="18" r="2" fill="currentColor"/><circle cx="20" cy="6" r="2" fill="currentColor"/>',
   rope: '<path d="M4 17c4-1 4-9 8-9s4 8 8 7" stroke-dasharray="2.5 2"/><circle cx="4" cy="17" r="1.6" fill="currentColor"/>',
+  bamboo: '<path d="M6 21V3M18 21V3"/><path d="M4.5 8h3M4.5 14h3M16.5 6h3M16.5 12h3M16.5 18h3"/><path d="M9 8l3-2M15 14l-3 2"/>',
+  glulam: '<rect x="3" y="7" width="18" height="10" rx="1.5"/><path d="M3 10.5h18M3 14h18"/>',
+  truss: '<path d="M3 18h18M3 6h18M4 6l5 12M9 6l5 12M14 6l5 12"/><circle cx="4" cy="6" r="1.2" fill="currentColor"/><circle cx="19" cy="6" r="1.2" fill="currentColor"/>',
+  chain: '<ellipse cx="7" cy="8" rx="3" ry="2.2"/><ellipse cx="12" cy="12" rx="3" ry="2.2"/><ellipse cx="17" cy="16" rx="3" ry="2.2"/>',
   arch: '<path d="M3 19c0-8 4-13 9-13s9 5 9 13"/><path d="M3 19h18"/>',
   pier: '<rect x="8" y="4" width="8" height="16" rx="1"/><path d="M8 9h8M8 14h8"/>',
   erase: '<path d="M8.5 19.5L3.8 14.8a1.8 1.8 0 0 1 0-2.6l8.4-8.4a1.8 1.8 0 0 1 2.6 0l5.4 5.4a1.8 1.8 0 0 1 0 2.6L13 19.5zM8.5 19.5H20M7 11l7 7"/>',
@@ -3502,8 +3566,10 @@ function buildHud(host, ctx) {
     siteBtns[s.id] = b;
   }
   // Material dock: one button per material the active site allows.
-  const MAT_ICON = { bois: "beam", acier: "steel", cable: "cable", corde: "rope", arche: "arch", pilier: "pier" };
-  const MAT_HINT = { beam: "tension + compression", cable: "pulls only", arch: "pushes only" };
+  const MAT_ICON = {
+    bambou: "bamboo", bois: "beam", lamelle: "glulam", acier: "steel", treillis: "truss",
+    cable: "cable", chaine: "chain", corde: "rope", arche: "arch", pilier: "pier",
+  };
   const matsEl = $(".ph-mats");
   function renderMaterials() {
     const site = ctx.config.sites.find((s) => s.id === ctx.activeId());
@@ -3516,7 +3582,7 @@ function buildHud(host, ctx) {
       b.className = "tool mat";
       b.dataset.tool = id;
       b.setAttribute("aria-pressed", "false");
-      b.title = `${m.label} — cost ${m.cost}, max ${m.maxLen} m, ${MAT_HINT[m.kind]} (${i + 1})`;
+      b.title = `${m.label} — cost ${m.cost}, max ${m.maxLen} m, ${KIND_LABEL[m.kind]} (${i + 1})`;
       b.style.setProperty("--m", `#${m.color.toString(16).padStart(6, "0")}`);
       b.innerHTML = `${phIcon(MAT_ICON[id])}<span>${m.label}</span><small>${m.cost} · ${m.maxLen}m</small>`;
       b.addEventListener("click", () => ctx.setTool(id));
@@ -4100,59 +4166,169 @@ startGame({
       "label": "Brook",
       "width": 12,
       "budget": 90,
-      "materials": ["bois", "corde", "cable"]
+      "materials": [
+        "corde",
+        "cable",
+        "bambou",
+        "bois"
+      ]
     },
     {
       "id": "riviere",
       "label": "River",
       "width": 28,
       "budget": 150,
-      "materials": ["bois", "corde", "cable", "acier"]
+      "materials": [
+        "corde",
+        "cable",
+        "chaine",
+        "bambou",
+        "bois",
+        "lamelle",
+        "acier"
+      ]
     },
     {
       "id": "fleuve",
       "label": "Great River",
       "width": 44,
       "budget": 220,
-      "materials": ["bois", "corde", "cable", "acier", "arche", "pilier"]
+      "materials": [
+        "corde",
+        "cable",
+        "chaine",
+        "bambou",
+        "bois",
+        "lamelle",
+        "acier",
+        "treillis",
+        "pilier",
+        "arche"
+      ]
     }
   ],
   "substances": [],
   "material": [
-    { "id": "fantome", "kind": "fantome", "label": "Test ghost" },
-    { "id": "pylone-gauche", "kind": "pylone", "label": "Left-bank pylon", "x": 0.3, "y": 0.2 },
-    { "id": "pylone-droit", "kind": "pylone", "label": "Right-bank pylon", "x": 0.7, "y": 0.2 }
+    {
+      "id": "fantome",
+      "kind": "fantome",
+      "label": "Test ghost"
+    },
+    {
+      "id": "pylone-gauche",
+      "kind": "pylone",
+      "label": "Left-bank pylon",
+      "x": 0.3,
+      "y": 0.2
+    },
+    {
+      "id": "pylone-droit",
+      "kind": "pylone",
+      "label": "Right-bank pylon",
+      "x": 0.7,
+      "y": 0.2
+    }
   ],
   "laws": [
-    { "law": "chantier", "params": { "budget": 120 } },
-    { "law": "gravite" },
-    { "law": "poids-propre", "params": { "g": 9.81 } },
-    { "law": "rupture" },
-    { "law": "charge-flottante", "params": { "poids": 20, "vitesse": 6 } }
+    {
+      "law": "chantier",
+      "params": {
+        "budget": 120
+      }
+    },
+    {
+      "law": "gravite"
+    },
+    {
+      "law": "poids-propre",
+      "params": {
+        "g": 9.81
+      }
+    },
+    {
+      "law": "rupture"
+    },
+    {
+      "law": "charge-flottante",
+      "params": {
+        "poids": 20,
+        "vitesse": 6
+      }
+    }
   ],
   "metrics": [
-    { "id": "fleche", "label": "Sag", "unit": "mm", "source": "fleche", "color": "#7dd3fc" },
-    { "id": "contrainte", "label": "Max stress", "unit": "%", "source": "contrainte", "color": "#f87171" },
-    { "id": "cout", "label": "Cost", "unit": "", "source": "cout", "color": "#fbbf24" },
-    { "id": "score", "label": "Score", "unit": "", "source": "score", "color": "#6ee7a0" }
+    {
+      "id": "fleche",
+      "label": "Sag",
+      "unit": "mm",
+      "source": "fleche",
+      "color": "#7dd3fc"
+    },
+    {
+      "id": "contrainte",
+      "label": "Max stress",
+      "unit": "%",
+      "source": "contrainte",
+      "color": "#f87171"
+    },
+    {
+      "id": "cout",
+      "label": "Cost",
+      "unit": "",
+      "source": "cout",
+      "color": "#fbbf24"
+    },
+    {
+      "id": "score",
+      "label": "Score",
+      "unit": "",
+      "source": "score",
+      "color": "#6ee7a0"
+    }
   ],
   "instruments": [
-    { "type": "chips", "metrics": ["fleche", "contrainte", "cout", "score"] },
-    { "type": "curve", "metrics": ["contrainte"] }
+    {
+      "type": "chips",
+      "metrics": [
+        "fleche",
+        "contrainte",
+        "cout",
+        "score"
+      ]
+    },
+    {
+      "type": "curve",
+      "metrics": [
+        "contrainte"
+      ]
+    }
   ],
   "controls": [
-    { "path": "laws.4.poids", "label": "Ghost weight (t)", "min": 8, "max": 40, "step": 1 },
-    { "path": "laws.4.vitesse", "label": "Ghost speed", "min": 2, "max": 12, "step": 1 }
+    {
+      "path": "laws.4.poids",
+      "label": "Ghost weight (t)",
+      "min": 8,
+      "max": 40,
+      "step": 1
+    },
+    {
+      "path": "laws.4.vitesse",
+      "label": "Ghost speed",
+      "min": 2,
+      "max": 12,
+      "step": 1
+    }
   ],
   "notebook": {
     "enabled": true,
     "prompts": [
-      "Why does a rope deck sag before the ghost even steps on it?",
-      "Cables only pull: what happens if you try to support the deck with cables alone?",
-      "An arch only pushes: where in the bridge does that actually help?",
-      "Wood vs steel on the same span: which one breaks first, and why?",
-      "Which deck holds 20 t at the lowest cost?",
-      "Double the ghost weight: which member type snaps first?"
+      "Rope is the cheapest: how far can a rope deck span before it snaps under its own weight?",
+      "Cables only pull. What happens if you try to hold the deck UP with cables alone?",
+      "Arches and piers only push. Where on the bridge does that actually help?",
+      "Bamboo vs wood vs glulam on the same span: which one is the best value?",
+      "Why does the steel truss sag less than a solid steel beam of the same length?",
+      "Chain vs cable: which one holds more, and what do you pay for it?",
+      "Which deck holds 20 t at the lowest cost?"
     ]
   }
 }

@@ -22,18 +22,27 @@ export function buildFlaskGhost(THREE, opts) {
   const bodyGeo = lathe(THREE, PROFILE, 96);
   const hemBase = Float32Array.from(bodyGeo.attributes.position.array);
   const ink = new THREE.MeshStandardMaterial({ color: 0x17141f, roughness: 0.3 });
+  const scleraMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25 });
   const bodyMat = new THREE.MeshPhysicalMaterial({
     color: 0xfbf8ff, roughness: 0.35, clearcoat: 0.6, clearcoatRoughness: 0.2, side: THREE.DoubleSide,
   });
   group.add(shadows(new THREE.Mesh(bodyGeo, bodyMat)));
   const cheekMat = new THREE.MeshStandardMaterial({ color: 0xff9a62, roughness: 0.6 });
+  const sockets = new Map();
   for (const sx of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.085, 16, 12), ink);
-    eye.scale.set(1, 1.3, 0.55);
-    eye.position.set(sx * 0.225, EYE_Y, 0.72);
+    // White sclera first, then the pupil on top of it: both protrude from the
+    // head so the eyes read as eyes instead of sinking into the body shell.
+    const sclera = new THREE.Mesh(new THREE.SphereGeometry(0.15, 20, 14), scleraMat);
+    sclera.scale.set(1, 1.2, 0.5);
+    sclera.position.set(sx * 0.23, EYE_Y, 0.66);
+    group.add(sclera);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.1, 20, 14), ink);
+    eye.scale.set(1, 1.3, 0.8);
+    eye.position.set(sx * 0.225, EYE_Y, 0.74);
     eye.userData.sx = sx;
     group.add(eye);
     eyes.push(eye);
+    sockets.set(eye, sclera);
     const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 10), cheekMat);
     cheek.scale.set(1.2, 0.55, 0.3);
     cheek.position.set(sx * 0.46, 0.4, 0.62);
@@ -90,12 +99,23 @@ export function buildFlaskGhost(THREE, opts) {
     const blinking = t > state.blinkAt && t < state.blinkAt + 0.13;
     if (t > state.blinkAt + 0.13) state.blinkAt = t + 2.4 + Math.random() * 3.2;
     for (const eye of eyes) {
-      const x = eye.userData.sx * 0.225 + state.look.x * 0.05;
+      const sx = eye.userData.sx;
+      const x = sx * 0.225 + state.look.x * 0.05;
       const y = EYE_Y - state.look.y * 0.045;
       const r = bodyRadiusAt(y);
-      eye.position.set(x, y, Math.sqrt(Math.max(0, r * r - x * x)) + 0.005);
+      // Centre the pupil ON the body surface, not inside it: the sphere then
+      // reads as an eye protruding from the head instead of a hidden blob.
+      const z = Math.sqrt(Math.max(0, r * r - x * x)) + 0.02;
+      eye.position.set(x, y, z);
       eye.rotation.y = Math.asin(Math.max(-1, Math.min(1, x / r)));
       eye.scale.y = blinking ? 0.15 : 1.3;
+      // The white socket rides with its pupil so the eye never slides off it.
+      const socket = sockets.get(eye);
+      if (socket) {
+        socket.position.set(sx * 0.23 + state.look.x * 0.02, y, z - 0.05);
+        socket.rotation.y = eye.rotation.y;
+        socket.scale.y = blinking ? 0.15 : 1.2;
+      }
     }
   }
 

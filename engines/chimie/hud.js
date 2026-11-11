@@ -3,18 +3,9 @@
 // Knobs and Notebook sheets. Under each bottle: its dose pill. Bottom: time + status + Measure.
 import "../../core/ghost.js"; // side effect: window.AuraGhost (flask ghost logo)
 
-const CH_ICONS = {
-  back: '<path d="M15 6l-6 6 6 6"/>',
-  pause: '<path d="M9 5.5v13M15 5.5v13" stroke-width="2.8"/>',
-  play: '<path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/>',
-  empty: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4.5v4h4"/>',
-  step: '<path d="M6 5v14M10 12h9M15 8l4 4-4 4"/>',
-  plus: '<path d="M12 5v14M5 12h14"/>',
-  x: '<path d="M6 6l12 12M18 6L6 18"/>',
-  next: '<path d="M9 6l6 6-6 6"/>',
-};
-const chIcon = (k) => `<svg class="ch-i" viewBox="0 0 24 24" aria-hidden="true">${CH_ICONS[k]}</svg>`;
-const chEsc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+import { chIcon, chEsc } from "./hud-shared.js";
+import { buildLeftColumn } from "./hud-left.js";
+
 
 import { CH_CSS } from "./hud-css.js";
 
@@ -43,7 +34,6 @@ export function buildChemHud(host, ctx, view) {
   brand.querySelector("b").textContent = String(config.lab.title || "lab").toLowerCase();
   if (window.AuraGhost) window.AuraGhost.mount(brand.querySelector(".ch-logo"), "white");
   const steps = [{ id: "lab", label: "Lab" }];
-  if (config.laws.length > 0) steps.push({ id: "laws", label: "Laws" });
   if (config.controls.length > 0) steps.push({ id: "knobs", label: "Knobs" });
   if (config.notebook.enabled) steps.push({ id: "notebook", label: "Notebook" });
   const tabs = add('<nav class="ch-gx ch-pill ch-tabs" role="tablist" aria-label="Lab steps"></nav>');
@@ -103,41 +93,6 @@ export function buildChemHud(host, ctx, view) {
     widgets.appendChild(card);
     return { m, card, v: card.querySelector(".v"), last: "" };
   });
-
-  // Laws sheet.
-  if (steps.some((s) => s.id === "laws")) {
-    const s = sheet("laws");
-    s.insertAdjacentHTML("beforeend", '<h3>Laws</h3><p class="ch-mut" style="white-space:normal">Switch a law off to see what it does.</p>');
-    config.laws.forEach((l, i) => {
-      const mod = ctx.catalog.laws[l.law];
-      const label = mod ? mod.notice.label : l.law;
-      const key = `${l.law}#${i}`;
-      const row = document.createElement("div");
-      row.className = "ch-row";
-      row.innerHTML = `<label class="ch-sw"><input type="checkbox" aria-label="Enable ${chEsc(label)}"><span></span></label><span class="nm">${chEsc(label)}</span>`;
-      const box = row.querySelector("input");
-      box.checked = ctx.isActive("laws", key);
-      box.addEventListener("change", () => {
-        ctx.setActive("laws", key, box.checked);
-        ctx.touch();
-      });
-      s.appendChild(row);
-      if (mod && mod.notice) {
-        const ib = document.createElement("button");
-        ib.type = "button";
-        ib.className = "ch-ib";
-        ib.textContent = "i";
-        ib.setAttribute("aria-label", `About ${label}`);
-        ib.setAttribute("aria-expanded", "false");
-        row.appendChild(ib);
-        const nb = document.createElement("div");
-        nb.className = "ch-notice";
-        nb.innerHTML = `<b>${chEsc(label)}</b><br>Rule: ${chEsc(mod.notice.formule)}<br>Sources: ${chEsc(mod.notice.sources)}<br>Limits: ${chEsc(mod.notice.limites)}`;
-        ib.addEventListener("click", () => ib.setAttribute("aria-expanded", String(nb.classList.toggle("open"))));
-        s.appendChild(nb);
-      }
-    });
-  }
 
   // Knobs sheet: config sliders + the burner switch + the burette buttons.
   const sliders = [];
@@ -314,17 +269,8 @@ export function buildChemHud(host, ctx, view) {
   }
   select("lab");
 
-  // Dose pill under each bottle; flask tag at the neck.
-  const pills = config.substances.map((s) => {
-    const el = add(`<div class="ch-gx ch-pill ch-bl"><span></span><small></small><button type="button" class="minus" aria-label="Take one dose back">&#8722;</button><button type="button">${chIcon("plus")}</button></div>`);
-    el.style.setProperty("--c", s.color);
-    el.querySelector("span").textContent = view.shortName(s.label);
-    const btn = el.querySelector("button:not(.minus)");
-    btn.setAttribute("aria-label", `Pour one dose of ${s.label}`);
-    btn.addEventListener("click", () => ctx.addDose(s.id));
-    el.querySelector("button.minus").addEventListener("click", () => ctx.removeDose(s.id));
-    return { s, el, count: el.querySelector("small"), btn, last: "" };
-  });
+  // Left column: substances, instruments and laws (the bench list).
+  const left = buildLeftColumn({ add, config, ctx });
   const flaskMat = config.material.find((m) => m.kind === "recipient");
   const tag = add('<div class="ch-tag"><i></i><span class="ch-gx ch-pill"></span></div>');
   tag.querySelector("span").textContent = flaskMat ? flaskMat.label.replace(/\s+(\d+\s*mL)$/i, " · $1") : "Flask";
@@ -373,27 +319,12 @@ export function buildChemHud(host, ctx, view) {
     const right = sideOnRight ? r.right - sb.left + 16 : 16;
     // An open sheet grows over the scene on small screens: frame for the 150px strip only.
     const bottom = r.bottom - Math.min(bb.top, sideOnRight ? bb.top : Math.max(sb.top, sb.bottom - 150)) + 10;
-    return { top, right, bottom, left: r.width > 900 ? 24 : 16 };
+    const lb = left.element.getBoundingClientRect();
+    const leftInset = lb.width > 0 && lb.left - r.left < r.width / 2 ? lb.right - r.left + 16 : 16;
+    return { top, right, bottom, left: Math.max(r.width > 900 ? 24 : 16, leftInset) };
   }
-  // Place the pills and the tag on their 3D anchors (after every camera fit).
+  // Place the flask tag on its 3D anchor (after every camera fit).
   function layout() {
-    const xs = [];
-    for (const p of pills) {
-      const a = view.anchors.bottle(p.s.id) || { x: -400, y: -400 };
-      xs.push(a.x);
-      p.el.style.left = `${a.x.toFixed(1)}px`;
-      p.el.style.top = `${(a.y + 10).toFixed(1)}px`;
-    }
-    // Bottles close together on screen: drop the names, then the counts, so pills never touch.
-    const fits = () => pills.every((p, i) => i === 0 || Math.abs(xs[i] - xs[i - 1]) >= (pills[i - 1].el.offsetWidth + p.el.offsetWidth) / 2 + 6);
-    root.classList.remove("compact", "tiny");
-    if (!fits()) {
-      root.classList.add("compact");
-      if (!fits()) {
-        root.classList.remove("compact");
-        root.classList.add("tiny");
-      }
-    }
     const n = view.anchors.neck();
     tag.style.left = `${n.x.toFixed(1)}px`;
     tag.style.top = `${n.y.toFixed(1)}px`;
@@ -452,17 +383,8 @@ export function buildChemHud(host, ctx, view) {
         tc.card.querySelector(".area").setAttribute("d", `M${pts.join("L")}V50H0Z`);
       }
     }
-    // Dose pills.
-    for (const p of pills) {
-      const n = p.s.count || 0;
-      const max = ctx.doseMax(p.s.id);
-      const key = `${n}/${max}`;
-      if (key === p.last) continue;
-      p.last = key;
-      p.count.textContent = `×${n}`;
-      p.btn.disabled = n >= max;
-    }
-    // Knobs follow changes made elsewhere (pills, keys, restore).
+    left.refresh();
+    // Knobs follow changes made elsewhere (the left column, keys, restore).
     for (const sl of sliders) {
       const v = ctx.getControl(sl.c.path);
       if (v === sl.last) continue;

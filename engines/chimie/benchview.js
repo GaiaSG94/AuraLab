@@ -78,7 +78,9 @@ export function buildBenchView(host, ctx) {
 
   const manometer = buildManometer(THREE);
   manometer.group.scale.setScalar(0.78);
-  manometer.group.position.set(1.62, -0.55, 0.62);
+  // Behind and left of the flask: keeps it clear of the ghost (x = 2.25) and
+  // clear of the two rows of reagent bottles (x <= -1.75).
+  manometer.group.position.set(-1.05, -0.5, -1.2);
   scene.add(manometer.group);
 
   const bottles = buildBottles(THREE, scene, ctx.config.substances, ctx.config.controls || []);

@@ -8,13 +8,17 @@ export const suite = new Suite("chemistry");
 
 const REAGENTS = ["hcl", "ch3cooh", "naoh", "nh3", "cuso4", "nahco3", "agno3", "bbt"];
 
-// Boot the chemistry lab and set the doses (1 dose = 25 mL of 0.1 M solution).
-async function flask(doses = {}, buretteMl = 0, frames = 12) {
-  const booted = await bootLab("app-chimie");
+// The lab is booted once and reset between cases: booting per case dominated
+// the run time and proved nothing extra.
+const booted = await bootLab("app-chimie");
+
+// Set the doses (1 dose = 25 mL of 0.1 M solution) and run the reaction.
+function flask(doses = {}, buretteMl = 0, frames = 12) {
   REAGENTS.forEach((id) => {
     if (booted.lab.state.substances[id]) booted.lab.state.substances[id].count = doses[id] || 0;
   });
   booted.lab.state.material.burette.strength = buretteMl;
+  booted.lab.state.material.bruleur.strength = 0;
   booted.lab.world.reset();
   runSteps(booted, frames);
   return booted.lab.world;

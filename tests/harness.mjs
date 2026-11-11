@@ -1,6 +1,7 @@
 // Minimal property-based testing harness (zero dependency).
 // Seedable RNG + generated cases + shrinking, enough to state a property
 // once and let it hunt for the counter-example on its own.
+// Tests and properties run sequentially so a suite can share one booted lab.
 import { mulberry32 } from "../engines/particles/world.js";
 
 export function check(condition, message) {
@@ -18,8 +19,6 @@ const SHRINKERS = {
     return candidates.find((c) => c !== v && Number.isFinite(c)) ?? null;
   },
   string: (v) => (v.length > 1 ? v.slice(0, Math.floor(v.length / 2)) : null),
-  array: (v) => (v.length > 1 ? v.slice(0, -1) : null),
-  object: (v) => null,
 };
 
 function isPlainObject(v) {
@@ -27,7 +26,7 @@ function isPlainObject(v) {
 }
 
 // Simplify one numeric leaf at a time; shorten one array at a time.
-function shrink(value, path = []) {
+function shrink(value) {
   if (typeof value === "number") {
     const s = SHRINKERS.number(value);
     return s === null ? [] : [s];
@@ -44,7 +43,7 @@ function shrink(value, path = []) {
       out.push(copy);
     }
     value.forEach((child, i) => {
-      shrink(child, path.concat(i)).forEach((smaller) => {
+      shrink(child).forEach((smaller) => {
         const copy = value.slice();
         copy[i] = smaller;
         out.push(copy);
@@ -55,10 +54,7 @@ function shrink(value, path = []) {
   if (isPlainObject(value)) {
     const out = [];
     Object.keys(value).forEach((key) => {
-      const child = value[key];
-      shrink(child, path.concat(key)).forEach((smaller) => {
-        out.push({ ...value, [key]: smaller });
-      });
+      shrink(value[key]).forEach((smaller) => out.push({ ...value, [key]: smaller }));
     });
     return out;
   }
@@ -69,39 +65,27 @@ export class Suite {
   constructor(name) {
     this.name = name;
     this.results = [];
-    this.pending = [];
+    this.queue = [];
   }
 
-  // Deterministic example test. May be async: `await suite.settle()` flushes it.
+  // Deterministic example test. May be async; `await suite.settle()` runs it.
   test(name, fn) {
-    const run = async () => {
+    this.queue.push(async () => {
       try {
         await fn();
         this.results.push({ name, ok: true });
       } catch (err) {
         this.results.push({ name, ok: false, error: err.message });
       }
-    };
-    this.pending.push(run());
-    return this;
-  }
-
-  // Await every async test registered so far.
-  async settle() {
-    while (this.pending.length > 0) {
-      const batch = this.pending;
-      this.pending = [];
-      await Promise.all(batch);
-    }
+    });
     return this;
   }
 
   // Property: `generate(rng)` builds a case, `property(value)` must never throw.
-  // The property may be async; the run is queued and awaited by `settle()`.
   property(name, generate, property, options = {}) {
     const runs = options.runs || 40;
     const seed = options.seed || 1;
-    const run = async () => {
+    this.queue.push(async () => {
       const rng = mulberry32(seed);
       for (let i = 0; i < runs; i++) {
         const value = generate(rng, i);
@@ -114,8 +98,15 @@ export class Suite {
         }
       }
       this.results.push({ name, ok: true, runs });
-    };
-    this.pending.push(run());
+    });
+    return this;
+  }
+
+  // Run every queued test/property in declaration order.
+  async settle() {
+    const queue = this.queue;
+    this.queue = [];
+    for (const run of queue) await run();
     return this;
   }
 
