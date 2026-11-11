@@ -152,6 +152,99 @@ suite.test("cables go slack in compression, arches buckle in tension", async () 
   if ((await loadOf("bois", false)) <= 0) throw new Error("a beam carried nothing while stretched");
 });
 
+// --- the load ladder: several ghosts, each heavier, crossing in turn ---------
+
+async function ladderWorld(siteId = "fleuve") {
+  const { booted, world } = activeWorld(siteId);
+  buildDeck(world, "bois");
+  return { booted, world };
+}
+
+suite.property(
+  "the ladder splits the heaviest ghost into increasing rungs",
+  (rng) => ({ poids: 8 + Math.floor(rng() * 33), echelons: 1 + Math.floor(rng() * 6) }),
+  ({ poids, echelons }) => {
+    const { booted, world } = ladderWorldSync();
+    const params = world.params()["charge-flottante"];
+    params.poids = poids;
+    params.echelons = echelons;
+    const ladder = world.ladder();
+    if (ladder.length !== echelons) throw new Error(`${ladder.length} rungs instead of ${echelons}`);
+    for (let i = 1; i < ladder.length; i++) {
+      if (!(ladder[i] > ladder[i - 1])) throw new Error(`rungs are not increasing: ${ladder.join(", ")}`);
+    }
+    if (Math.abs(ladder[ladder.length - 1] - poids) > 0.05) {
+      throw new Error(`heaviest rung ${ladder[ladder.length - 1]} != poids ${poids}`);
+    }
+  },
+  { runs: 25 },
+);
+
+// The ladder helper is synchronous: the shared boot already happened at module load.
+function ladderWorldSync() {
+  const world = booted.lab.worlds.fleuve;
+  world.resetPhysics();
+  world.sticks = [];
+  buildDeck(world, "bois");
+  return { booted, world };
+}
+
+suite.test("each ghost that reaches the bank hands over to a heavier one", async () => {
+  const { world } = await ladderWorld();
+  const params = world.params()["charge-flottante"];
+  params.echelons = 4;
+  params.poids = 20;
+  const r = world.startTest();
+  if (!r.ok) throw new Error(`test refused: ${r.why}`);
+  if (r.rungs !== 4) throw new Error(`startTest announced ${r.rungs} rungs, expected 4`);
+  if (r.heaviest !== 20) throw new Error(`heaviest announced ${r.heaviest}, expected 20`);
+  if (world.ghosts.length !== 4) throw new Error(`${world.ghosts.length} ghosts built, expected 4`);
+  if (world.ghosts[0].state !== "crossing") throw new Error("the first ghost is not crossing");
+  if (world.ghosts.filter((g) => g.state === "waiting").length !== 3) {
+    throw new Error("the other ghosts are not queued on the bank");
+  }
+  // Walk the first ghost to the far bank by hand.
+  world.ghosts[0].x = world.half + 2;
+  world.ghostReachedBank();
+  if (world.ghostIndex !== 1) throw new Error("the ladder did not advance");
+  if (world.ghosts[0].state !== "done") throw new Error("the first ghost was not parked");
+  if (world.ghosts[1].state !== "crossing") throw new Error("the second ghost did not step up");
+  if (!(world.ghosts[1].weight > world.ghosts[0].weight)) {
+    throw new Error("the next ghost is not heavier");
+  }
+  if (world.testing !== true) throw new Error("the test ended before the ladder was done");
+});
+
+suite.test("the last ghost crossing ends the test as a pass, scored on the heaviest", async () => {
+  const { world } = await ladderWorld();
+  const params = world.params()["charge-flottante"];
+  params.echelons = 3;
+  params.poids = 30;
+  world.startTest();
+  for (let i = 0; i < 3; i++) {
+    world.ghosts[world.ghostIndex].x = world.half + 2;
+    world.ghostReachedBank();
+  }
+  if (world.testing) throw new Error("the test did not end after the last ghost");
+  if (world.statut !== 1) throw new Error(`statut ${world.statut}, expected 1 (pass)`);
+  if (world.passed !== 30) throw new Error(`heaviest carried ${world.passed} t, expected 30`);
+  const expected = Math.max(0, Math.round(30 * 10 - world.spent()));
+  if (world.score !== expected) throw new Error(`score ${world.score}, expected ${expected}`);
+});
+
+suite.test("a ladder of one ghost behaves like the old single test", async () => {
+  const { world } = await ladderWorld();
+  const params = world.params()["charge-flottante"];
+  params.echelons = 1;
+  params.poids = 20;
+  const r = world.startTest();
+  if (r.rungs !== 1) throw new Error(`${r.rungs} rungs, expected 1`);
+  world.ghosts[0].x = world.half + 2;
+  world.ghostReachedBank();
+  if (world.statut !== 1) throw new Error("a single ghost did not finish the test");
+  if (world.passed !== 20) throw new Error(`heaviest carried ${world.passed}, expected 20`);
+});
+
 suite.property(
   "an unknown material is always refused, never placed",
   (rng) => ({ id: `ghost-${Math.floor(rng() * 1000)}` }),

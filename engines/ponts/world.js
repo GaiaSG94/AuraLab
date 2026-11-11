@@ -35,13 +35,27 @@ export function createWorld({ laws, site }) {
     sticks: [],
     laws: laws || [],
     palette,
-    ghost: { x: -half - 2, y: 1.8, tilt: 0, falling: false },
+    // A ladder of test ghosts: each one heavier than the last, crossing in turn.
+    ghosts: [],
+    ghostIndex: 0,
+    passed: 0,
     testing: false,
     statut: -1,
     score: 0,
     maxStrain: 0,
     dirty: true,
     version: 0,
+    // The ghost currently on the deck (kept for the HUD and the old call sites).
+    get ghost() {
+      return this.ghosts[this.ghostIndex] || { x: -this.half - 2, y: 1.8, tilt: 0, falling: false, weight: 0 };
+    },
+    // The load ladder: `echelons` ghosts from poids/echelons up to poids.
+    ladder() {
+      const charge = this.params()["charge-flottante"] || {};
+      const total = charge.poids || 20;
+      const rungs = Math.max(1, Math.min(6, Math.round(charge.echelons || 4)));
+      return Array.from({ length: rungs }, (_, i) => Math.round(((total * (i + 1)) / rungs) * 10) / 10);
+    },
     params() {
       const p = {};
       for (const l of this.laws) p[l.mod.id] = l.params;
@@ -128,19 +142,54 @@ export function createWorld({ laws, site }) {
       this.resetPhysics();
       this.testing = true;
       this.statut = -1;
-      return { ok: true };
+      // Build the load ladder: N ghosts, each heavier than the last, queued
+      // behind one another on the left bank.
+      const startX = -this.half - 2;
+      this.ghosts = this.ladder().map((weight, i) => ({
+        weight,
+        x: startX - i * 2.6,
+        y: 1.8,
+        tilt: 0,
+        falling: false,
+        state: i === 0 ? "crossing" : "waiting",
+      }));
+      this.ghostIndex = 0;
+      this.passed = 0;
+      const weights = this.ghosts.map((g) => g.weight);
+      return { ok: true, rungs: this.ghosts.length, heaviest: weights[weights.length - 1] || 0 };
+    },
+    // A ghost made it to the far bank: park it there, send the next one.
+    // The last one finishes the test as a pass.
+    ghostReachedBank() {
+      const done = this.ghosts[this.ghostIndex];
+      if (!done) return;
+      done.state = "done";
+      this.passed = done.weight;
+      if (this.ghostIndex < this.ghosts.length - 1) {
+        this.ghostIndex += 1;
+        const next = this.ghosts[this.ghostIndex];
+        next.state = "crossing";
+        next.x = -this.half - 2;
+        next.y = 1.8;
+        next.tilt = 0;
+        // Re-queue the ones still waiting so they stand tight behind.
+        this.ghosts.forEach((q, i) => {
+          if (q.state === "waiting") q.x = -this.half - 2 - (i - this.ghostIndex) * 2.6;
+        });
+        return;
+      }
+      this.finishTest();
     },
     finishTest() {
       this.testing = false;
       const broken = this.sticks.some((s) => s.broken);
-      const charge = this.params()["charge-flottante"] || {};
-      const poids = charge.poids || 20;
       if (broken || this.ghost.falling) {
         this.statut = 0;
         this.score = -this.spent();
       } else {
         this.statut = 1;
-        this.score = Math.max(0, Math.round(poids * 10 - this.spent()));
+        // The score rewards the heaviest ghost that made it across.
+        this.score = Math.max(0, Math.round(this.passed * 10 - this.spent()));
       }
     },
     deckYAt(x) {
@@ -162,7 +211,9 @@ export function createWorld({ laws, site }) {
         n.x = n.rx; n.y = n.ry; n.px = n.rx; n.py = n.ry; n.ax = 0; n.ay = 0;
       }
       for (const s of this.sticks) { s.broken = false; s.strain = 0; s.load = 0; }
-      this.ghost.x = -this.half - 2; this.ghost.y = 1.8; this.ghost.tilt = 0; this.ghost.falling = false;
+      this.ghosts = [];
+      this.ghostIndex = 0;
+      this.passed = 0;
       this.testing = false;
       this.statut = -1;
       this.maxStrain = 0;
@@ -233,13 +284,18 @@ export function createWorld({ laws, site }) {
         if (!n.fixed && n.y < -10) { n.y = -10; n.px = n.x; n.py = n.y; }
       }
       if (this.testing) {
-        if (this.sticks.some((s) => s.broken)) this.ghost.falling = true;
-        if (this.ghost.falling) {
-          this.ghost.y = Math.max(-9.4, this.ghost.y - 14 * dt);
-          this.ghost.tilt = Math.min(0.9, this.ghost.tilt + 1.5 * dt);
-          if (this.ghost.y <= -9.3) this.finishTest();
-        } else {
-          this.ghost.y = this.deckYAt(this.ghost.x) + 1.8;
+        const g = this.ghosts[this.ghostIndex];
+        if (!g) return;
+        if (this.sticks.some((s) => s.broken) && g.state === "crossing") {
+          g.falling = true;
+          g.state = "fallen";
+        }
+        if (g.falling) {
+          g.y = Math.max(-9.4, g.y - 14 * dt);
+          g.tilt = Math.min(0.9, g.tilt + 1.5 * dt);
+          if (g.y <= -9.3) this.finishTest();
+        } else if (g.state === "crossing") {
+          g.y = this.deckYAt(g.x) + 1.8;
         }
       }
     },

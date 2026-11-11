@@ -1,21 +1,24 @@
-// Law: charge-flottante — the test ghost hovers across and presses on nearby deck nodes.
+// Law: charge-flottante — a ladder of test ghosts crosses the deck one after
+// the other, each heavier than the last. The bridge must hold the whole ladder.
 export const chargeFlottante = {
   id: "charge-flottante",
   notice: {
-    label: "Floating load",
-    formule: "The ghost (weight t) floats above the deck at speed m/s and pushes nearby nodes.",
-    sources: "Moving point load (toy model).",
-    limites: "One ghost; deck assumed continuous.",
+    label: "Floating load ladder",
+    formule: "N ghosts cross in turn, weighing poids/N, 2*poids/N ... poids. Each presses on the deck nodes within 3 m of it. The bridge must carry the heaviest.",
+    sources: "Moving point load (toy model), staged like a real proof-load test.",
+    limites: "One ghost on the deck at a time; deck assumed continuous.",
   },
-  defaults: { poids: 20, vitesse: 6 },
+  defaults: { poids: 20, vitesse: 6, echelons: 4 },
   apply(world, dt, params) {
     if (!world.testing) return;
-    world.ghost.x += params.vitesse * dt;
+    const ghost = world.ghosts[world.ghostIndex];
+    if (!ghost || ghost.state === "fallen") return;
+    ghost.x += params.vitesse * dt;
     for (const n of world.nodes) {
       if (!n.deck || n.fixed) continue;
-      const dist = Math.abs(n.x - world.ghost.x);
-      if (dist < 3) n.ay -= params.poids * 2.2 * (1 - dist / 3);
+      const dist = Math.abs(n.x - ghost.x);
+      if (dist < 3) n.ay -= ghost.weight * 2.2 * (1 - dist / 3);
     }
-    if (world.ghost.x > world.half + 1.5) world.finishTest();
+    if (ghost.x > world.half + 1.5) world.ghostReachedBank();
   },
 };

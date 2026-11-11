@@ -3,6 +3,7 @@
 // Bottom: budget ring, hint, repair, Test. Same ctx contract as the game expects.
 import "../../core/ghost.js"; // side effect: window.AuraGhost (flask ghost logo)
 import { MATERIALS, KIND_LABEL, materialsForSite } from "./materials.js";
+import { buildLog } from "./hud-log.js";
 
 const PH_ICONS = {
   beam: '<rect x="3" y="9.5" width="18" height="5" rx="1.5"/><path d="M8 9.5v5M12 9.5v5M16 9.5v5"/>',
@@ -337,47 +338,18 @@ export function buildHud(host, ctx) {
     };
   }
   const hasCharge = chargeParams().length > 0;
-  const poidsSlider = hasCharge ? slider("Weight (t) — ghost size", 8, 40, 1,
+  const poidsSlider = hasCharge ? slider("Heaviest ghost (t)", 8, 40, 1,
     () => chargeParams()[0].poids,
     (v) => chargeParams().forEach((p) => { p.poids = v; })) : null;
+  const echelonsSlider = hasCharge ? slider("Ghosts in the ladder", 1, 6, 1,
+    () => chargeParams()[0].echelons,
+    (v) => chargeParams().forEach((p) => { p.echelons = v; })) : null;
   const vitesseSlider = hasCharge ? slider("Speed", 2, 12, 1,
     () => chargeParams()[0].vitesse,
     (v) => chargeParams().forEach((p) => { p.vitesse = v; })) : null;
 
-  // Log: prompts + entries + note input.
-  const prompts = document.createElement("ul");
-  prompts.className = "ph-prompts";
-  for (const p of ctx.config.notebook.prompts || []) {
-    const li = document.createElement("li");
-    li.textContent = p;
-    prompts.appendChild(li);
-  }
-  journalEl.appendChild(prompts);
-  const entries = document.createElement("ul");
-  entries.className = "ph-entries";
-  journalEl.appendChild(entries);
-  const noteRow = document.createElement("div");
-  noteRow.className = "ph-note";
-  const noteInput = document.createElement("input");
-  noteInput.placeholder = "Note an observation…";
-  noteInput.setAttribute("aria-label", "Note an observation");
-  const noteBtn = document.createElement("button");
-  noteBtn.type = "button";
-  noteBtn.textContent = "Note";
-  const addNote = () => {
-    const text = noteInput.value.trim();
-    if (!text) return;
-    ctx.journal(text);
-    noteInput.value = "";
-    refresh(true);
-  };
-  noteBtn.addEventListener("click", addNote);
-  noteInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") addNote();
-  });
-  noteRow.appendChild(noteInput);
-  noteRow.appendChild(noteBtn);
-  journalEl.appendChild(noteRow);
+  // Log: prompts, recorded entries and the note input.
+  const { entries } = buildLog({ journalEl, ctx, refresh });
 
   // Keyboard shortcuts.
   window.addEventListener("keydown", (e) => {
@@ -416,6 +388,17 @@ export function buildHud(host, ctx) {
     const s = ctx.config.sites.find((x) => x.id === id);
     return s ? s.label : id;
   }
+  // "up to 20 t · 4 ghosts" while idle, "ghost 2/4 · 10 t" while testing.
+  function ghostSummary() {
+    const w = ctx.worlds[ctx.activeId()].world;
+    const params = chargeParams()[0] || {};
+    const total = params.poids || 20;
+    const rungs = Math.max(1, Math.min(6, Math.round(params.echelons || 4)));
+    if (!w.testing) return `up to ${total} t · ${rungs} ghosts`;
+    const g = w.ghosts[w.ghostIndex];
+    return `ghost ${Math.min(rungs, w.ghostIndex + 1)}/${rungs} · ${g ? g.weight : total} t`;
+  }
+
   function refresh(force) {
     const w = ctx.worlds[ctx.activeId()].world;
     const spent = w.spent();
@@ -449,8 +432,9 @@ export function buildHud(host, ctx) {
       }
       V("laws").textContent = `${active} active`;
       if (poidsSlider) poidsSlider.sync();
+      if (echelonsSlider) echelonsSlider.sync();
       if (vitesseSlider) vitesseSlider.sync();
-      V("ghost").textContent = hasCharge ? `${chargeParams()[0].poids} t` : "";
+      V("ghost").textContent = hasCharge ? ghostSummary() : "";
       testBtn.setAttribute("aria-busy", String(!!w.testing));
       testBtn.querySelector("span").textContent = w.testing ? "Testing…" : "Test";
       hintEl.classList.toggle("run", !!w.testing);
