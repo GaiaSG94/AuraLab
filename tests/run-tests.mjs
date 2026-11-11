@@ -6,11 +6,12 @@ import { suite as labsSuite } from "./properties-labs.mjs";
 import { suite as chemistrySuite } from "./properties-chemistry.mjs";
 import { suite as bridgeSuite } from "./properties-bridge.mjs";
 import { suite as levelsSuite } from "./properties-levels.mjs";
+import { suite as chemScenarios } from "./properties-chemistry-scenarios.mjs";
 import { installDom } from "./dom-stub.mjs";
 
 installDom();
 
-const suites = [validateSuite, simulationSuite, labsSuite, chemistrySuite, bridgeSuite, levelsSuite];
+const suites = [validateSuite, simulationSuite, labsSuite, chemistrySuite, chemScenarios, bridgeSuite, levelsSuite];
 
 for (const suite of suites) await suite.settle();
 
