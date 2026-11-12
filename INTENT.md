@@ -3,7 +3,9 @@
 > Document d'intention : ce que le projet veut devenir.
 > Cible : hackathon Kiroween 2026, track Skeleton Crew (template épuré + deux applis distinctes).
 > État actuel : socle + 4 labos fonctionnels (2 en 2D sur le shell, 2 en 3D sur interface propre) ;
-> toutes les technologies Kiro intégrées et vérifiées en CI (voir Journal).
+> les deux labos 3D reposent sur de la science réelle (chimie aqueuse stœchiométrique, pont à 10
+> matériaux et niveaux générés avec cagnotte) ; toutes les technologies Kiro intégrées et vérifiées
+> en CI ; 68 propriétés PBT (voir Journal).
 
 ## Vision produit
 
@@ -183,3 +185,42 @@ vérifiables, pas seulement mentionnées.
    dans les profils d'agents (le seul scope qui voyage avec le repo).
 10. **CI** : 5 jobs (fmt, lint, build, test, pbt) + le garde-fou budget ;
     déclenchement étendu aux push sur `main`.
+
+## Journal — session 2026-11-12 (science réelle + niveaux + scénarios)
+
+Objectif : que les deux labos 3D reposent sur de la vraie science et que la
+progression du Bridge Lab soit un système de niveaux, pas trois rivières figées.
+
+1. **Chemistry Lab réel** : 8 réactifs, 7 lois stœchiométriques (dilution,
+   équilibre acido-basique, enthalpie de réaction, précipitation, dégagement
+   gazeux, indicateur coloré, ébullition), 5 instruments (température, pH,
+   volume, précipité, pression), burette de titrage. Le HUD passe en **colonne
+   gauche** (substances −/+, instruments vivants, lois à cases avec notices) ;
+   l'onglet Laws et les pastilles flottantes disparaissent ; le manomètre est
+   déplacé derrière-gauche du ballon pour ne plus chevaucher le fantôme ; les
+   yeux du fantôme (sclérotique blanche + pupille) sont restaurés.
+2. **Bridge Lab à 10 matériaux** : catalogue structurel (corde, câble, bambou,
+   chaîne, bois, lamelle, acier, pilier, treillis, arche) avec familles
+   traction/compression, coût, portée max, rigidité, résistance, poids propre.
+3. **Système de niveaux** (`engines/ponts/levels.js`) : plus de liste `sites`.
+   Chaque niveau dérive du bloc `levels` du config — écart, échelle de charges,
+   fantôme le plus lourd, palette de matériaux, récompense. Difficulté
+   **monotone et plafonnée** ; la palette ne fait que croître (REQ-55/56/58).
+4. **Cagnotte** (purse) : `purse - dépensé + récompense`, jamais négative,
+   récompense bankée une seule fois par échelle (garde anti-double-paiement),
+   progression sauvegardée. Le HUD affiche `Level N` + la cagnotte ; l'échelle
+   de charges est en **lecture seule** (le niveau est le contrat) ; un bouton
+   `Next level` apparaît quand l'échelle est franchie.
+5. **mapview reconstructible** : `constructMapView` + `dispose`, rig caméra et
+   aperçu de membre extraits (`camera-rig.js`, `member-preview.js`) pour
+   rebâtir la vallée à chaque niveau sous la barre des 500 lignes.
+6. **Scénarios chimie de bout en bout** (`tests/properties-chemistry-scenarios.mjs`) :
+   6 scénarios qui pilotent le vrai labo et prouvent la paillasse, pas seulement
+   chaque loi isolée — titrage complet (équivalence à 25 mL + exothermie),
+   précipitation pesée puis redissoute en complexe, manomètre CO2 qui monte puis
+   se relaxe, indicateur BBT, 5 instruments finis, ébullition au Bunsen. Un bug
+   de test corrigé au passage (`measures[metric.source]`, pas `[metric.id]`).
+7. **État** : 68/68 propriétés ; toutes les portes vertes (fmt, lint, build,
+   test, PBT, ci-budget, hermes-lite, intégrité, artefacts Kiro, workflows,
+   MCP) ; 0 erreur console ; 14/14 assertions DOM chimie, 13/13 bridge.
+   PR #9, #10, #11, #12, #13 mergées sur `main`.
