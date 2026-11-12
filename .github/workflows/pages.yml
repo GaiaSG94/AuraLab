@@ -1,0 +1,47 @@
+name: pages
+
+# Déploiement du portail + des labos autonomes sur GitHub Pages.
+# Sert la racine du dépôt telle quelle : index.html (portail), dist/*.html
+# (autonomes double-cliquables) et app-*/ (sources modulaires). Aucun build :
+# la règle du dépôt est « dist/ est généré et committé », on déploie ce qu'on
+# double-clique. .nojekyll désactive Jekyll (déploiement statique pur).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout (superficiel)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: Upload artifact (racine du dépôt)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

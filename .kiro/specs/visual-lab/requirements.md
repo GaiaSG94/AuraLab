@@ -1,4 +1,4 @@
-# visual-lab — Requirements (EARS)
+﻿# visual-lab â€” Requirements (EARS)
 
 Lean, reusable template for visual education labs (Kiroween Skeleton Crew track).
 One generic shell renders every lab; each lab is a config + small wiring code.
@@ -77,7 +77,7 @@ measurement contract.
 
 - REQ-50: The chemistry engine SHALL model real aqueous chemistry: molar dilution, charge-balance pH (strong and weak acids and bases), heat of neutralisation, insoluble precipitates with their mass in grams, CO2 gas evolution with the headspace pressure, and a colour indicator (bromothymol blue).
 - REQ-51: The chemistry lab SHALL expose five instruments worth of measurements (temperature, pH, volume, precipitate mass, pressure) and a titration burette.
-- REQ-52: The bridge engine SHALL draw members from a structural catalogue of at least six materials, each with its own cost, maximum span, stiffness, strength and self-weight, and each belonging to a mechanical family (tension only, compression only, or both).
+- REQ-52: The bridge engine SHALL draw members from a structural catalogue of at least ten materials, each with its own cost, maximum span, stiffness, strength and self-weight, and each belonging to a mechanical family (tension only, compression only, or both).
 - REQ-53: A bridge site SHALL gate its material palette, so progression is visible in the dock.
 - REQ-54: The bridge dock SHALL show every allowed material with its cost and span, and the placement preview SHALL turn red when the span exceeds the material limit.
 - REQ-55: The bridge lab SHALL derive each level from the `levels` block of
@@ -109,7 +109,7 @@ measurement contract.
 - REQ-44: WHEN a reagent combination is simulated THEN pH SHALL stay within
   [0, 14], temperature within [0, 100] degrees C, and every measure SHALL stay
   finite, for any combination of doses and any burette volume.
-- REQ-45: The bridge lab SHALL offer at least six structural materials, each
+- REQ-45: The bridge lab SHALL offer at least ten structural materials, each
   with its own cost, maximum span, stiffness, strength and self-weight, and
   each belonging to a family (beam: tension and compression; cable: tension
   only; arch/pier: compression only).

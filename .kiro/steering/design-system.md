@@ -39,18 +39,23 @@ same without writing CSS.
 - Exception: Bridge Lab (`app-ponts`) is a headless full-screen 3D game with
   its own interface (`engines/ponts/mapview.js` + `hud.js`). Golden-hour
   low-poly valley; frosted-glass HUD floating on the edges: brand (ghost +
-  lowercase name), sites and score/home on top, tool dock on the left, sensors
-  card (laws, ghost, log) on the right, budget ring + hint + Test at the
-  bottom. Gradients and glass are allowed here because the 3D scene shows
-  through; keep the bridge clear in the middle of the screen.
+  lowercase name), a `Level N` chip and the purse on top, tool dock on the
+  left, sensors card (laws, the read-only load ladder, per-rung log) on the
+  right, budget ring + hint + Test + `Next level` at the bottom. There are no
+  site buttons any more: levels are generated (`engines/ponts/levels.js`) and
+  the purse carries over. Gradients and glass are allowed here because the 3D
+  scene shows through; keep the bridge clear in the middle of the screen.
 - Exception: Chemistry Lab (`app-chimie`) is also headless and full-screen 3D
   (`engines/chimie/benchview.js` + `hud.js`, design "blown glass"). Real glass
   on the flat page green `#6cc95a`, no dark bench: slim dropper bottles on the
-  left (dose pill under each, click a bottle to pour), Erlenmeyer on a tripod
-  over the Bunsen burner in the middle (thermometer dipped in), the 3D flask
-  ghost watching on the right. Frosted-glass HUD: brand + Lab/Laws/Knobs/
-  Notebook tabs + home on top, measure cards on the right, time + status +
-  Measure at the bottom. `lab.js` stays for the validator / MCP server.
+  left plus a titration burette, Erlenmeyer on a tripod over the Bunsen burner
+  in the middle (thermometer dipped in), the manometer behind-left so it never
+  overlaps the ghost, the 3D flask ghost watching on the right. Frosted-glass
+  HUD: brand + Lab/Knobs/Notebook tabs + home on top, a left column holding the
+  8 substances (−/+ dose), the 5 live instruments and the 7 law switches with
+  their notices, measure cards + pH scale + equivalence badge on the right,
+  time + status + Measure at the bottom. `lab.js` stays for the validator / MCP
+  server.
 - The 3D ghost (both 3D labs) has a wavy, swaying hem instead of a round
   bottom, eyes that follow the pointer (else the experiment) and blink. In the
   Chemistry Lab it also has moods: watches the flask, looks at the viewer,
