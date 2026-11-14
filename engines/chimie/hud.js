@@ -1,9 +1,10 @@
 // Chemistry HUD (design C4 "blown glass"): frosted-glass panels floating on the page colour
-// over the 3D bench. Top: brand, steps as tabs, home. Right: measures (Lab) or the Laws,
-// Knobs and Notebook sheets. Under each bottle: its dose pill. Bottom: time + status + Measure.
+// over the 3D bench. Top: brand + home. Left: substances and the instruments the student
+// selects. Right: the measures of the selected instruments. Bottom: time + status + notebook
+// + Measure.
 import "../../core/ghost.js"; // side effect: window.AuraGhost (flask ghost logo)
 
-import { chIcon, chEsc } from "./hud-shared.js";
+import { chIcon, chEsc, CH_INSTRUMENTS } from "./hud-shared.js";
 import { buildLeftColumn } from "./hud-left.js";
 
 
@@ -17,7 +18,7 @@ export function buildChemHud(host, ctx, view) {
     st.textContent = CH_CSS;
     document.head.appendChild(st);
   }
-  const { config, world, state } = ctx;
+  const { config, world } = ctx;
   const root = document.createElement("div");
   root.className = "ch-root";
   host.appendChild(root);
@@ -29,43 +30,28 @@ export function buildChemHud(host, ctx, view) {
     return n;
   };
 
-  // Top: brand, tabs, home.
+  // Top: brand, home.
   const brand = add('<div class="ch-brand"><span class="ch-logo"></span><b></b></div>');
   brand.querySelector("b").textContent = String(config.lab.title || "lab").toLowerCase();
   if (window.AuraGhost) window.AuraGhost.mount(brand.querySelector(".ch-logo"), "white");
-  const steps = [{ id: "lab", label: "Lab" }];
-  if (config.controls.length > 0) steps.push({ id: "knobs", label: "Knobs" });
-  if (config.notebook.enabled) steps.push({ id: "notebook", label: "Notebook" });
-  const tabs = add('<nav class="ch-gx ch-pill ch-tabs" role="tablist" aria-label="Lab steps"></nav>');
-  const tabBtns = {};
-  steps.forEach((s) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.setAttribute("role", "tab");
-    b.textContent = s.label;
-    b.addEventListener("click", () => select(s.id));
-    tabs.appendChild(b);
-    tabBtns[s.id] = b;
-  });
   const home = add(`<a class="ch-gx ch-pill ch-home">${chIcon("back")}<span>all labs</span></a>`);
   home.setAttribute("href", config.lab.home || "../index.html");
 
-  // Right column: measures (Lab) or one sheet per step.
+  // Right column: measures.
   const side = add('<div class="ch-side"></div>');
-  const panes = {};
   const widgets = document.createElement("div");
   widgets.className = "ch-widgets";
   side.appendChild(widgets);
-  panes.lab = widgets;
+  const panes = { lab: widgets };
   const sheet = (id) => {
     const s = document.createElement("section");
     s.className = "ch-gx ch-card ch-sheet";
-    s.setAttribute("role", "tabpanel");
     s.hidden = true;
     side.appendChild(s);
     panes[id] = s;
     return s;
   };
+
 
   // Measure cards, one per config metric (temperature, pH, volume have their own look).
   const cards = config.metrics.map((m) => {
@@ -94,55 +80,11 @@ export function buildChemHud(host, ctx, view) {
     return { m, card, v: card.querySelector(".v"), last: "" };
   });
 
-  // Knobs sheet: config sliders + the burner switch + the burette buttons.
-  const sliders = [];
-  let burnerBox = null;
-  if (steps.some((s) => s.id === "knobs")) {
-    const s = sheet("knobs");
-    s.insertAdjacentHTML("beforeend", "<h3>Knobs</h3>");
-    if (state.material.bruleur) {
-      const row = document.createElement("div");
-      row.className = "ch-row";
-      row.innerHTML = '<label class="ch-sw"><input type="checkbox" aria-label="Burner on"><span></span></label><span class="nm">Burner on<small>or click the burner</small></span>';
-      burnerBox = row.querySelector("input");
-      burnerBox.addEventListener("change", () => ctx.setBurner(burnerBox.checked));
-      s.appendChild(row);
-    }
-    if (state.material.burette) {
-      const b = document.createElement("div");
-      b.className = "ch-bur";
-      b.innerHTML =
-        '<button type="button" class="ink" data-ml="1">+1 mL</button>' +
-        '<button type="button" data-ml="5">+5 mL</button>' +
-        '<button type="button" data-ml="drain">Drain</button>' +
-        '<small>NaOH 0.1 M</small>';
-      b.querySelectorAll("button").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const ml = btn.dataset.ml;
-          if (ml === "drain") ctx.drainBurette();
-          else ctx.dispense(Number(ml));
-        });
-      });
-      s.appendChild(b);
-    }
-    config.controls.forEach((c, i) => {
-      const w = document.createElement("div");
-      w.className = "ch-ctl";
-      w.innerHTML = `<label for="ch-ctl-${i}"><span>${chEsc(c.label)}</span><output></output></label><input id="ch-ctl-${i}" type="range" min="${c.min}" max="${c.max}" step="${c.step}">`;
-      const input = w.querySelector("input");
-      const out = w.querySelector("output");
-      input.addEventListener("input", () => {
-        ctx.setControl(c.path, parseFloat(input.value));
-        out.textContent = input.value;
-      });
-      s.appendChild(w);
-      sliders.push({ c, input, out, last: null });
-    });
-  }
+  // Controls live in the left instrument list now.
 
   // Notebook sheet (same storage as the shell notebook).
   let renderBook = () => {};
-  if (steps.some((s) => s.id === "notebook")) {
+  if (config.notebook.enabled) {
     // No scrollbar: the sheet keeps a fixed layout and the entries are paged to what fits.
     const s = sheet("notebook");
     s.classList.add("ch-book");
@@ -258,14 +200,21 @@ export function buildChemHud(host, ctx, view) {
     window.addEventListener("resize", () => { if (ctx.tab === "notebook") renderBook(true); });
   }
 
+  let nbBtn = null;
   function select(id) {
     ctx.tab = id;
-    steps.forEach((s) => {
-      tabBtns[s.id].setAttribute("aria-selected", String(s.id === id));
-      panes[s.id].hidden = s.id !== id;
-    });
-    side.classList.toggle("sheet", id !== "lab");
-    if (id === "notebook") renderBook();
+    const notebookOpen = id === "notebook" && panes.notebook;
+    if (notebookOpen) {
+      widgets.hidden = true;
+      panes.notebook.hidden = false;
+      side.classList.add("sheet");
+      renderBook();
+    } else {
+      widgets.hidden = false;
+      if (panes.notebook) panes.notebook.hidden = true;
+      side.classList.remove("sheet");
+    }
+    if (nbBtn) nbBtn.classList.toggle("on", notebookOpen);
   }
   select("lab");
 
@@ -283,6 +232,7 @@ export function buildChemHud(host, ctx, view) {
     `<button type="button" class="ch-ib2 empty" title="Empty the flask (R)" aria-label="Empty the flask">${chIcon("empty")}</button>` +
     `<button type="button" class="ch-ib2 step" title="One step" aria-label="One step">${chIcon("step")}</button>` +
     '<span class="ch-sep"></span><p class="ch-stat" role="status" aria-live="polite"><span class="dots"></span><span class="txt"></span></p><span class="ch-sep"></span>' +
+    '<button type="button" class="ch-btn notebook">Notebook</button>' +
     '<button type="button" class="ch-measure"><i></i>Measure</button>';
   const playBtn = bar.querySelector(".play");
   const stepBtn = bar.querySelector(".step");
@@ -291,6 +241,12 @@ export function buildChemHud(host, ctx, view) {
   playBtn.addEventListener("click", () => ctx.togglePause());
   bar.querySelector(".empty").addEventListener("click", () => ctx.emptyFlask());
   stepBtn.addEventListener("click", () => ctx.stepOnce());
+  nbBtn = bar.querySelector(".notebook");
+  nbBtn.addEventListener("click", () => {
+    const open = !nbBtn.classList.toggle("on");
+    select(open ? "notebook" : "lab");
+    if (!open) nbBtn.blur();
+  });
   bar.querySelector(".ch-measure").addEventListener("click", () => { ctx.record(); renderBook(); });
 
   // Keyboard: Space play/pause, R empty, B burner, 1–9 pour, Esc back to Lab.
@@ -314,7 +270,7 @@ export function buildChemHud(host, ctx, view) {
     const r = host.getBoundingClientRect();
     const sb = side.getBoundingClientRect();
     const bb = bar.getBoundingClientRect();
-    const top = Math.max(brand.getBoundingClientRect().bottom, tabs.getBoundingClientRect().bottom, home.getBoundingClientRect().bottom) - r.top + 14;
+    const top = Math.max(brand.getBoundingClientRect().bottom, home.getBoundingClientRect().bottom) - r.top + 14;
     const sideOnRight = sb.left - r.left > r.width / 2;
     const right = sideOnRight ? r.right - sb.left + 16 : 16;
     // An open sheet grows over the scene on small screens: frame for the 150px strip only.
@@ -339,6 +295,12 @@ export function buildChemHud(host, ctx, view) {
     src === "precipite" ? v.toFixed(3) :
     (Math.round(v * 10) / 10).toFixed(1);
   function refresh() {
+    // Measures follow the instruments selected on the left: a deselected
+    // instrument loses its card (and its 3D object via ctx.setInstrument).
+    for (const c of cards) {
+      const def = CH_INSTRUMENTS.find((i) => i.metric === c.m.source);
+      c.card.hidden = !!(def && !ctx.instrumentActive(def));
+    }
     const vals = ctx.metricValues();
     for (const c of cards) {
       const v = vals[c.m.id] || 0;
@@ -384,15 +346,6 @@ export function buildChemHud(host, ctx, view) {
       }
     }
     left.refresh();
-    // Knobs follow changes made elsewhere (the left column, keys, restore).
-    for (const sl of sliders) {
-      const v = ctx.getControl(sl.c.path);
-      if (v === sl.last) continue;
-      sl.last = v;
-      sl.input.value = String(v);
-      sl.out.textContent = String(Math.round(v * 100) / 100);
-    }
-    if (burnerBox) burnerBox.checked = ctx.isActive("material", "bruleur");
     // Status line.
     const st = ctx.status();
     const sk = st.text + st.colors.join();
@@ -409,15 +362,7 @@ export function buildChemHud(host, ctx, view) {
     }
     const nb = ctx.notebook();
     const count = nb.notes.length + nb.snapshots.length;
-    if (count !== lastBadge && tabBtns.notebook) {
-      lastBadge = count;
-      let b = tabBtns.notebook.querySelector(".badge");
-      if (!count && b) b.remove();
-      if (count) {
-        if (!b) { b = document.createElement("span"); b.className = "badge"; tabBtns.notebook.appendChild(b); }
-        b.textContent = String(count);
-      }
-    }
+    if (count !== lastBadge) lastBadge = count;
   }
   refresh();
   return { refresh, layout, insets, select, renderBook };

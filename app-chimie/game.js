@@ -49,6 +49,21 @@ export async function startGame(source) {
 
   const ctx = {
     config, catalog, clock, isActive, setActive, world, state,
+    instrumentActive(instrument) {
+      if (instrument.id === "burner") return isActive("instruments", instrument.id) && isActive("material", "bruleur");
+      return isActive("instruments", instrument.id);
+    },
+    setInstrument(instrument, active) {
+      setActive("instruments", instrument.id, active);
+      if (instrument.id === "burner") {
+        const b = state.material.bruleur;
+        if (!active && b) b.strength = 0;
+      }
+      if (instrument.id === "burette" && !active) ctx.drainBurette();
+      if (view.syncInstruments) view.syncInstruments();
+      view.resize();
+      ctx.touch();
+    },
     tab: "lab",
     history: [],
     touch() { world.step(0, isActive); },
@@ -94,12 +109,13 @@ export async function startGame(source) {
       ctx.touch();
     },
     setBurner(on) {
-      setActive("material", "bruleur", on);
+      setActive("instruments", "burner", on);
       const b = state.material.bruleur;
       if (on && b && !(b.strength > 0)) b.strength = 60;
+      if (view.syncInstruments) view.syncInstruments();
       ctx.touch();
     },
-    toggleBurner() { ctx.setBurner(!isActive("material", "bruleur")); },
+    toggleBurner() { ctx.setBurner(!ctx.instrumentActive({ id: "burner" })); },
     getControl(path) { return getPath(state, path); },
     setControl(path, v) {
       if (setPath(state, path, v)) ctx.touch();

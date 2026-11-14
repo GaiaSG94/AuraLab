@@ -1,5 +1,8 @@
-// Chemistry HUD shared helpers: icon set and escaping.
+// Chemistry HUD shared helpers: icon set, escaping, and the instrument list.
 // Kept in one module so the HUD and its left column never drift apart.
+// Instruments: what the student can put on (or take off) the bench.
+// metric: the config metric the instrument measures; material: the bench
+// object shown/hidden when selected.
 
 const CH_ICONS = {
   back: '<path d="M15 6l-6 6 6 6"/>',
@@ -11,6 +14,16 @@ const CH_ICONS = {
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
   next: '<path d="M9 6l6 6-6 6"/>',
 };
+
+export const CH_INSTRUMENTS = [
+  { id: "thermometer", label: "Thermometer", metric: "temperature", material: "thermometer" },
+  { id: "ph-meter", label: "pH meter", metric: "ph" },
+  { id: "graduated-cylinder", label: "Graduated cylinder", metric: "volume" },
+  { id: "balance", label: "Balance", metric: "precipite" },
+  { id: "manometer", label: "Manometer", metric: "pression", material: "manometer" },
+  { id: "burette", label: "NaOH burette", material: "burette", control: "material.burette.strength", controlMax: 50, controlStep: 1 },
+  { id: "burner", label: "Bunsen burner", material: "bruleur", control: "material.bruleur.strength", controlMax: 100, controlStep: 5 },
+];
 
 export const chIcon = (k) => `<svg class="ch-i" viewBox="0 0 24 24" aria-hidden="true">${CH_ICONS[k]}</svg>`;
 

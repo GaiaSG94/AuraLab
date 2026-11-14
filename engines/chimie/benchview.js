@@ -143,6 +143,17 @@ export function buildBenchView(host, ctx) {
 
   let hoverId = null;
   const hits = [...bottles.map((b) => b.hit), burner.hit, burette.hit];
+  function syncInstruments() {
+    const visible = (id) => ctx.instrumentActive ? ctx.instrumentActive({ id }) : true;
+    thermometer.group.visible = visible("thermometer");
+    manometer.group.visible = visible("manometer");
+    burner.group.visible = visible("burner") && (ctx.isActive("material", "bruleur") || !ctx.instrumentActive);
+    burner.flame.visible = burner.group.visible;
+    burner.glow.visible = burner.group.visible;
+    burner.hit.visible = burner.group.visible;
+    burette.group.visible = visible("burette");
+  }
+  syncInstruments();
   wirePicking(canvas, camera, hits, ctx, ghost, (id) => { hoverId = id; });
 
   let t = 0;
@@ -167,6 +178,7 @@ export function buildBenchView(host, ctx) {
     pour(id) { effects.pour(id, bottles); ghost.hop(); },
     dispense(ml) { effects.dispense(ml, burette); ghost.hop(); },
     resize,
+    syncInstruments,
     toScreen,
     shortName,
     setHover: (id) => { hoverId = id; },
@@ -439,7 +451,8 @@ function updateThermometer(th, world) {
 
 function updateBurner(burner, world, ctx, t, reduced) {
   const b = world.material.bruleur;
-  const lit = !!(b && ctx.isActive("material", "bruleur") && b.strength > 0);
+  const on = !ctx.instrumentActive || ctx.instrumentActive({ id: "burner" });
+  const lit = !!(b && on && b.strength > 0);
   burner.flame.visible = lit;
   burner.glow.visible = lit;
   if (!lit) return;
@@ -512,6 +525,6 @@ function wirePicking(canvas, camera, hits, ctx, ghost, onHover) {
     if (!h) return;
     if (h.substance) ctx.addDose(h.substance);
     else if (h.burner) ctx.toggleBurner();
-    else if (h.burette) ctx.dispense(e.shiftKey ? 5 : 1);
+    else if (h.burette && (!ctx.instrumentActive || ctx.instrumentActive({ id: "burette" }))) ctx.dispense(e.shiftKey ? 5 : 1);
   });
 }

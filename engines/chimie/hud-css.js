@@ -21,7 +21,9 @@ export const CH_CSS = `
 .ch-side{position:absolute;right:24px;top:84px;bottom:96px;width:236px;display:flex;flex-direction:column;gap:12px}
 .ch-side>[hidden]{display:none!important}
 .ch-widgets{flex:1;min-height:0;display:flex;flex-direction:column;gap:12px}
-.ch-card{padding:14px 16px;display:flex;flex-direction:column;gap:7px;min-height:0}
+ .ch-card{padding:14px 16px;display:flex;flex-direction:column;gap:7px;min-height:0}
+ .ch-widgets>.ch-card[hidden]{display:none}
+ .ch-bar .ch-btn.notebook.on{background:#0b2a17;color:#fff}
 .ch-cap{font:700 10.5px/1 "JetBrains Mono",ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;color:rgba(11,42,23,.6)}
 .ch-wh{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .ch-chip{font-weight:700;font-size:11px;background:#ff5a3d;color:#fff;border-radius:999px;padding:3px 9px;white-space:nowrap}
@@ -156,7 +158,23 @@ export const CH_CSS = `
 .ch-ins .tag.base{background:#7c3aed;color:#fff}
 .ch-ins .tag.solid{background:#0ea5e9;color:#fff}
 .ch-ins .tag.gas{background:#f97316;color:#fff}
-.ch-ins .tag.hot{background:#b91c1c;color:#fff}
-.ch-law{display:flex;align-items:center;gap:8px;min-height:28px}
-.ch-law .nm{flex:1;min-width:0;font-weight:600;font-size:12px}
-`;
+ .ch-ins .tag.hot{background:#b91c1c;color:#fff}
+ .ch-instrument{display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:7px;min-height:30px}
+ .ch-instrument .nm{min-width:0;font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .ch-instrument .readout{font:700 10px "JetBrains Mono",ui-monospace,monospace;color:rgba(11,42,23,.7);white-space:nowrap}
+ .ch-check{position:relative;width:36px;height:22px;display:block}
+ .ch-check input{position:absolute;inset:0;width:100%;height:100%;opacity:0;margin:0;cursor:pointer}
+ .ch-check span{position:absolute;inset:0;border-radius:999px;background:rgba(11,42,23,.2);transition:background .15s;pointer-events:none}
+ .ch-check span::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .15s}
+ .ch-check input:checked+span{background:#0b2a17}
+ .ch-check input:checked+span::after{left:17px}
+ .ch-check input:focus-visible+span{outline:3px solid #0b2a17;outline-offset:2px}
+ .ch-instrument-control{grid-column:2 / 4;width:100%;margin:-2px 0 2px;accent-color:#0b2a17}
+ .ch-instrument-quick{grid-column:2 / 4;display:flex;gap:4px}
+ .ch-instrument-quick button{border:1px solid rgba(11,42,23,.25);border-radius:999px;padding:2px 7px;font-size:10px}
+ .ch-instrument-quick button.ink{background:#0b2a17;color:#fff}
+ .ch-instrument-quick button:disabled{opacity:.3;cursor:default}
+ .ch-instrument.off{opacity:.55}
+ .ch-law{display:flex;align-items:center;gap:8px;min-height:28px}
+ .ch-law .nm{flex:1;min-width:0;font-weight:600;font-size:12px}
+ `;
