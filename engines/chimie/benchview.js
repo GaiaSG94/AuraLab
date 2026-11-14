@@ -6,6 +6,7 @@
 import {
   lathe, glassMaterial, metalMaterial, shadows,
   buildFlask, buildThermometer, buildBurner, buildBurette, buildManometer,
+  buildBeaker, buildStirrer, buildTestTubeRack,
   liquidLevelOf, flaskInnerRadius,
 } from "./glassware.js";
 import { buildFlaskGhost } from "./bench-ghost.js";
@@ -83,6 +84,13 @@ export function buildBenchView(host, ctx) {
   manometer.group.position.set(-1.05, -0.5, -1.2);
   scene.add(manometer.group);
 
+  const beaker = buildBeaker(THREE);
+  scene.add(beaker.group);
+  const stirrer = buildStirrer(THREE);
+  scene.add(stirrer.group);
+  const rack = buildTestTubeRack(THREE);
+  scene.add(rack.group);
+
   const bottles = buildBottles(THREE, scene, ctx.config.substances, ctx.config.controls || []);
   const ghost = buildFlaskGhost(THREE, { toScreen, reduced: REDUCED });
   scene.add(ghost.group);
@@ -147,11 +155,12 @@ export function buildBenchView(host, ctx) {
     const visible = (id) => ctx.instrumentActive ? ctx.instrumentActive({ id }) : true;
     thermometer.group.visible = visible("thermometer");
     manometer.group.visible = visible("manometer");
-    burner.group.visible = visible("burner") && (ctx.isActive("material", "bruleur") || !ctx.instrumentActive);
-    burner.flame.visible = burner.group.visible;
-    burner.glow.visible = burner.group.visible;
-    burner.hit.visible = burner.group.visible;
     burette.group.visible = visible("burette");
+    burner.group.visible = visible("burner");
+    burner.hit.visible = burner.group.visible;
+    beaker.group.visible = visible("beaker");
+    stirrer.group.visible = visible("stirrer");
+    rack.group.visible = visible("rack");
   }
   syncInstruments();
   wirePicking(canvas, camera, hits, ctx, ghost, (id) => { hoverId = id; });

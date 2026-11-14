@@ -23,6 +23,9 @@ export const CH_INSTRUMENTS = [
   { id: "manometer", label: "Manometer", metric: "pression", material: "manometer" },
   { id: "burette", label: "NaOH burette", material: "burette", control: "material.burette.strength", controlMax: 50, controlStep: 1 },
   { id: "burner", label: "Bunsen burner", material: "bruleur", control: "material.bruleur.strength", controlMax: 100, controlStep: 5 },
+  { id: "beaker", label: "Beaker 100 mL", material: "beaker" },
+  { id: "stirrer", label: "Magnetic stirrer", material: "stirrer" },
+  { id: "rack", label: "Test tube rack", material: "rack" },
 ];
 
 export const chIcon = (k) => `<svg class="ch-i" viewBox="0 0 24 24" aria-hidden="true">${CH_ICONS[k]}</svg>`;

@@ -50,11 +50,12 @@ export async function startGame(source) {
   const ctx = {
     config, catalog, clock, isActive, setActive, world, state,
     instrumentActive(instrument) {
-      if (instrument.id === "burner") return isActive("instruments", instrument.id) && isActive("material", "bruleur");
+      if (instrument.material) return isActive("material", instrument.material);
       return isActive("instruments", instrument.id);
     },
     setInstrument(instrument, active) {
-      setActive("instruments", instrument.id, active);
+      setActive(instrument.material ? "material" : "instruments", instrument.material || instrument.id, active);
+      if (instrument.id === "burner") setActive("material", "bruleur", active);
       if (instrument.id === "burner") {
         const b = state.material.bruleur;
         if (!active && b) b.strength = 0;

@@ -2609,6 +2609,57 @@ function buildManometer(THREE) {
   return { group, needle };
 }
 
+// Plain glass beaker resting on the bench, left of the reagent bottles.
+function buildBeaker(THREE) {
+  const group = new THREE.Group();
+  const glass = glassMaterial(THREE);
+  const body = shadows(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.34, 0.8, 36, 1, true), glass));
+  body.position.y = 0.4;
+  const rim = shadows(new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.025, 10, 40), glass));
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = 0.8;
+  const bottom = shadows(new THREE.Mesh(new THREE.CircleGeometry(0.34, 36), glass));
+  bottom.rotation.x = -Math.PI / 2;
+  const waterMat = new THREE.MeshStandardMaterial({ color: 0x9fd8ef, roughness: 0.15, transparent: true, opacity: 0.7 });
+  const water = shadows(new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.28, 0.42, 32), waterMat));
+  water.position.y = 0.21;
+  group.add(body, rim, bottom, water);
+  group.position.set(-1.7, -1.2, 0.35);
+  return { group };
+}
+
+// Magnetic stirrer plate with its dial, parked right of the flask.
+function buildStirrer(THREE) {
+  const group = new THREE.Group();
+  const plate = shadows(new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.1, 0.65), metalMaterial(THREE, 0xe8ece9, 0.3)));
+  plate.position.y = 0.05;
+  const dial = shadows(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.04, 24), metalMaterial(THREE, 0x0f172a, 0.35)));
+  dial.rotation.x = Math.PI / 2;
+  dial.position.set(0.2, 0.08, 0.14);
+  const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.2, 0.5, 28, 1, true), glassMaterial(THREE));
+  cup.position.y = 0.35;
+  group.add(plate, dial, cup);
+  group.position.set(1.45, -1.2, 0.3);
+  return { group };
+}
+
+// Wooden rack holding five empty test tubes, back-left of the bench.
+function buildTestTubeRack(THREE) {
+  const group = new THREE.Group();
+  const wood = metalMaterial(THREE, 0x8b5e3c, 0.65);
+  const board = shadows(new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.08, 0.5), wood));
+  const top = shadows(new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.05, 0.16), wood));
+  top.position.set(0, 0.34, 0);
+  group.add(board, top);
+  for (let i = -2; i <= 2; i++) {
+    const tube = shadows(new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.065, 0.7, 18, 1, true), glassMaterial(THREE)));
+    tube.position.set(i * 0.22, 0.36, 0);
+    group.add(tube);
+  }
+  group.position.set(-1.15, -1.2, -1.35);
+  return { group };
+}
+
 // ---- engines/chimie/bench-ghost.js (inlined) ----
 // The flask ghost mascot for the Chemistry bench (Three.js via the global THREE).
 // Open body with a scalloped, swaying hem; eyes that follow the pointer, the
@@ -3001,6 +3052,9 @@ const CH_INSTRUMENTS = [
   { id: "manometer", label: "Manometer", metric: "pression", material: "manometer" },
   { id: "burette", label: "NaOH burette", material: "burette", control: "material.burette.strength", controlMax: 50, controlStep: 1 },
   { id: "burner", label: "Bunsen burner", material: "bruleur", control: "material.bruleur.strength", controlMax: 100, controlStep: 5 },
+  { id: "beaker", label: "Beaker 100 mL", material: "beaker" },
+  { id: "stirrer", label: "Magnetic stirrer", material: "stirrer" },
+  { id: "rack", label: "Test tube rack", material: "rack" },
 ];
 
 const chIcon = (k) => `<svg class="ch-i" viewBox="0 0 24 24" aria-hidden="true">${CH_ICONS[k]}</svg>`;
@@ -3014,55 +3068,20 @@ const INSTRUMENTS = CH_INSTRUMENTS;
 
 function buildLeftColumn({ add, config, ctx }) {
   const col = add('<aside class="ch-left ch-gx"></aside>');
-  const substances = buildSubstances(col, config, ctx);
   const instruments = buildInstruments(col, config, ctx);
 
   return {
     element: col,
     refresh() {
-      substances.refresh();
       instruments.refresh();
     },
   };
 }
 
-function buildSubstances(col, config, ctx) {
-  const card = section(col, "Substances", "click a flask or use −/+");
-  const rows = config.substances.map((s) => {
-    const row = document.createElement("div");
-    row.className = "ch-sub";
-    row.style.setProperty("--c", s.color);
-    row.innerHTML =
-      '<span class="dot" aria-hidden="true"></span><span class="nm"></span><span class="ct">×0</span>' +
-      '<button type="button" class="sq minus" aria-label="Take one dose back">&#8722;</button>' +
-      '<button type="button" class="sq plus" aria-label="Pour one dose">+</button>';
-    row.querySelector(".nm").textContent = s.label;
-    row.querySelector(".nm").title = s.label;
-    row.querySelector(".plus").addEventListener("click", () => ctx.addDose(s.id));
-    row.querySelector(".minus").addEventListener("click", () => ctx.removeDose(s.id));
-    card.appendChild(row);
-    return { s, ct: row.querySelector(".ct"), plus: row.querySelector(".plus"), minus: row.querySelector(".minus"), last: "" };
-  });
-  return {
-    refresh() {
-      rows.forEach((r) => {
-        const n = r.s.count || 0;
-        const max = ctx.doseMax(r.s.id);
-        const key = `${n}/${max}`;
-        if (key === r.last) return;
-        r.last = key;
-        r.ct.textContent = `×${n}`;
-        r.plus.disabled = n >= max;
-        r.minus.disabled = n <= 0;
-      });
-    },
-  };
-}
-
 function buildInstruments(col, config, ctx) {
-  const card = section(col, "Instruments", "select what is on the bench");
+  const card = section(col, "Instruments", "select your lab equipment");
   const metrics = new Map(config.metrics.map((m) => [m.source, m]));
-    const rows = INSTRUMENTS.filter((instrument) => instrument.metric || instrument.control).map((instrument) => {
+  const rows = INSTRUMENTS.map((instrument) => {
     const metric = metrics.get(instrument.metric);
     const row = document.createElement("div");
     row.className = "ch-instrument";
@@ -3211,6 +3230,13 @@ function buildBenchView(host, ctx) {
   manometer.group.position.set(-1.05, -0.5, -1.2);
   scene.add(manometer.group);
 
+  const beaker = buildBeaker(THREE);
+  scene.add(beaker.group);
+  const stirrer = buildStirrer(THREE);
+  scene.add(stirrer.group);
+  const rack = buildTestTubeRack(THREE);
+  scene.add(rack.group);
+
   const bottles = buildBottles(THREE, scene, ctx.config.substances, ctx.config.controls || []);
   const ghost = buildFlaskGhost(THREE, { toScreen, reduced: REDUCED });
   scene.add(ghost.group);
@@ -3275,11 +3301,12 @@ function buildBenchView(host, ctx) {
     const visible = (id) => ctx.instrumentActive ? ctx.instrumentActive({ id }) : true;
     thermometer.group.visible = visible("thermometer");
     manometer.group.visible = visible("manometer");
-    burner.group.visible = visible("burner") && (ctx.isActive("material", "bruleur") || !ctx.instrumentActive);
-    burner.flame.visible = burner.group.visible;
-    burner.glow.visible = burner.group.visible;
-    burner.hit.visible = burner.group.visible;
     burette.group.visible = visible("burette");
+    burner.group.visible = visible("burner");
+    burner.hit.visible = burner.group.visible;
+    beaker.group.visible = visible("beaker");
+    stirrer.group.visible = visible("stirrer");
+    rack.group.visible = visible("rack");
   }
   syncInstruments();
   wirePicking(canvas, camera, hits, ctx, ghost, (id) => { hoverId = id; });
@@ -3738,7 +3765,6 @@ function buildChemHud(host, ctx, view) {
 
   // Controls live in the left instrument list now.
 
-  // Notebook sheet (same storage as the shell notebook).
   let renderBook = () => {};
   if (config.notebook.enabled) {
     // No scrollbar: the sheet keeps a fixed layout and the entries are paged to what fits.
@@ -3887,8 +3913,7 @@ function buildChemHud(host, ctx, view) {
     `<button type="button" class="ch-ib2 ink play">${chIcon("pause")}</button>` +
     `<button type="button" class="ch-ib2 empty" title="Empty the flask (R)" aria-label="Empty the flask">${chIcon("empty")}</button>` +
     `<button type="button" class="ch-ib2 step" title="One step" aria-label="One step">${chIcon("step")}</button>` +
-    '<span class="ch-sep"></span><p class="ch-stat" role="status" aria-live="polite"><span class="dots"></span><span class="txt"></span></p><span class="ch-sep"></span>' +
-    '<button type="button" class="ch-btn notebook">Notebook</button>' +
+    '<span class="ch-sep"></span><p class="ch-stat" role="status" aria-live="polite"><span class="dots"></span><span class="txt"></span></p>' +
     '<button type="button" class="ch-measure"><i></i>Measure</button>';
   const playBtn = bar.querySelector(".play");
   const stepBtn = bar.querySelector(".step");
@@ -3899,9 +3924,7 @@ function buildChemHud(host, ctx, view) {
   stepBtn.addEventListener("click", () => ctx.stepOnce());
   nbBtn = bar.querySelector(".notebook");
   nbBtn.addEventListener("click", () => {
-    const open = !nbBtn.classList.toggle("on");
-    select(open ? "notebook" : "lab");
-    if (!open) nbBtn.blur();
+    select(ctx.tab === "notebook" ? "lab" : "notebook");
   });
   bar.querySelector(".ch-measure").addEventListener("click", () => { ctx.record(); renderBook(); });
 
@@ -4079,11 +4102,12 @@ async function startGame(source) {
   const ctx = {
     config, catalog, clock, isActive, setActive, world, state,
     instrumentActive(instrument) {
-      if (instrument.id === "burner") return isActive("instruments", instrument.id) && isActive("material", "bruleur");
+      if (instrument.material) return isActive("material", instrument.material);
       return isActive("instruments", instrument.id);
     },
     setInstrument(instrument, active) {
-      setActive("instruments", instrument.id, active);
+      setActive(instrument.material ? "material" : "instruments", instrument.material || instrument.id, active);
+      if (instrument.id === "burner") setActive("material", "bruleur", active);
       if (instrument.id === "burner") {
         const b = state.material.bruleur;
         if (!active && b) b.strength = 0;

@@ -232,3 +232,54 @@ export function buildManometer(THREE) {
   group.add(hit);
   return { group, needle };
 }
+
+// Plain glass beaker resting on the bench, left of the reagent bottles.
+export function buildBeaker(THREE) {
+  const group = new THREE.Group();
+  const glass = glassMaterial(THREE);
+  const body = shadows(new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.34, 0.8, 36, 1, true), glass));
+  body.position.y = 0.4;
+  const rim = shadows(new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.025, 10, 40), glass));
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = 0.8;
+  const bottom = shadows(new THREE.Mesh(new THREE.CircleGeometry(0.34, 36), glass));
+  bottom.rotation.x = -Math.PI / 2;
+  const waterMat = new THREE.MeshStandardMaterial({ color: 0x9fd8ef, roughness: 0.15, transparent: true, opacity: 0.7 });
+  const water = shadows(new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.28, 0.42, 32), waterMat));
+  water.position.y = 0.21;
+  group.add(body, rim, bottom, water);
+  group.position.set(-1.7, -1.2, 0.35);
+  return { group };
+}
+
+// Magnetic stirrer plate with its dial, parked right of the flask.
+export function buildStirrer(THREE) {
+  const group = new THREE.Group();
+  const plate = shadows(new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.1, 0.65), metalMaterial(THREE, 0xe8ece9, 0.3)));
+  plate.position.y = 0.05;
+  const dial = shadows(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.04, 24), metalMaterial(THREE, 0x0f172a, 0.35)));
+  dial.rotation.x = Math.PI / 2;
+  dial.position.set(0.2, 0.08, 0.14);
+  const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.2, 0.5, 28, 1, true), glassMaterial(THREE));
+  cup.position.y = 0.35;
+  group.add(plate, dial, cup);
+  group.position.set(1.45, -1.2, 0.3);
+  return { group };
+}
+
+// Wooden rack holding five empty test tubes, back-left of the bench.
+export function buildTestTubeRack(THREE) {
+  const group = new THREE.Group();
+  const wood = metalMaterial(THREE, 0x8b5e3c, 0.65);
+  const board = shadows(new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.08, 0.5), wood));
+  const top = shadows(new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.05, 0.16), wood));
+  top.position.set(0, 0.34, 0);
+  group.add(board, top);
+  for (let i = -2; i <= 2; i++) {
+    const tube = shadows(new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.065, 0.7, 18, 1, true), glassMaterial(THREE)));
+    tube.position.set(i * 0.22, 0.36, 0);
+    group.add(tube);
+  }
+  group.position.set(-1.15, -1.2, -1.35);
+  return { group };
+}

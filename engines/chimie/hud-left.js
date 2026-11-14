@@ -4,55 +4,20 @@ const INSTRUMENTS = CH_INSTRUMENTS;
 
 export function buildLeftColumn({ add, config, ctx }) {
   const col = add('<aside class="ch-left ch-gx"></aside>');
-  const substances = buildSubstances(col, config, ctx);
   const instruments = buildInstruments(col, config, ctx);
 
   return {
     element: col,
     refresh() {
-      substances.refresh();
       instruments.refresh();
     },
   };
 }
 
-function buildSubstances(col, config, ctx) {
-  const card = section(col, "Substances", "click a flask or use −/+");
-  const rows = config.substances.map((s) => {
-    const row = document.createElement("div");
-    row.className = "ch-sub";
-    row.style.setProperty("--c", s.color);
-    row.innerHTML =
-      '<span class="dot" aria-hidden="true"></span><span class="nm"></span><span class="ct">×0</span>' +
-      '<button type="button" class="sq minus" aria-label="Take one dose back">&#8722;</button>' +
-      '<button type="button" class="sq plus" aria-label="Pour one dose">+</button>';
-    row.querySelector(".nm").textContent = s.label;
-    row.querySelector(".nm").title = s.label;
-    row.querySelector(".plus").addEventListener("click", () => ctx.addDose(s.id));
-    row.querySelector(".minus").addEventListener("click", () => ctx.removeDose(s.id));
-    card.appendChild(row);
-    return { s, ct: row.querySelector(".ct"), plus: row.querySelector(".plus"), minus: row.querySelector(".minus"), last: "" };
-  });
-  return {
-    refresh() {
-      rows.forEach((r) => {
-        const n = r.s.count || 0;
-        const max = ctx.doseMax(r.s.id);
-        const key = `${n}/${max}`;
-        if (key === r.last) return;
-        r.last = key;
-        r.ct.textContent = `×${n}`;
-        r.plus.disabled = n >= max;
-        r.minus.disabled = n <= 0;
-      });
-    },
-  };
-}
-
 function buildInstruments(col, config, ctx) {
-  const card = section(col, "Instruments", "select what is on the bench");
+  const card = section(col, "Instruments", "select your lab equipment");
   const metrics = new Map(config.metrics.map((m) => [m.source, m]));
-    const rows = INSTRUMENTS.filter((instrument) => instrument.metric || instrument.control).map((instrument) => {
+  const rows = INSTRUMENTS.map((instrument) => {
     const metric = metrics.get(instrument.metric);
     const row = document.createElement("div");
     row.className = "ch-instrument";

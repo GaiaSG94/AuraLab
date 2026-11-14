@@ -82,7 +82,6 @@ export function buildChemHud(host, ctx, view) {
 
   // Controls live in the left instrument list now.
 
-  // Notebook sheet (same storage as the shell notebook).
   let renderBook = () => {};
   if (config.notebook.enabled) {
     // No scrollbar: the sheet keeps a fixed layout and the entries are paged to what fits.
@@ -231,8 +230,7 @@ export function buildChemHud(host, ctx, view) {
     `<button type="button" class="ch-ib2 ink play">${chIcon("pause")}</button>` +
     `<button type="button" class="ch-ib2 empty" title="Empty the flask (R)" aria-label="Empty the flask">${chIcon("empty")}</button>` +
     `<button type="button" class="ch-ib2 step" title="One step" aria-label="One step">${chIcon("step")}</button>` +
-    '<span class="ch-sep"></span><p class="ch-stat" role="status" aria-live="polite"><span class="dots"></span><span class="txt"></span></p><span class="ch-sep"></span>' +
-    '<button type="button" class="ch-btn notebook">Notebook</button>' +
+    '<span class="ch-sep"></span><p class="ch-stat" role="status" aria-live="polite"><span class="dots"></span><span class="txt"></span></p>' +
     '<button type="button" class="ch-measure"><i></i>Measure</button>';
   const playBtn = bar.querySelector(".play");
   const stepBtn = bar.querySelector(".step");
@@ -243,9 +241,7 @@ export function buildChemHud(host, ctx, view) {
   stepBtn.addEventListener("click", () => ctx.stepOnce());
   nbBtn = bar.querySelector(".notebook");
   nbBtn.addEventListener("click", () => {
-    const open = !nbBtn.classList.toggle("on");
-    select(open ? "notebook" : "lab");
-    if (!open) nbBtn.blur();
+    select(ctx.tab === "notebook" ? "lab" : "notebook");
   });
   bar.querySelector(".ch-measure").addEventListener("click", () => { ctx.record(); renderBook(); });
 
