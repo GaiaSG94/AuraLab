@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>One kit, many labs — building LabKit with Kiro · Kiroween 2026</title>
+<meta name="description" content="How a lean, zero-dependency kit of virtual education labs was built with Kiro for Kiroween 2026 — specs, steering, hooks and property-based tests." />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=JetBrains+Mono:wght@400;600;700&display=swap" />
+<style>
+  :root {
+    --page: #ff8a3d;
+    --ink: #17141f;
+    --paper: #fbf8ff;
+    --accent: #f59e0b;
+    --font: "Archivo", "Arial Narrow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--font); }
+  body { font-size: 17px; line-height: 1.65; }
+  article { max-width: 720px; margin: 0 auto; padding: 56px 22px 80px; }
+  .kicker { font: 700 12px var(--mono); text-transform: uppercase; letter-spacing: 0.14em; }
+  h1 { font-weight: 900; font-stretch: 68%; text-transform: uppercase; line-height: 0.92; font-size: clamp(38px, 7vw, 64px); margin: 12px 0 8px; }
+  .standfirst { font-size: 20px; line-height: 1.5; margin: 12px 0 28px; }
+  .meta { font: 400 13px var(--mono); border-top: 2px solid var(--ink); border-bottom: 1px solid rgba(23,20,31,.25); padding: 10px 0; margin: 0 0 36px; }
+  h2 { font-weight: 900; font-stretch: 68%; text-transform: uppercase; line-height: 1; font-size: 28px; margin: 44px 0 10px; }
+  p { margin: 0 0 18px; }
+  ul { margin: 0 0 18px; padding-left: 22px; }
+  li { margin-bottom: 8px; }
+  a { color: var(--ink); font-weight: 700; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+  code { font: 600 14px var(--mono); background: rgba(23,20,31,.08); padding: 1px 6px; border-radius: 6px; }
+  pre { background: var(--ink); color: var(--paper); border-radius: 14px; padding: 16px 18px; overflow-x: auto; }
+  pre code { background: none; color: #cfc9e3; font-weight: 400; padding: 0; }
+  .callout { background: var(--ink); color: var(--paper); border-radius: 14px; padding: 18px 20px; margin: 24px 0; }
+  .callout b { color: var(--accent); }
+  .signature { margin-top: 48px; border-top: 2px solid var(--ink); padding-top: 16px; font-size: 15px; }
+  .signature .name { font-weight: 900; font-stretch: 72%; text-transform: uppercase; font-size: 20px; }
+  footer { font: 400 13px var(--mono); text-align: center; padding: 0 22px 40px; }
+  footer a { font-weight: 400; }
+</style>
+</head>
+<body>
+<article>
+  <span class="kicker">Kiroween 2026 · Skeleton Crew · Build log</span>
+  <h1>One kit,<br />many labs</h1>
+  <p class="standfirst">LabKit is a lean, zero-dependency template for virtual education labs: one shared
+  core, a catalog of composable laws, and four labs that differ only by their data. This is how it was
+  built — and how Kiro changed the way I develop.</p>
+  <p class="meta">By <strong>Gaia Samama-Giudicelli</strong> · Written as part of the Kiroween 2026 hackathon ·
+  <a href="https://gaiasg94.github.io/LabKit/">Try the labs</a> ·
+  <a href="https://github.com/GaiaSG94/LabKit">Repository</a></p>
+
+  <h2>The problem</h2>
+  <p>Educational simulations usually come in two flavours, and both are wrong for a classroom.
+  Heavy SDKs demand an install, an account and a modern laptop. One-off apps are closed boxes:
+  a teacher can look at a gravity simulation but cannot turn it into a chemistry lab without
+  starting over. Meanwhile the loop that actually teaches — <em>hypothesis, action, observation,
+  understanding</em> — needs very few tools: a scene, a handful of sliders, live measurements,
+  and the freedom to break things safely.</p>
+  <p>So the brief I set for Kiroween's Skeleton Crew track was narrow on purpose: build a
+  <strong>template lean enough to be read, flexible enough to carry very different subjects</strong>,
+  and prove it with labs that share nothing but the kit.</p>
+
+  <h2>What is in the box</h2>
+  <p>Four labs ship today, each a standalone HTML file a student can double-click — no server,
+  no network, no account:</p>
+  <ul>
+    <li><strong>Space Lab</strong> (2D) — a gravity well, planets and an asteroid belt.</li>
+    <li><strong>Eco Lab</strong> (2D) — rabbits, foxes and bushes, with a live population chart.</li>
+    <li><strong>Chemistry Lab</strong> (3D) — real aqueous chemistry: eight reagents, burette
+    titration, pH, precipitates and gas pressure.</li>
+    <li><strong>Bridge Lab</strong> (3D) — ten structural materials, generated levels, a load
+    ladder and a purse that carries over between bridges.</li>
+  </ul>
+  <p>The kit itself is a <code>core/</code> that knows <em>zero science</em> — layout, theme,
+  sliders, instruments, notebook, validation — plus swappable engines and labs that are nothing
+  but a <code>config.json</code> and a few dozen lines of glue. There is no dependency, no
+  bundler, no framework. A new lab costs a copy, a config and a validation.</p>
+
+  <h2>How Kiro changed the way I develop</h2>
+  <p>I used to write code and backfill documentation when someone asked. Kiro inverted that:
+  in this project <strong>the documents came first and the code had to obey them</strong>, and
+  it is visible in the repository, not just claimed in a README.</p>
+  <ul>
+    <li><strong>Spec-driven development.</strong> Every module started as EARS requirements
+    ("WHEN… the system SHALL…") in <code>.kiro/specs/</code>, then a design, then tasks. The
+    acceptance criteria were not decoration: each one became a property test, run on every
+    change.</li>
+    <li><strong>Steering instead of repeated corrections.</strong> The rules I would normally
+    repeat in review comments — the core never names a scientific concept, failure is free and
+    names the offending value, laws never touch the DOM — live in <code>.kiro/steering/</code>
+    and are read by the agent before it writes anything.</li>
+    <li><strong>A hook that actually bites.</strong> A <code>PreToolUse</code> guard runs the
+    validator, the property tests and the standalone build before any commit or push, and
+    blocks the tool call on failure. The same gate runs in CI, so nothing ships that would not
+    pass — including a stale <code>dist/</code>.</li>
+    <li><strong>Property-based testing found what I would have missed.</strong> Dozens of
+    properties derived from the requirements, with seeded RNG and shrinking: alignment bugs in
+    row matching, off-by-one in the law catalog, config drift — caught by generated cases, not
+    by my imagination.</li>
+    <li><strong>The whole surface.</strong> A local MCP server with five tools, four custom
+    agents (<code>lab-architect</code>, <code>law-smith</code>, <code>config-doctor</code>,
+    <code>lab-reviewer</code>), three skills, three workflows, and an installable power — all
+    verifiable in CI by anyone who clones the repo.</li>
+  </ul>
+
+  <div class="callout">
+    <b>The one sentence I would keep:</b> the acceptance criteria mattered more than the design
+    documents, because each one became a test that runs on every save. Writing "WHEN this, the
+    system SHALL that" before typing is now how I start every feature, with or without an
+    agent in the loop.
+  </div>
+
+  <h2>Why build-time only</h2>
+  <p>Kiro built the kit; the labs do not need it. Everything runs offline, without credits,
+  keys or a backend — a teacher on a classroom laptop with no wifi gets the same experience as
+  a judge on a fiber connection. That constraint shaped the architecture: no runtime service,
+  no telemetry, no install step, and standalone files regenerated in one command whenever a
+  config changes.</p>
+
+  <h2>Try it</h2>
+  <p>The portal with all four labs is at <a href="https://gaiasg94.github.io/LabKit/">gaiasg94.github.io/LabKit</a>;
+  each lab also exists as a double-clickable standalone file. The full source, specs and tests
+  are on <a href="https://github.com/GaiaSG94/LabKit">GitHub</a>, MIT licensed. Non-developers
+  get a step-by-step French guide, <code>CREER-UN-LABO.md</code>, to create a lab by editing
+  JSON — no code, no Node.</p>
+
+  <div class="signature">
+    <span class="name">Gaia Samama-Giudicelli</span><br />
+    Builder of LabKit · Kiroween 2026, Skeleton Crew track.<br />
+    <a href="https://gaiasg94.github.io/LabKit/">Live labs</a> ·
+    <a href="https://github.com/GaiaSG94/LabKit">Source</a>
+  </div>
+</article>
+<footer>
+  <a href="index.html">← Back to the LabKit portal</a>
+</footer>
+</body>
+</html>
